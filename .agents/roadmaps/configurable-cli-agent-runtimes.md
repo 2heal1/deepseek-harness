@@ -8,7 +8,7 @@
 
 集成分支：`feat/configurable-cli`
 
-远端状态：集成基线已推送到 `fork/feat/configurable-cli`
+远端状态：D0 已通过 [PR #1](https://github.com/2heal1/deepseek-harness/pull/1) 合入 `fork/feat/configurable-cli`
 
 ## 使用规则
 
@@ -17,6 +17,8 @@
 `PR` 列填写完整 GitHub URL；尚未创建 PR 时填写 `—`。`完成证据` 列在工作开始前记录必需判据，在完成后补充实际运行的检查、快照或集成证据。状态发生变化时，在文末更新记录中追加一行。
 
 本文件只记录交付状态、依赖、分支、PR 和证据。架构范围、所有权、安全保证与取舍由设计方案负责；改变这些决策时必须同时更新 Agent Note，不能只修改 roadmap。
+
+派发工作包时，让负责的 agent 阅读[工作包执行说明](configurable-cli-agent-runtimes-task.md)并指定一个 ID。执行说明负责通用的预检、分支、状态、验证和交付步骤；本文件负责该 ID 的范围、依赖、Agent 等级和完成判据。
 
 ## 分支与 PR 规则
 
@@ -43,7 +45,7 @@
 
 | ID | 工作包 | 硬依赖 | 并行组 | Agent 等级 | 状态 | 工作分支 | PR | 完成证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| D0 | 设计方案与交付跟踪基线 | 无 | D0 | 高级 | `in-progress` | `feat/configurable-cli` | — | Agent Note 与本 roadmap 通过文档门禁，集成分支已创建 |
+| D0 | 设计方案与交付跟踪基线 | 无 | D0 | 高级 | `done` | `feat/configurable-cli-d0-design-roadmap` | [PR #1](https://github.com/2heal1/deepseek-harness/pull/1) | Agent Note 与 roadmap 通过 `doc-sync`、lint、提交钩子和增量 typecheck；PR 已合入集成分支 |
 | P0a | Codex App Server 协议 Spike | D0 | P0 | 中等，高级评审 | `not-started` | `feat/configurable-cli-p0a-codex-spike` | — | 带版本的握手、流、取消、错误和关闭 fixture |
 | P0b | ACP 协议 Spike | D0 | P0 | 中等，高级评审 | `not-started` | `feat/configurable-cli-p0b-acp-spike` | — | 带版本的一次性运行、取消、错误和关闭 fixture |
 | P0c | Host、SDK、事件与威胁模型审计 | D0 | P0 | 高级 | `not-started` | `feat/configurable-cli-p0c-runtime-audit` | — | 调用方行为矩阵、事件表和启动威胁模型 |
@@ -77,3 +79,4 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | 日期 | 工作包 | 变更 |
 | --- | --- | --- |
 | 2026-08-18 | D0 | 创建集成分支 `feat/configurable-cli`，fast-forward 到 `master` 的 `99f6f02fec` 并推送到 fork；创建 D0 工作分支；拆分交付 roadmap；设计与跟踪基线进入 `in-progress` |
+| 2026-08-18 | D0 | [PR #1](https://github.com/2heal1/deepseek-harness/pull/1) 合入 `feat/configurable-cli`；记录文档、lint、提交钩子和增量 typecheck 证据；状态更新为 `done` |
