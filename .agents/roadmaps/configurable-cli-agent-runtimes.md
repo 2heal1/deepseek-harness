@@ -46,7 +46,7 @@
 | ID | 工作包 | 硬依赖 | 并行组 | Agent 等级 | 状态 | 工作分支 | PR | 完成证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | D0 | 设计方案与交付跟踪基线 | 无 | D0 | 高级 | `done` | `feat/configurable-cli-d0-design-roadmap` | [PR #1](https://github.com/2heal1/deepseek-harness/pull/1) | Agent Note 与 roadmap 通过 `doc-sync`、lint、提交钩子和增量 typecheck；PR 已合入集成分支 |
-| P0a | Codex App Server 协议 Spike | D0 | P0 | 中等，高级评审 | `not-started` | `feat/configurable-cli-p0a-codex-spike` | — | 带版本的握手、流、取消、错误和关闭 fixture |
+| P0a | Codex App Server 协议 Spike | D0 | P0 | 中等，高级评审 | `in-progress` | `feat/configurable-cli-p0a-codex-spike` | — | 0.147.0 握手、流、取消、错误与关闭 fixture；Codex 定向测试 39/39、`doc-sync` 28/28、lint、翻译配对与 `git diff --check` 通过 |
 | P0b | ACP 协议 Spike | D0 | P0 | 中等，高级评审 | `not-started` | `feat/configurable-cli-p0b-acp-spike` | — | 带版本的一次性运行、取消、错误和关闭 fixture |
 | P0c | Host、SDK、事件与威胁模型审计 | D0 | P0 | 高级 | `not-started` | `feat/configurable-cli-p0c-runtime-audit` | — | 调用方行为矩阵、事件表和启动威胁模型 |
 | P1 | 架构冻结 | P0a、P0b、P0c | P1 | 高级主干所有者 | `not-started` | `feat/configurable-cli-p1-architecture` | — | Agent 行为、Router 所有权、事件来源、快照、fork 与安全决策获接受 |
@@ -80,3 +80,5 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | --- | --- | --- |
 | 2026-08-18 | D0 | 创建集成分支 `feat/configurable-cli`，fast-forward 到 `master` 的 `99f6f02fec` 并推送到 fork；创建 D0 工作分支；拆分交付 roadmap；设计与跟踪基线进入 `in-progress` |
 | 2026-08-18 | D0 | [PR #1](https://github.com/2heal1/deepseek-harness/pull/1) 合入 `feat/configurable-cli`；记录文档、lint、提交钩子和增量 typecheck 证据；状态更新为 `done` |
+| 2026-08-18 | P0a | 从最新 `feat/configurable-cli` 创建 `feat/configurable-cli-p0a-codex-spike`；Codex App Server 协议 Spike 进入 `in-progress` |
+| 2026-08-18 | P0a | 固定 Codex App Server 0.147.0 的握手、assistant 流、interrupt、远端错误和 stdio 关闭 fixture，并通过定向测试与文档门禁；等待高级评审 |

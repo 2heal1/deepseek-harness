@@ -55,7 +55,7 @@ The standalone composition below shows the complete explicit capability. A Profi
 
 ## Product compatibility and evidence
 
-The production wire intentionally implements only the app-server methods required by this one-shot contract. Development evidence is pinned to `@openai/codex@0.147.0` / `codex-cli 0.147.0`; the npm package is a test-only dependency, and deployments still supply `codex` on `PATH`.
+The production wire intentionally implements only the app-server methods required by this one-shot contract. Development evidence is pinned to `@openai/codex@0.147.0` / `codex-cli 0.147.0`; the npm package is a test-only dependency, and deployments still supply `codex` on `PATH`. Versioned normalized transcripts under `tests/fixtures/app-server/0.147.0/` record the required handshake, assistant stream, interrupt, remote failure, and stdio closure facts for protocol consumers.
 
 ## Model Experience
 

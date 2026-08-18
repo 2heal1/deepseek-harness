@@ -55,7 +55,7 @@
 
 ## 产品兼容性与证据
 
-生产环境的协议层有意只实现这一单次执行约定所需的 app-server 方法。开发证据锁定在 `@openai/codex@0.147.0` / `codex-cli 0.147.0`；该 NPM 包仅作为测试依赖，部署环境仍需通过 `PATH` 提供 `codex`。
+生产环境的协议层有意只实现这一单次执行约定所需的 app-server 方法。开发证据锁定在 `@openai/codex@0.147.0` / `codex-cli 0.147.0`；该 NPM 包仅作为测试依赖，部署环境仍需通过 `PATH` 提供 `codex`。`tests/fixtures/app-server/0.147.0/` 下带版本的规范化 transcript（文本记录）记录了协议消费方所需的握手、assistant 流、interrupt（中断）、远端失败与 stdio 关闭事实。
 
 ## 模型体验
 

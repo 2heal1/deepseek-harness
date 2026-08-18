@@ -1,0 +1,50 @@
+{
+  "scenario": "close",
+  "steps": [
+    {
+      "direction": "client-to-server",
+      "message": {
+        "id": 2,
+        "method": "turn/start",
+        "params": {
+          "threadId": "<thread-id>",
+          "input": [
+            {
+              "type": "text",
+              "text": "Wait for connection closure.",
+              "text_elements": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "id": 2,
+        "result": {
+          "turn": {
+            "id": "<turn-id>",
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "lifecycle": "stdin-close"
+    },
+    {
+      "lifecycle": "stdout-eof"
+    },
+    {
+      "lifecycle": "process-exit",
+      "exitCode": 0,
+      "signal": null
+    }
+  ],
+  "expected": {
+    "terminalTurnNotification": false,
+    "processExitCode": 0
+  }
+}
