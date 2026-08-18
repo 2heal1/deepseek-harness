@@ -138,6 +138,14 @@ Harness permission presets constrain Harness tools, not a product's native tools
 
 The subprocess owner observes the whole process tree and provides bounded startup, protocol cancellation, grace-period escalation, final termination, and complete quiescence. Startup rollback removes the process, temporary authentication material, gateway registration, session scope, and unpublished Agent. Temporary files include crash-cleanup metadata so the next host start can remove stale owned files.
 
+### ACP protocol spike baseline
+
+The V1 ACP child compatibility baseline is `@agentclientprotocol/sdk@0.25.1`, ACP protocol version `1`, over newline-delimited JSON-RPC 2.0 on stdio. The client sequence is `initialize` → `session/new` → one `session/prompt`. Assistant text arrives through ordered `session/update` notifications, while the `session/prompt` response supplies only the terminal `stopReason`. The provider must verify the negotiated `InitializeResponse.protocolVersion` because the SDK accepts any integer response without enforcing equality with the requested version.
+
+Cancellation uses a `session/cancel` notification. The agent may still send `session/update` notifications before the outstanding prompt settles with `stopReason: "cancelled"`, so the adapter continues reading updates until prompt settlement; local process cancellation remains authoritative for a non-cooperative agent. A structured agent failure is a JSON-RPC error response that rejects the request promise, while transport EOF independently rejects outstanding requests. Both become provider failures after retaining any assistant text already reported by complete update frames.
+
+ACP protocol version 1 provides `session/close` only as an optional method when the agent advertises `sessionCapabilities.close`; the V1 one-shot baseline does not require that capability. Provider shutdown therefore closes client stdin, observes agent stdout EOF and connection closure, then relies on the subprocess owner for process-tree quiescence. The versioned [fixture manifest](../../../../packages/subagent/subagent-acp/tests/fixtures/protocol-v1-sdk-0.25.1/manifest.json) and [official-SDK replay test](../../../../packages/subagent/subagent-acp/tests/protocol-fixtures.spec.ts) pin the one-shot, cancellation, structured-error, and EOF-shutdown frames.
+
 ### Session facts and provenance
 
 The Session Log remains the source of truth for Harness-visible conversation and activity. Runtime adapters record only observed or negotiated facts. Canonical user, assistant, and turn events represent conversation facts; assistant provenance comes from negotiated protocol data or the pinned profile when the driver defines that field as authoritative. A provider that cannot satisfy the canonical assistant provenance requirements is not eligible for V1 main-agent use.

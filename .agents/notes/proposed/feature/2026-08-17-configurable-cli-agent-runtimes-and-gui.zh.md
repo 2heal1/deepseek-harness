@@ -138,6 +138,14 @@ Harness permission preset 只约束 Harness 工具，不约束产品原生工具
 
 subprocess 所有者观察整棵进程树，并提供有界启动、协议取消、宽限期升级、最终终止和完全停稳。启动回滚会移除进程、临时认证材料、网关注册、会话 Scope 和未发布 Agent。临时文件带有崩溃清理元数据，使下次 Host 启动时能够删除陈旧的自有文件。
 
+### ACP 协议 Spike 基线
+
+V1 ACP 子 agent 的兼容基线是 `@agentclientprotocol/sdk@0.25.1`、ACP 协议版本 `1`，通过 stdio 传输换行分隔的 JSON-RPC 2.0。Client 调用顺序为 `initialize` → `session/new` → 单次 `session/prompt`。assistant 文本通过有序 `session/update` 通知到达，`session/prompt` 响应只提供终止 `stopReason`。提供方必须校验协商得到的 `InitializeResponse.protocolVersion`，因为 SDK 接受任意整数响应，不会强制它与请求版本相等。
+
+取消使用 `session/cancel` 通知。在未完成的 prompt 以 `stopReason: "cancelled"` 结算前，agent 仍可发送 `session/update` 通知，因此适配器会继续读取更新直至 prompt 结算；对于不协作的 agent，本地进程取消仍是权威机制。结构化 agent 失败是使请求 Promise 被拒绝的 JSON-RPC 错误响应，传输 EOF 则会独立拒绝未完成请求。两者都会在保留完整更新帧已经报告的 assistant 文本后成为提供方失败。
+
+ACP 协议版本 1 仅在 agent 声明 `sessionCapabilities.close` 时提供可选的 `session/close` 方法；V1 一次性基线不要求该能力。因此，提供方关闭时会关闭 Client stdin、观察 agent stdout EOF 和连接关闭，再由 subprocess 所有者证明进程树完全停稳。带版本的 [fixture manifest](../../../../packages/subagent/subagent-acp/tests/fixtures/protocol-v1-sdk-0.25.1/manifest.json)和[官方 SDK 回放测试](../../../../packages/subagent/subagent-acp/tests/protocol-fixtures.spec.ts)固定一次性运行、取消、结构化错误和 EOF 关闭帧。
+
 ### 会话事实与来源
 
 Session Log 继续作为 Harness 可见对话和活动的真源。运行时适配器只记录观察或协商得到的事实。规范 user、assistant 和 turn 事件表示对话事实；assistant 来源来自协商的协议数据，或者来自 Driver 明确规定为权威字段的固定 profile。无法满足规范 assistant 来源要求的提供方不能用于 V1 主 agent。
