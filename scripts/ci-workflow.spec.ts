@@ -132,6 +132,19 @@ describe('CI workflow', () => {
     for (const key of ['DSH_GATE_CONCURRENCY', 'DSH_OXLINT_THREADS', 'DSH_PUBLINT_CONCURRENCY', 'DSH_SNAPSHOT_MAX_CONCURRENCY']) {
       expect(node24Consumers.env[key], `node-24-consumers ${key} must use serial fork capacity`).toContain("'1'")
     }
+    if (!Array.isArray(node24Consumers.steps)) {
+      throw new TypeError('node-24-consumers must define steps')
+    }
+    const hostedPlaywrightInstall = node24Consumers.steps
+      .filter(isRecord)
+      .find(step => step.name === 'Install Playwright Chromium and hosted dependencies')
+    expect(hostedPlaywrightInstall).toMatchObject({
+      'timeout-minutes': 15,
+      env: {
+        PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: '120000',
+      },
+      run: 'pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium',
+    })
     expect(aggregate['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
     expect(aggregate['runs-on']).not.toContain('DSH_CI_FAILOVER_WINDOWS')
     expect(aggregate['runs-on']).toContain('vm-backup')

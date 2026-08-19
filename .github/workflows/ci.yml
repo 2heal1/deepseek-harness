@@ -255,6 +255,9 @@ jobs:
 
       - name: Install Playwright Chromium and hosted dependencies
         if: github.repository != 'deepseek-ai/deepseek-harness' || vars.DSH_CI_FAILOVER_LINUX != 'selfhosted' || github.event.pull_request.user.login == 'dependabot[bot]'
+        timeout-minutes: 15
+        env:
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: '120000'
         run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
 
       # The persistent VM image owns Playwright's Linux system packages; do
