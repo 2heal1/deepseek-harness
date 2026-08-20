@@ -1,0 +1,16 @@
+{
+  "fixtureVersion": 1,
+  "protocol": "acp",
+  "protocolVersion": 1,
+  "transport": "ndjson-stdio",
+  "sdk": {
+    "package": "@agentclientprotocol/sdk",
+    "version": "0.25.1"
+  },
+  "scenarios": [
+    "one-shot.json",
+    "cancel.json",
+    "error.json",
+    "shutdown.json"
+  ]
+}
