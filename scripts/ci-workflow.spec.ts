@@ -49,8 +49,13 @@ describe('CI workflow', () => {
     const node24Coverage = workflow.jobs['node-24-coverage']
     const node24Consumers = workflow.jobs['node-24-consumers']
     const aggregate = workflow.jobs['all-checks-passed']
-    if (!Array.isArray(windows.steps) || !Array.isArray(aggregate.needs)) {
-      throw new TypeError('Windows job must define steps and the aggregate must define needs')
+    if (!Array.isArray(windows.steps)
+      || !Array.isArray(aggregate.needs)
+      || !isRecord(windowsNative.env)
+      || !isRecord(node24.env)
+      || !isRecord(node24Coverage.env)
+      || !isRecord(node24Consumers.env)) {
+      throw new TypeError('CI jobs must define their expected steps, needs, and environment')
     }
     const commandSteps = windows.steps.filter((step): step is Record<string, unknown> & { run: string } => (
       isRecord(step) && typeof step.run === 'string'
@@ -62,19 +67,31 @@ describe('CI workflow', () => {
     expect(windows.if).toBe("github.event_name == 'pull_request'")
     expect(commandSteps.some(step => step.run.includes('wine-windows-gates.sh'))).toBe(true)
 
-    // windows-native: non-blocking native job with failover, runs windows-complete.
-    // Its pool is resolved by the Windows-specific switch.
+    // windows-native: non-blocking native job with failover and a standard
+    // fork fallback, runs windows-complete.
     expect(typeof windowsNative['runs-on']).toBe('string')
     expect(windowsNative['runs-on']).toContain('DSH_CI_FAILOVER_WINDOWS')
     expect(windowsNative['runs-on']).not.toContain('DSH_CI_FAILOVER_LINUX')
     expect(windowsNative['runs-on']).toContain('self-hosted')
     expect(windowsNative['runs-on']).toContain('dsh-win-ci')
     expect(windowsNative['runs-on']).toContain('dsh-windows-2025-16core')
+    expect(windowsNative['runs-on']).toContain("github.repository == 'deepseek-ai/deepseek-harness'")
+    expect(windowsNative['runs-on']).toContain('windows-2025')
     expect(windowsNative.name).toBe('windows node 24 / native complete')
     expect(windowsNative.if).toBe("github.event_name == 'pull_request'")
     expect(windowsNative.env).toMatchObject({
       DSH_COVERAGE_TEST_TIMEOUT_MS: '30000',
     })
+    for (const key of ['DSH_COVERAGE_MAX_WORKERS', 'DSH_GATE_CONCURRENCY', 'DSH_PUBLINT_CONCURRENCY']) {
+      expect(windowsNative.env[key], `windows-native ${key} must use serial fork capacity`).toContain(
+        "github.repository == 'deepseek-ai/deepseek-harness'",
+      )
+      expect(windowsNative.env[key]).toContain("'1'")
+    }
+    expect(windowsNative.env.DSH_COVERAGE_PARTITIONS).toContain(
+      "github.repository == 'deepseek-ai/deepseek-harness'",
+    )
+    expect(windowsNative.env.DSH_COVERAGE_PARTITIONS).toContain("|| ''")
     const nativeCommandSteps = (windowsNative.steps as unknown[]).filter((step): step is Record<string, unknown> & { run: string } => (
       isRecord(step) && typeof step.run === 'string'
     ))
@@ -95,14 +112,45 @@ describe('CI workflow', () => {
     expect(aggregate.needs).not.toContain('serial-windows')
 
     // Linux failover is a separate switch: the three required Linux workers
-    // and the verdict job resolve their pool through DSH_CI_FAILOVER_LINUX,
-    // never the Windows switch.
+    // resolve through DSH_CI_FAILOVER_LINUX, retain the canonical repository's
+    // larger runner, and fall back to ubuntu-latest in forks.
     for (const [jobName, job] of [['node-24', node24], ['node-24-coverage', node24Coverage], ['node-24-consumers', node24Consumers]] as const) {
       expect(typeof job['runs-on']).toBe('string')
       expect(job['runs-on'], `${jobName} runs-on must use the Linux failover switch`).toContain('DSH_CI_FAILOVER_LINUX')
       expect(job['runs-on'], `${jobName} runs-on must not use the Windows failover switch`).not.toContain('DSH_CI_FAILOVER_WINDOWS')
       expect(job['runs-on']).toContain('vm-backup')
+      expect(job['runs-on']).toContain("github.repository == 'deepseek-ai/deepseek-harness'")
+      expect(job['runs-on']).toContain('dsh-ubuntu-24-04-16core')
+      expect(job['runs-on']).toContain('ubuntu-latest')
+      if (!Array.isArray(job.steps)) throw new TypeError(`${jobName} must define steps`)
+      for (const step of job.steps) {
+        if (!isRecord(step) || typeof step.if !== 'string' || !step.if.includes('DSH_CI_FAILOVER_LINUX')) continue
+        expect(step.if, `${jobName} failover steps must qualify fork variables by repository`).toContain(
+          'github.repository',
+        )
+      }
     }
+    expect(node24.env.DSH_GATE_CONCURRENCY).toContain("'1'")
+    expect(node24Coverage.env.DSH_COVERAGE_MAX_WORKERS).toContain("'1'")
+    expect(node24Coverage.env.DSH_COVERAGE_PARTITIONS).toContain("|| ''")
+    expect(node24Coverage.env.DSH_GATE_CONCURRENCY).toContain("'1'")
+    for (const key of ['DSH_GATE_CONCURRENCY', 'DSH_OXLINT_THREADS', 'DSH_PUBLINT_CONCURRENCY', 'DSH_SNAPSHOT_MAX_CONCURRENCY']) {
+      expect(node24Consumers.env[key], `node-24-consumers ${key} must use serial fork capacity`).toContain("'1'")
+    }
+    expect(node24Consumers.env.DSH_WEB_SNAPSHOT_WORKERS).toContain("'2'")
+    if (!Array.isArray(node24Consumers.steps)) {
+      throw new TypeError('node-24-consumers must define steps')
+    }
+    const hostedPlaywrightInstall = node24Consumers.steps
+      .filter(isRecord)
+      .find(step => step.name === 'Install Playwright Chromium and hosted dependencies')
+    expect(hostedPlaywrightInstall).toMatchObject({
+      'timeout-minutes': 15,
+      env: {
+        PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: '120000',
+      },
+      run: 'pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium',
+    })
     expect(aggregate['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
     expect(aggregate['runs-on']).not.toContain('DSH_CI_FAILOVER_WINDOWS')
     expect(aggregate['runs-on']).toContain('vm-backup')
@@ -238,6 +286,20 @@ describe('E2B e2e workflow', () => {
   })
 })
 
+describe('DeepSeek e2e workflow', () => {
+  it('prepares bubblewrap from the pinned payload without a package transaction', () => {
+    const workflow = loadWorkflow('.github/workflows/e2e.yml')
+    const e2e = workflowJob(workflow, 'e2e')
+    if (!Array.isArray(e2e.steps)) throw new TypeError('DeepSeek e2e workflow must define steps')
+
+    const steps = e2e.steps.filter(isRecord)
+    expect(steps.find(step => step.name === 'Prepare bubblewrap (unrestrict userns)')).toMatchObject({
+      run: 'bash scripts/prepare-ci-bubblewrap.sh',
+    })
+    expect(JSON.stringify(steps)).not.toContain('apt-get')
+  })
+})
+
 describe('Python release workflows', () => {
   it('keeps complete wheel validation separate from protected public publication', () => {
     const workflow = loadWorkflow('.github/workflows/python-release.yml')
@@ -268,7 +330,10 @@ describe('Python release workflows', () => {
       },
     })
     expect(pythonCompat.strategy).toMatchObject({ matrix: { python: ['3.10', '3.14'] } })
-    expect(JSON.stringify(pythonCompat.steps)).toContain('deepseek-harness-sdk==${{ steps.compatibility-version.outputs.version }}')
+    const pythonCompatSteps = JSON.stringify(pythonCompat.steps)
+    expect(pythonCompatSteps).toContain('dist/deepseek_harness_sdk-$VERSION-py3-none-any.whl')
+    expect(pythonCompatSteps).toContain('dist/deepseek_harness_runtime_bin-$VERSION-py3-none-manylinux_2_28_x86_64.whl')
+    expect(pythonCompatSteps).not.toContain('--find-links')
     const validateSteps = JSON.stringify(validate.steps)
     const authorize = validate.steps.filter(isRecord).find(step => step.name === 'Authorize publication request')
     if (!isRecord(authorize) || typeof authorize.run !== 'string') {
@@ -341,7 +406,14 @@ describe('Python release workflows', () => {
     expect(plan.if).toContain('inputs.ci')
     expect(plan.if).toContain('inputs.release')
     expect(JSON.stringify(plan.steps)).toContain('pep440_version')
-    expect(JSON.stringify(workflow)).toContain('macosx_14_0_arm64')
+    const workflowJson = JSON.stringify(workflow)
+    expect(workflowJson).toContain('macosx_14_0_arm64')
+    expect(workflowJson).toContain('dist-python/$SDK_WHEEL')
+    expect(workflowJson).toContain('dist-python/$RUNTIME_WHEEL')
+    expect(workflowJson).toContain('/work/dist-python/$SDK_WHEEL')
+    expect(workflowJson).toContain('/work/dist-python/$RUNTIME_WHEEL')
+    expect(workflowJson).not.toContain('--find-links dist-python')
+    expect(workflowJson).not.toContain('--find-links /work/dist-python')
     expect(manylinuxAddon).toMatchObject({ if: "runner.os == 'Linux'" })
     expect(JSON.stringify(manylinuxAddon)).toContain('manylinux_2_28_x86_64')
     expect(JSON.stringify(manylinuxAddon)).toContain('manylinux_2_28_aarch64')

@@ -72,7 +72,7 @@ describe('Codex App Server 0.147.0 protocol fixtures', () => {
     fileURLToPath(new URL('../package.json', import.meta.url)),
     'utf8',
   )), 'package.json')
-  const devDependencies = object(packageJson.devDependencies, 'package devDependencies')
+  const dependencies = object(packageJson.dependencies, 'package dependencies')
   const fixtureNames = ['handshake', 'stream', 'cancel', 'error', 'close'] as const
   const fixtures = Object.fromEntries(
     fixtureNames.map(name => [name, readJson(`${name}.json`)]),
@@ -93,7 +93,7 @@ describe('Codex App Server 0.147.0 protocol fixtures', () => {
       packageVersion: '0.147.0',
       cliVersionOutput: 'codex-cli 0.147.0',
     })
-    expect(devDependencies['@openai/codex']).toBe(manifestProduct.packageVersion)
+    expect(dependencies['@openai/codex']).toBe(manifestProduct.packageVersion)
     expect(object(manifest.scenarios, 'manifest scenarios')).toEqual({
       handshake: 'handshake.json',
       stream: 'stream.json',

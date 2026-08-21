@@ -1,0 +1,86 @@
+[
+  {
+    "direction": "client->agent",
+    "frame": {
+      "jsonrpc": "2.0",
+      "id": 0,
+      "method": "initialize",
+      "params": {
+        "protocolVersion": 1,
+        "clientCapabilities": {}
+      }
+    }
+  },
+  {
+    "direction": "agent->client",
+    "frame": {
+      "jsonrpc": "2.0",
+      "id": 0,
+      "result": {
+        "protocolVersion": 1,
+        "agentCapabilities": {
+          "loadSession": false,
+          "promptCapabilities": {
+            "image": false,
+            "audio": false,
+            "embeddedContext": false
+          }
+        },
+        "authMethods": []
+      }
+    }
+  },
+  {
+    "direction": "client->agent",
+    "frame": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "session/new",
+      "params": {
+        "cwd": "/fixture/workspace",
+        "mcpServers": []
+      }
+    }
+  },
+  {
+    "direction": "agent->client",
+    "frame": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "sessionId": "fixture-session"
+      }
+    }
+  },
+  {
+    "direction": "client->agent",
+    "frame": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "session/prompt",
+      "params": {
+        "sessionId": "fixture-session",
+        "prompt": [
+          {
+            "type": "text",
+            "text": "fixture task"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "direction": "agent->client",
+    "frame": {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "error": {
+        "code": -32603,
+        "message": "Internal error",
+        "data": {
+          "details": "fixture prompt failed"
+        }
+      }
+    }
+  }
+]
