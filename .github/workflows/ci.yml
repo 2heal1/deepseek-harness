@@ -131,10 +131,10 @@ jobs:
           || 'ubuntu-latest' }}
     name: node 24 / coverage
     env:
-      # Partitioning replaces the instrumented share; the canonical repository
-      # gives the exempt-heavy gate two workers, while forks use one worker.
+      # Partitioning replaces the instrumented share in the canonical repository.
+      # Forks keep one unpartitioned worker so blob merging cannot lose coverage.
       DSH_COVERAGE_MAX_WORKERS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '6' || '1' }}
-      DSH_COVERAGE_PARTITIONS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '4' || '2' }}
+      DSH_COVERAGE_PARTITIONS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '4' || '' }}
       DSH_GATE_CONCURRENCY: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '3' || '1' }}
     steps:
       - uses: actions/checkout@v6
@@ -489,7 +489,7 @@ jobs:
     timeout-minutes: 120
     env:
       DSH_COVERAGE_MAX_WORKERS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '6' || '1' }}
-      DSH_COVERAGE_PARTITIONS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '8' || '2' }}
+      DSH_COVERAGE_PARTITIONS: ${{ github.repository == 'deepseek-ai/deepseek-harness' && '8' || '' }}
       # Instrumented process and polling fixtures can exceed Vitest's defaults
       # under the complete lane's concurrent gate load.
       DSH_COVERAGE_TEST_TIMEOUT_MS: '30000'

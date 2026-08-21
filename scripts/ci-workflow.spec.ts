@@ -91,7 +91,7 @@ describe('CI workflow', () => {
     expect(windowsNative.env.DSH_COVERAGE_PARTITIONS).toContain(
       "github.repository == 'deepseek-ai/deepseek-harness'",
     )
-    expect(windowsNative.env.DSH_COVERAGE_PARTITIONS).toContain("'2'")
+    expect(windowsNative.env.DSH_COVERAGE_PARTITIONS).toContain("|| ''")
     const nativeCommandSteps = (windowsNative.steps as unknown[]).filter((step): step is Record<string, unknown> & { run: string } => (
       isRecord(step) && typeof step.run === 'string'
     ))
@@ -132,7 +132,7 @@ describe('CI workflow', () => {
     }
     expect(node24.env.DSH_GATE_CONCURRENCY).toContain("'1'")
     expect(node24Coverage.env.DSH_COVERAGE_MAX_WORKERS).toContain("'1'")
-    expect(node24Coverage.env.DSH_COVERAGE_PARTITIONS).toContain("'2'")
+    expect(node24Coverage.env.DSH_COVERAGE_PARTITIONS).toContain("|| ''")
     expect(node24Coverage.env.DSH_GATE_CONCURRENCY).toContain("'1'")
     for (const key of ['DSH_GATE_CONCURRENCY', 'DSH_OXLINT_THREADS', 'DSH_PUBLINT_CONCURRENCY', 'DSH_SNAPSHOT_MAX_CONCURRENCY']) {
       expect(node24Consumers.env[key], `node-24-consumers ${key} must use serial fork capacity`).toContain("'1'")
