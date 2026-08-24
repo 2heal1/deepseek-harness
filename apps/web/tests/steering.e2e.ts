@@ -43,6 +43,7 @@ const STEER_ALL_FIXTURE = join(STEER_ALL_DIR, 'session.jsonl')
 const STEER_ALL_OVERRIDE = join(STEER_ALL_DIR, 'replay.override.json')
 const STEER_ALL_MID = join(STEER_ALL_DIR, 'mid-steer.expected.md')
 const STEER_ALL_SETTLED = join(STEER_ALL_DIR, 'settled.expected.md')
+const STEER_ALL_REPLAY_PACE_MS = 1_000
 const STEER_ONE = 'Interjection: include the word BANANA in your final reply.'
 const STEER_TWO = 'Interjection: include the word ORANGE in your final reply.'
 
@@ -304,7 +305,7 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     scaffold = await launchWebScaffold({
       replayFixture: STEER_ALL_FIXTURE,
       replayOverride: STEER_ALL_OVERRIDE,
-      paceMs: REPLAY_PACE_MS,
+      paceMs: STEER_ALL_REPLAY_PACE_MS,
     })
     scaffold.ctx.on('session/event', (_session, event) => { sessionEvents.push(event) })
     browser = await chromium.launch()
@@ -336,13 +337,10 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
     await input.fill(STEER_TWO)
     await input.press('Enter')
     const dock = page.locator('[data-queue-dock]')
-    // Both messages queued: the two-row dock shows a collapsed count header,
-    // and Playwright text matching skips the hidden rows — expand the list,
-    // then assert each row's content.
+    // The count proves both rows reached the Host. Flush before opening the
+    // dock: that click can outlive the replay window and let the question
+    // composer take over the InputBar.
     await dock.getByText('2 queued messages').waitFor({ timeout: 10_000 })
-    await dock.getByRole('button').click()
-    await dock.getByText(STEER_ONE, { exact: true }).waitFor({ timeout: 10_000 })
-    await dock.getByText(STEER_TWO, { exact: true }).waitFor({ timeout: 10_000 })
     expect(await page.locator('[data-pending-steering]').count()).toBe(0)
 
     // Empty draft + Cmd+Enter: both queued rows steer in FIFO order, the dock
@@ -352,6 +350,8 @@ describe('web e2e: empty-draft Cmd+Enter steers the whole queue', () => {
       () => page.locator('[data-pending-steering]').filter({ hasText: /BANANA|ORANGE/ }).count(),
       { timeout: 10_000 },
     ).toBe(2)
+    await page.locator('[data-pending-steering]').filter({ hasText: STEER_ONE }).waitFor({ timeout: 10_000 })
+    await page.locator('[data-pending-steering]').filter({ hasText: STEER_TWO }).waitFor({ timeout: 10_000 })
     expect(await page.locator('[data-queue-dock]').count()).toBe(0)
     // The reasoning row streams independently of the steering handoff. Wait
     // for the block to settle so the mid snapshot does not race its transient

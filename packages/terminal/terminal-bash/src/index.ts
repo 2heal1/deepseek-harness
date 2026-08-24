@@ -114,15 +114,15 @@ async function startupSession(
       return
     }
     // pwsh cannot install its prompt from the environment: write the prompt
-    // function through the session and wait for the first marker prompt,
-    // which is also the readiness contract of the bash initialize path. The
-    // first send also pins UTF-8 output (the shared pwsh-local preamble)
+    // function only after its native prompt is ready, then wait for the first
+    // marker prompt. The setup send also pins UTF-8 output (the shared pwsh-local preamble)
     // before anything runs: the session decode path treats PTY bytes as
     // UTF-8, and an un-pinned console writes its host code page for
     // non-ASCII output. The banner-to-prompt gap can outlast the silence
     // bound, so the wait loops over follow-up sends until the controlled
     // prompt is actually visible (in the viewport or the retained scrollback
     // when it landed between sends), bounded by the send deadline.
+    await session.initialize(signal)
     let viewport = ''
     for (;;) {
       const first = viewport.length === 0

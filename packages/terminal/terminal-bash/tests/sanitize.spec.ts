@@ -21,6 +21,21 @@ describe('TerminalSanitizer', () => {
     expect(sanitizer.push('\x1b]0;title\x1b\\')).toEqual({ text: '', prompt: false })
   })
 
+  it('answers complete and split cursor position queries', () => {
+    const sanitizer = new TerminalSanitizer(64)
+    expect(sanitizer.push('\x1b[6n')).toEqual({
+      text: '',
+      prompt: false,
+      response: '\x1b[1;1R',
+    })
+    expect(sanitizer.push('\x1b[6')).toEqual({ text: '', prompt: false })
+    expect(sanitizer.push('n')).toEqual({
+      text: '',
+      prompt: false,
+      response: '\x1b[1;1R',
+    })
+  })
+
   it('normalizes CRLF and standalone carriage returns', () => {
     expect(normalizeTerminalText('a\r\nb\rc\x07')).toBe('a\nb\nc')
   })
