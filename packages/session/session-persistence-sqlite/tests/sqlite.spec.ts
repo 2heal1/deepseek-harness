@@ -445,7 +445,13 @@ describe('SessionPersistenceSqlite schema ownership', () => {
         : undefined
     })
 
-    const db = await openDatabase(BusyOnceDatabase, path, 'wal', 100)
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
+    let db: DatabaseSync
+    try {
+      db = await openDatabase(BusyOnceDatabase, path, 'wal', 100)
+    } finally {
+      clock.mockRestore()
+    }
     expect(attempts).toBe(2)
     expect(db.prepare(sql('journal-mode-wal')).get()).toEqual({ journal_mode: 'wal' })
     expect(db.prepare(sql('select-trusted-schema')).get()).toEqual({ trusted_schema: 0 })
@@ -503,12 +509,17 @@ describe('SessionPersistenceSqlite schema ownership', () => {
       attempts += 1
       return Object.assign(new Error('database is locked'), { errcode: 5 })
     })
-    await expect(openDatabase(
-      BusyDatabase,
-      await freshDbPath('dsh-sqlite-journal-paced-'),
-      'wal',
-      50,
-    )).rejects.toThrow('database is locked')
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => attempts * 10)
+    try {
+      await expect(openDatabase(
+        BusyDatabase,
+        await freshDbPath('dsh-sqlite-journal-paced-'),
+        'wal',
+        50,
+      )).rejects.toThrow('database is locked')
+    } finally {
+      clock.mockRestore()
+    }
     expect(attempts).toBeGreaterThan(1)
     expect(attempts).toBeLessThanOrEqual(6)
   })
