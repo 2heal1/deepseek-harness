@@ -14,6 +14,8 @@ export interface SanitizedChunk {
   prompt: boolean
   /** Printable text after the latest owned marker in this chunk. */
   promptTail?: string
+  /** Terminal response required by a recognized control query. */
+  response?: string
 }
 
 /**
@@ -41,6 +43,7 @@ export class TerminalSanitizer {
     let prompt = false
     let includePromptTail = this.trackingPromptTail
     let promptTail = ''
+    let response = ''
     let index = 0
     const appendText = (value: string): void => {
       text += value
@@ -92,6 +95,7 @@ export class TerminalSanitizer {
           index = escape
           break
         }
+        if (this.pending.slice(escape, end + 1) === '\x1b[6n') response += '\x1b[1;1R'
         index = end + 1
         continue
       }
@@ -104,6 +108,7 @@ export class TerminalSanitizer {
       text: this.normalizeText(text),
       prompt,
       ...includePromptTail ? { promptTail } : {},
+      ...response.length > 0 ? { response } : {},
     }
   }
 

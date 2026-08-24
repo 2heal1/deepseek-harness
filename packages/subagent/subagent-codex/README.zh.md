@@ -96,7 +96,7 @@ dsh --profile <name>
 
 生产环境的协议层有意只实现这一单次执行约定所需的 app-server 方法。运行时依赖与六个 optional-dependency alias 均锁定到 `@openai/codex@0.147.0` / `codex-cli 0.147.0`。普通安装会按当前操作系统与 CPU 选择一个载荷。对于当前 darwin-arm64 载荷，`npm pack --dry-run --json @openai/codex@0.147.0-darwin-arm64` 报告压缩包为 111,199,052 字节、解包后为 274,777,843 字节。该包包含原生 `codex`、`codex-code-mode-host`、`rg` 与 `zsh` 资源；其他平台可能不同，这些数值只用于披露而不是安装阈值。
 
-生成的 schema 证据与包测试会固定全部十六种 error-info variant、HTTP status 所在位置、六个生命周期阶段、进程结果、终止原因映射、unknown 回退、脱敏、权限顺序、取消、并发与清理聚合。无密钥真实产品测试会驱动包内 wrapper 连接回环 Responses fixture，并观测包内 argv、确切的 Bearer 密钥、原始任务、逐字节完全一致的最终回答、线程级 `never` 对环境中 `on-request` 的覆盖、自动评审启动、不产生文件副作用的无人值守拒绝、真实 `internalServerError`、测试拥有临时存储中的显式危险绕过写入、携带安全退出事实的进程／协议失败，以及 wrapper／原生进程完全停稳。同一层级还会证明两个命名实例保留彼此独立的环境与原生模式。
+`tests/fixtures/app-server/0.147.0/` 下带版本的规范化 transcript（文本记录）记录了协议消费方所需的握手、assistant 流、interrupt（中断）、远端失败与 stdio 关闭事实。生成的 schema 证据与包测试会固定全部十六种 error-info variant、HTTP status 所在位置、六个生命周期阶段、进程结果、终止原因映射、unknown 回退、脱敏、权限顺序、取消、并发与清理聚合。无密钥真实产品测试会驱动包内 wrapper 连接回环 Responses fixture，并观测包内 argv、确切的 Bearer 密钥、原始任务、逐字节完全一致的最终回答、线程级 `never` 对环境中 `on-request` 的覆盖、自动评审启动、不产生文件副作用的无人值守拒绝、真实 `internalServerError`、测试拥有临时存储中的显式危险绕过写入、携带安全退出事实的进程／协议失败，以及 wrapper／原生进程完全停稳。同一层级还会证明两个命名实例保留彼此独立的环境与原生模式。
 
 如果安装时省略 optional dependencies、当前平台不受支持，或所选载荷缺失，第一次委派会在 `initialize` 阶段以安全 `unknown` 类别和已观测到的进程结果失败。原始 wrapper 文本只保留在 Host stderr；提供方既不会探测宿主 CLI，也不会用它重试。独立 wrapper fixture 会另行证明原生载荷失败与不存在宿主回退。
 

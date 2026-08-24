@@ -148,6 +148,39 @@ async function initialize(session: LocalPtySession, terminal: FakeTerminal): Pro
 }
 
 describe('LocalPtySession readiness and output', () => {
+  it('answers cursor position queries and surfaces response write failures', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config())
+    const initializing = session.initialize()
+    terminal.emitData('\x1b[6')
+    terminal.emitData('n')
+    await vi.waitFor(() => {
+      expect(terminal.writes).toEqual(['\x1b[1;1R'])
+    })
+    terminal.emitData('\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    await initializing
+
+    const failingTerminal = new FakeTerminal()
+    const failing = new LocalPtySession(failingTerminal, config())
+    const operation = failing.startSend({ text: '', submit: false })
+    failingTerminal.throwWrite = true
+    failingTerminal.emitData('\x1b[6n')
+    await expect(operation.done).rejects.toThrow('write failed')
+    expect(failing.status()).toEqual({ kind: 'exited', exitCode: null, signal: null })
+
+    const closingTerminal = new FakeTerminal()
+    closingTerminal.autoExitOnKill = false
+    const closing = new LocalPtySession(closingTerminal, config())
+    const closed = closing.close('test complete')
+    closingTerminal.throwWrite = true
+    closingTerminal.emitData('\x1b[6n')
+    await Promise.resolve()
+    closingTerminal.emitExit()
+    await closed
+  })
+
   it('lets queued terminal output run before the first post-write readiness poll', async () => {
     vi.useFakeTimers()
     const terminal = new FakeTerminal()
@@ -233,6 +266,30 @@ describe('LocalPtySession readiness and output', () => {
     inspector.waiting = false
     await vi.advanceTimersByTimeAsync(10)
     expect(settled).toBe(false)
+    inspector.waiting = true
+    await vi.advanceTimersByTimeAsync(10)
+    expect((await operation.done).waitReason).toBe('stdin_read')
+  })
+
+  it('does not reuse a pre-write non-wait as proof that the submitted input ran', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const inspector = new FakeInspector()
+    const session = makeSession(terminal, inspector, config())
+    await initialize(session, terminal)
+
+    inspector.waiting = false
+    const operation = session.startSend({ text: 'echo ready', submit: true })
+    let settled = false
+    void operation.done.then(() => { settled = true })
+    await Promise.resolve()
+    await Promise.resolve()
+    inspector.waiting = true
+    await vi.advanceTimersByTimeAsync(20)
+    expect(settled).toBe(false)
+
+    inspector.waiting = false
+    await vi.advanceTimersByTimeAsync(10)
     inspector.waiting = true
     await vi.advanceTimersByTimeAsync(10)
     expect((await operation.done).waitReason).toBe('stdin_read')

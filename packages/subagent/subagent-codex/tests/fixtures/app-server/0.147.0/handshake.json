@@ -1,0 +1,44 @@
+{
+  "scenario": "handshake",
+  "steps": [
+    {
+      "direction": "client-to-server",
+      "message": {
+        "id": 0,
+        "method": "initialize",
+        "params": {
+          "clientInfo": {
+            "name": "deepseek-harness-spike",
+            "title": "DeepSeek Harness protocol spike",
+            "version": "0.0.1"
+          },
+          "capabilities": {
+            "experimentalApi": false,
+            "requestAttestation": false
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "id": 0,
+        "result": {
+          "userAgent": "deepseek-harness-spike/0.147.0 (<platform>)",
+          "codexHome": "<codex-home>",
+          "platformFamily": "<platform-family>",
+          "platformOs": "<platform-os>"
+        }
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "message": {
+        "method": "initialized"
+      }
+    }
+  ],
+  "expected": {
+    "connectionState": "initialized"
+  }
+}

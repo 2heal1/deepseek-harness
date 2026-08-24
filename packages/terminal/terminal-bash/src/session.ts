@@ -132,13 +132,12 @@ class LocalSendOperation implements TerminalSendOperation {
 
   setInitialForeground(foreground: SubprocessTerminalForeground | undefined): void {
     this.initialForegroundPgid = foreground?.processGroupId
-    this.initialForegroundLeftWait = foreground?.inputWaiting !== true
+    this.initialForegroundLeftWait = false
   }
 
   acceptsStdinWait(pgid: number, waiting: boolean): boolean {
-    // The same group may still expose the wait that existed before terminal.write.
-    // Observe every poll so a departure before the exact-settlement threshold
-    // still makes a later return to that wait post-write evidence.
+    // A pre-write non-wait is not evidence that this input started. The same
+    // group must leave stdin wait in a post-write poll before returning to it.
     if (pgid !== this.initialForegroundPgid) return waiting
     if (!waiting) this.initialForegroundLeftWait = true
     return waiting && this.initialForegroundLeftWait
@@ -379,6 +378,11 @@ export class LocalPtySession implements TerminalBackendSession {
 
   private onData(data: string): void {
     const sanitized = this.sanitizer.push(data)
+    if (sanitized.response !== undefined) {
+      void this.terminal.write(sanitized.response).catch((error: unknown) => {
+        if (!this.closing) this.onTransportFailure(error)
+      })
+    }
     this.appendOutput(sanitized.text)
     if (sanitized.prompt) {
       // TODO(pty-delayed-signal-prompt): With a reproducer, define a marker-generation boundary

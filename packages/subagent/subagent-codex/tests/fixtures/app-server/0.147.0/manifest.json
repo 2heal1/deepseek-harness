@@ -1,0 +1,33 @@
+{
+  "fixtureFormatVersion": 1,
+  "protocol": "codex-app-server",
+  "transport": "stdio-jsonl",
+  "product": {
+    "package": "@openai/codex",
+    "packageVersion": "0.147.0",
+    "cliVersionOutput": "codex-cli 0.147.0"
+  },
+  "schemaEvidence": {
+    "command": "codex app-server generate-json-schema --out <directory>",
+    "versionSpecific": true
+  },
+  "capture": {
+    "date": "2026-08-18",
+    "platform": "darwin-arm64",
+    "client": "deepseek-harness-spike",
+    "upstream": "loopback Responses fixture",
+    "normalization": [
+      "Replace generated thread, turn, item, workspace, and home values with angle-bracket placeholders.",
+      "Remove timestamps, durations, machine names, installation ids, warnings, token usage, rate limits, and remote-control notifications.",
+      "Retain protocol fields that establish handshake, input admission, assistant streaming, cancellation, failure, and process closure.",
+      "Preserve one observed order while requiring consumers to correlate asynchronous notifications by thread and turn ids."
+    ]
+  },
+  "scenarios": {
+    "handshake": "handshake.json",
+    "stream": "stream.json",
+    "cancel": "cancel.json",
+    "error": "error.json",
+    "close": "close.json"
+  }
+}

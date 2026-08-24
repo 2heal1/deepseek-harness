@@ -1,0 +1,160 @@
+{
+  "scenario": "stream",
+  "steps": [
+    {
+      "direction": "client-to-server",
+      "message": {
+        "id": 1,
+        "method": "thread/start",
+        "params": {
+          "cwd": "<workspace>",
+          "ephemeral": true
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "id": 1,
+        "result": {
+          "thread": {
+            "id": "<thread-id>",
+            "ephemeral": true,
+            "cliVersion": "0.147.0",
+            "status": {
+              "type": "idle"
+            },
+            "canAcceptDirectInput": true
+          },
+          "model": "fixture-model",
+          "modelProvider": "fixture",
+          "approvalPolicy": "never",
+          "sandbox": {
+            "type": "readOnly",
+            "networkAccess": false
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "message": {
+        "id": 2,
+        "method": "turn/start",
+        "params": {
+          "threadId": "<thread-id>",
+          "input": [
+            {
+              "type": "text",
+              "text": "Return the fixture answer.",
+              "text_elements": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "thread/started",
+        "params": {
+          "thread": {
+            "id": "<thread-id>",
+            "ephemeral": true,
+            "cliVersion": "0.147.0",
+            "canAcceptDirectInput": true
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "id": 2,
+        "result": {
+          "turn": {
+            "id": "<turn-id>",
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "turn/started",
+        "params": {
+          "threadId": "<thread-id>",
+          "turn": {
+            "id": "<turn-id>",
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "item/started",
+        "params": {
+          "threadId": "<thread-id>",
+          "turnId": "<turn-id>",
+          "item": {
+            "type": "agentMessage",
+            "id": "<agent-message-id>",
+            "text": "",
+            "phase": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "item/agentMessage/delta",
+        "params": {
+          "threadId": "<thread-id>",
+          "turnId": "<turn-id>",
+          "itemId": "<agent-message-id>",
+          "delta": "fixture answer"
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "item/completed",
+        "params": {
+          "threadId": "<thread-id>",
+          "turnId": "<turn-id>",
+          "item": {
+            "type": "agentMessage",
+            "id": "<agent-message-id>",
+            "text": "fixture answer",
+            "phase": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "<thread-id>",
+          "turn": {
+            "id": "<turn-id>",
+            "status": "completed",
+            "error": null
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "assistantText": "fixture answer",
+    "turnStatus": "completed"
+  }
+}

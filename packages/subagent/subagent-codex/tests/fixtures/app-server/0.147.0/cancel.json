@@ -1,0 +1,85 @@
+{
+  "scenario": "cancel",
+  "steps": [
+    {
+      "direction": "client-to-server",
+      "message": {
+        "id": 2,
+        "method": "turn/start",
+        "params": {
+          "threadId": "<thread-id>",
+          "input": [
+            {
+              "type": "text",
+              "text": "Wait for cancellation.",
+              "text_elements": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "id": 2,
+        "result": {
+          "turn": {
+            "id": "<turn-id>",
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "turn/started",
+        "params": {
+          "threadId": "<thread-id>",
+          "turn": {
+            "id": "<turn-id>",
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-server",
+      "message": {
+        "id": 3,
+        "method": "turn/interrupt",
+        "params": {
+          "threadId": "<thread-id>",
+          "turnId": "<turn-id>"
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "id": 3,
+        "result": {}
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "<thread-id>",
+          "turn": {
+            "id": "<turn-id>",
+            "status": "interrupted",
+            "error": null
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "interruptAcknowledged": true,
+    "turnStatus": "interrupted"
+  }
+}

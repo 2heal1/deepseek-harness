@@ -1,0 +1,88 @@
+{
+  "scenario": "error",
+  "steps": [
+    {
+      "direction": "client-to-server",
+      "message": {
+        "id": 2,
+        "method": "turn/start",
+        "params": {
+          "threadId": "<thread-id>",
+          "input": [
+            {
+              "type": "text",
+              "text": "Trigger the fixture failure.",
+              "text_elements": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "id": 2,
+        "result": {
+          "turn": {
+            "id": "<turn-id>",
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "turn/started",
+        "params": {
+          "threadId": "<thread-id>",
+          "turn": {
+            "id": "<turn-id>",
+            "status": "inProgress",
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "error",
+        "params": {
+          "threadId": "<thread-id>",
+          "turnId": "<turn-id>",
+          "willRetry": false,
+          "error": {
+            "message": "{\"error\":{\"message\":\"fixture failure\",\"type\":\"invalid_request_error\"}}",
+            "codexErrorInfo": "other",
+            "additionalDetails": null
+          }
+        }
+      }
+    },
+    {
+      "direction": "server-to-client",
+      "message": {
+        "method": "turn/completed",
+        "params": {
+          "threadId": "<thread-id>",
+          "turn": {
+            "id": "<turn-id>",
+            "status": "failed",
+            "error": {
+              "message": "{\"error\":{\"message\":\"fixture failure\",\"type\":\"invalid_request_error\"}}",
+              "codexErrorInfo": "other",
+              "additionalDetails": null
+            }
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "willRetry": false,
+    "turnStatus": "failed",
+    "codexErrorInfo": "other"
+  }
+}
