@@ -20,6 +20,81 @@ DeepSeek Harness 存在两种执行模型。主 agent（智能体）通过 `dsh-
 
 首个可用版本支持原生执行、兼容 Codex App Server 的流式主 agent、兼容 ACP 的一次性子 agent，以及每会话 MCP 网关。该版本不承诺冷恢复、可续接外部子 agent、通用 JSONL 执行、终端回放、跨会话进程池或桌面打包。
 
+### P1 冻结约定
+
+以下约定是 F1、F2、F4 和 F5 的实现输入。这些工作包可以增加私有辅助机制和提供方专用数据，但改变这些公共标识、所有权规则、事件生产者、持久化规则或安全保证时，必须再次更新决策。
+
+#### Agent、submission 与能力
+
+| 主题 | 冻结约定 |
+| --- | --- |
+| 必选 `Agent` | 暴露共享的 `SessionId`、`Session`、作用域 `Context`、已声明能力、`idle \| running` 调度状态、`submit`、定向 submission 取消、`whenIdle` 和句柄释放。`whenIdle` 仍是整个 agent 的完全停稳原语，绝不结算特定 submission。 |
+| Submission 接纳 | `submit` 校验请求，分配品牌化 `SubmissionId` 和带标识的用户消息，追加 `agent/submission/accepted`，然后返回 receipt。在该追加之前发生的失败会拒绝操作且不返回 receipt；之后发生的失败会结算 receipt。接纳表示 Harness 已负责该工作，不表示外部模型已观察到消息。 |
+| 启动关联 | Receipt 暴露启动 Promise。Router 分配轮次，并依次追加 `turn/start`、`agent/submission/started` 和规范 `user/message` 后完成该 Promise。排队期间被取消或随释放终止的 submission 以未启动结算，且不打开轮次。 |
+| 终态关联 | Receipt 暴露唯一结算 Promise。对于已启动工作，Router 追加 `turn/end`，再追加 `agent/submission/settled`，然后以轮次、`TurnEndReason` 和终态事件序号完成 receipt。此时规范 assistant 事件已经追加并完成同步分发；持久化 flush 和 transport 输出队列仍由调用方负责。 |
+| 取消竞态 | 取消以 `SubmissionId` 为目标、保持幂等，并返回它是否在终态结算前胜出。首个终态转换生效。Sink 关闭后观察到的提供方输出不能进入规范对话事件。Agent 释放会先用持久的 disposed cause 取消所有未结算 receipt，再返回。 |
+| 调度状态 | `Agent.status` 保持 `idle \| running`：它回答已发布 agent 是否持有工作。Profile 可用性和进程／协议阶段使用运行时事实，而不是增加 Agent 状态。失败的运行时会终结其 submission 并被释放；不可用 profile 不会发布 Agent。 |
+| 可选能力 | 注册能力集为 `continuation`、`steering`、`queuedInputRead`、`queuedInputMutation`、`injection`、`maintenance`、`imageInput`、`modelOverride`、`approvals`、`runtimeActivity`、`harnessTools`、`resume` 和 `coldResume` 使用稳定 id。能力专用 metadata 携带完整度或限制。空闲状态下的首次 submission、定向取消、规范 assistant 输出和结算是主运行时的必选能力。 |
+| 执行约束 | 每个可选操作都在 Service 或 Host 执行边界检查实时能力。缺少能力时抛出 `AGENT_CAPABILITY_UNSUPPORTED`，并携带 agent id、能力 id 和 operation；UI 可见性绝不是授权。 |
+
+#### Router 生命周期
+
+Router 是唯一 `AgentFactory`，并执行一个覆盖回滚的事务：
+
+1. 在创建运行时资源之前，解析并校验有效 profile、提供方注册、调用方覆盖项、会话 identity 和不可变快照。
+2. 准备尚未发布的会话和 agent scope，再要求提供方返回 prepared runtime 句柄。提供方可以分配协议与进程资源，但不能注册会话或 Agent、追加规范事件或接纳输入。
+3. 运行调用方 setup 及其同步 publication commit。先 enter Session，再 enter Agent；先 announce `session/created`，再 announce `agent/created`。只有返回的已发布 handle 可以接纳 submission。
+4. 任何失败都会依次停止接纳、终结已接纳 submission、关闭提供方事件 sink、释放提供方并等待进程树完全停稳、展开 agent scope、detach Agent，最后 detach Session。任何已经开始的创建通知都会收到配对的释放通知。
+5. 正常释放使用同一条 memoized 反向路径。它在取消前停止接纳，允许有界终态提供方输出直到每个活动 submission 结算，在终止进程前关闭 sink，等待提供方完全停稳，展开 scope 注册，发出 `agent/disposed`，最后发出 `session/disposed`。重复或竞态释放等待同一个 Promise。
+
+提供方只拥有其 prepared 句柄返回的资源，并且必须保证 `dispose` 幂等且完全停稳。Router 拥有 Session preparation、scope、registry publication、receipt 和全部回滚顺序。提供方卸载会在注册消失前 drain 它准备的每个句柄。
+
+#### Durable 事件与来源
+
+| 事件族 | 唯一生产者与规则 |
+| --- | --- |
+| `session/*`、`agent/created`、`agent/disposed`、`agent/status` | Session Store 和 Router 保留现有所有权。Router 包装层产生两态调度转换；提供方通过运行时事实报告进程阶段。 |
+| `agent/submission/accepted`、`started`、`settled`；`turn/start`、`turn/end`；`user/message` | 仅由 Router 生产。Submission 事件携带 `SubmissionId` 和 `MessageId`；started 与 settled 记录携带已分配的轮次。未启动结算不携带轮次。 |
+| `agent/runtime/facts` | 提供方只能通过 Router sink 报告事实。记录标识运行时和提供方，携带协商后的产品与协议版本、能力、安全的 external-session id 和 `starting \| ready \| running \| stopping \| stopped \| failed` 进程阶段，并标明每项事实来自 profile 或协议观察。 |
+| `assistant/chunk`、`assistant/message` | 提供方只能通过 Router 为一个打开 submission 所有的事件 sink 写入。Native 记录包含步骤；外部记录省略步骤，并携带 `{ kind: "runtime", provider, source: "protocol" }` provenance。由 profile 得到的模型 identity 在运行时事实中使用 `source: "profile"`，而不作为 assistant 内容 provenance。 |
+| `step/*`、`request/*`、`agent/pre-step`、`agent/request*`、`agent/turn-stopping`、`agent/inbox/*` | 仅属于 Native 运行时。F5 允许规范 user 和 assistant 事件直接出现在外部 open turn 中，不虚构 Harness 步骤。 |
+| `tool/*` 与 `agent/runtime/activity` | 只有 Harness ToolRuntime 生产 `tool/call` 和 `tool/result`。提供方用运行时 activity 报告产品原生命令、工具、文件、diff、usage 和 status 观察结果，其中包含运行时 id、已知时的 submission id、kind、phase、`complete \| partial` 完整度以及有界且已脱敏的 JSON data。 |
+
+`deriveMessages` 使用显式的规范事件 allowlist，并排除所有运行时事实与 activity 事件。运行时事件 sink 在追加前校验打开的 submission 与轮次、事件顺序、已声明的 activity 能力、JSON 上限、provenance 和脱敏。提供方绝不会获得不受限的 `Session.append` 权限。
+
+F5 会改变 Session Header 和规范 assistant 事件表示，因此把 `SESSION_FORMAT_VERSION` 从 `0` 增加到 `1`；预发布 loader 会拒绝版本 `0`，而不是猜测 provenance 或运行时 identity。
+
+#### 快照、恢复与 fork
+
+每个新 Session Header 都包含一个不可变 `RuntimeProfileSnapshot`，其中包括 `schemaVersion`、`profileId`、Settings revision、provider id 与 provider-options version、executable 及 resolution policy、argument array、working-directory policy、model policy、product configuration、permissions 与 enforcement claim、native-tool policy、Harness-tool transport 与 allowlist、credential target 到 `CredentialRef` 的映射、process deadlines 及 capacity。在创建该快照前解析所有默认值和调用方覆盖项。快照不包含已解析 credential、生成的 gateway token、临时路径、process id、协商能力或 external-session id。
+
+恢复只使用存储的快照。对应 Settings profile 可以已编辑或不存在。当提供方或快照 version 不兼容、运行时不具备 `resume`，或必需 product state／external identity 缺失时，恢复返回类型化错误；它绝不会选择当前默认值、创建替代 external identity 或回退到 Native。
+
+普通 fork 按字节复制父会话的快照并记录普通会话 lineage，但排除协商事实和 external identity。Child 始终创建新的外部产品会话，并追加自己的运行时事实。New-from-transcript 操作可以解析不同 profile，但它会创建不带恢复语义的新会话，并展示为新 identity。
+
+每次进程启动都从快照中的引用解析 credential。轮换会改变后续启动获得的值，但不修改快照；引用缺失时在创建进程前失败。
+
+#### 错误与调用方迁移
+
+运行时失败使用单一可序列化 `AgentRuntimeError`，包含稳定 code、phase、安全 message、可选提供方 id 和已脱敏的有界 details。冻结 code 为 `PROFILE_NOT_FOUND`、`PROFILE_INVALID`、`RUNTIME_UNAVAILABLE`、`RUNTIME_INCOMPATIBLE`、`AGENT_CAPABILITY_UNSUPPORTED`、`AGENT_BUSY`、`SUBMISSION_REJECTED`、`RESUME_UNSUPPORTED`、`EXTERNAL_STATE_MISSING`、`SECURITY_POLICY_UNSATISFIED`、`START_TIMEOUT`、`TURN_TIMEOUT`、`RUNTIME_FAILED` 和 `DISPOSE_FAILED`。接纳后的取消是 receipt 终态结果，不是 exception。
+
+F1 增加运行时 Service Definition、identifier、receipt、capability、快照和错误类型，但不改变 active factory。F2 安装 Router 与 Native 提供方，并把 Native-only 行为移入能力。F5 将 Web Host、ACP Host、JSON-RPC SDK Server 与 Client 以及 Headless 原子迁移到 receipt，并移除它们对 inbox claim、`followup`、`steer` 或按消息猜测 `whenIdle` 的直接依赖。
+
+Web RPC schema 在本预发布阶段同步更新。ACP 协议行为保持版本 1；ACP Host 把 receipt settlement 转换为现有 ACP 响应，并自行 flush 有序输出队列。JSON-RPC `serverInfo.version` 更新为 `0.0.2`；`session/prompt` 同时返回 message id 与 submission id，submission start 和 settlement 通知取代 inbox-splice 推断。旧 SDK Client 会因 version／schema 校验失败，而不会获得兼容模拟。Headless 等待 receipt settlement，随后只 flush 与其关联的会话区间。
+
+#### 安全启动
+
+F4 按以下规则实现供所有外部运行时使用的唯一 Launcher：
+
+1. 不经 Shell 解析可执行文件。绝对路径在 spawn 前立即重新校验；裸名称只从启动策略的显式 search path 解析。失败绝不回退到其他可执行文件或 Native。
+2. 从空映射构造子进程环境：Launcher 必需的操作系统条目、Driver 必需条目、显式 allowlist 中的非 secret ambient 环境键、profile literal，以及刚解析的 credential target。Windows key 比较不区分大小写。Ambient credential-shaped 环境键和所有 reserved key 即使列入 allowlist 也会被拒绝。
+3. 每个 Driver 为 protocol mode、output mode、model、session、gateway、policy 和 credential 声明 reserved argument 与 environment key。只有 Driver-owned injection 可以写入它们；重复项或 profile 设置尝试在 spawn 前失败。V1 credential 只通过环境传入，绝不进入 argv。
+4. Windows native executable 直接 spawn。Driver 只有通过共享的 `ComSpec /d /s /c` Launcher 才能选择 `.cmd` 或 `.bat`；其 encoder 拒绝动态 argument 中的 CR、LF、NUL、`%`、`!` 和命令元字符，并为带空格路径、引号、extension precedence 与拒绝行为提供原生 Windows fixture。Profile 不能提供 Shell command string。
+5. 认证文件只能在随机 owner-only 目录中以 exclusive owner-only file 创建。Prepared 句柄在发布前记录不含 secret 的 cleanup metadata，在每条正常或回滚路径删除文件；启动 scavenger 会删除本安装拥有的 stale file，且不跟随 link。
+6. 在任何提供方诊断到达 logger、错误、会话事件、API 响应或 retained output 前，安装 launch-scoped known-value redactor。它处理跨 stream 分片拆分的 value，并替换每个非空已解析 credential value；编码或转换后的 secret 不在保证范围内。
+7. 执行快照中为正数的 startup、turn、graceful-shutdown 和 final-termination deadline。Timeout 会停止接纳，在可用时请求 protocol cancellation，关闭 protocol input，通过 subprocess process-tree terminator 逐级升级，等待 `waitForExit`，然后才完成 rollback 或 dispose。
+8. Capacity 会一直占用到进程树完全停稳且临时材料清理完成。Cancellation 或 cleanup failure 会保留原 terminal reason，并独立报告 `DISPOSE_FAILED`；任何 success result 都不能隐藏未完成清理。
+
 ### 术语与所有权
 
 | 术语 | 含义 | 所有者 |
