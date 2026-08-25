@@ -48,7 +48,7 @@
 | D0 | 设计方案与交付跟踪基线 | 无 | D0 | 高级 | `done` | `feat/configurable-cli-d0-design-roadmap` | [PR #1](https://github.com/2heal1/deepseek-harness/pull/1) | Agent Note 与 roadmap 通过 `doc-sync`、lint、提交钩子和增量 typecheck；PR 已合入集成分支 |
 | P0a | Codex App Server 协议 Spike | D0 | P0 | 中等，高级评审 | `in-review` | `feat/configurable-cli-p0a-codex-spike` | [PR #3](https://github.com/2heal1/deepseek-harness/pull/3) | 0.147.0 握手、流、取消、错误与关闭 fixture；Codex 定向测试、`doc-sync`、lint、翻译配对与 `git diff --check` 通过 |
 | P0b | ACP 协议 Spike | D0 | P0 | 中等，高级评审 | `done` | `feat/configurable-cli-p0b-acp-spike` | [PR #2](https://github.com/2heal1/deepseek-harness/pull/2) | SDK 0.25.1／协议 v1 的一次性运行、取消、结构化错误和 EOF 关闭 fixture；官方 SDK 回放 5 项、ACP 单测 52 项、包级类型构建、lint、doc-sync 通过；PR 已合入集成分支 |
-| P0c | Host、SDK、事件与威胁模型审计 | D0 | P0 | 高级 | `not-started` | `feat/configurable-cli-p0c-runtime-audit` | — | 调用方行为矩阵、事件表和启动威胁模型 |
+| P0c | Host、SDK、事件与威胁模型审计 | D0 | P0 | 高级 | `in-review` | `feat/configurable-cli-p0c-runtime-audit` | [PR #4](https://github.com/2heal1/deepseek-harness/pull/4) | [审计报告](configurable-cli-agent-runtimes-p0c-audit.md)：调用方行为矩阵、事件表、启动威胁模型与 P1 冻结输入；`doc-sync` 28 项、lint、`git diff --check` 通过 |
 | P1 | 架构冻结 | P0a、P0b、P0c | P1 | 高级主干所有者 | `not-started` | `feat/configurable-cli-p1-architecture` | — | Agent 行为、Router 所有权、事件来源、快照、fork 与安全决策获接受 |
 | F1 | agent 运行时 Service Definition | P1 | F1 | 高级 | `not-started` | `feat/configurable-cli-f1-runtime-service` | — | 类型、Fake Provider、能力与失败测试、不变量配套工具 |
 | F2 | Router 与 Native 提取 | F1 | F | 高级 | `not-started` | `feat/configurable-cli-f2-router-native` | — | Native 行为一致性、事务回滚、取消、资源释放与完全停稳测试 |
@@ -87,3 +87,6 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | 2026-08-18 | P0b | 完成 SDK 0.25.1／协议 v1 的四类 fixture、官方 SDK 回放测试与双语设计基线；最小充分测试、lint 和 doc-sync 通过，等待创建 Draft PR |
 | 2026-08-18 | P0b | [PR #2](https://github.com/2heal1/deepseek-harness/pull/2) 已创建；状态更新为 `in-review`，等待高级协议评审 |
 | 2026-08-20 | P0b | [PR #2](https://github.com/2heal1/deepseek-harness/pull/2) 合入 `feat/configurable-cli`；状态更新为 `done` |
+| 2026-08-24 | P0c | 从最新 `fork/feat/configurable-cli` 创建 `feat/configurable-cli-p0c-runtime-audit`；确认 D0 已合入且远端不存在同名工作分支；状态更新为 `in-progress` |
+| 2026-08-24 | P0c | 完成 Host／SDK 调用方行为矩阵、Session 与 live event 来源表、启动威胁模型及 P1 冻结输入；`doc-sync` 28 项、lint 与 `git diff --check` 通过，等待 Draft PR |
+| 2026-08-24 | P0c | [PR #4](https://github.com/2heal1/deepseek-harness/pull/4) 已创建；状态更新为 `in-review`，等待高级架构评审 |
