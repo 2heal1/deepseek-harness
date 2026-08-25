@@ -28,24 +28,24 @@ DeepSeek Harness 存在两种执行模型。主 agent（智能体）通过 `dsh-
 
 | 主题 | 冻结约定 |
 | --- | --- |
-| 必选 `Agent` | 暴露共享的 `SessionId`、`Session`、作用域 `Context`、已声明能力、`idle \| running` 调度状态、`submit`、定向 submission 取消、`whenIdle` 和句柄释放。`whenIdle` 仍是整个 agent 的完全停稳原语，绝不结算特定 submission。 |
+| 必选 `Agent` | 暴露共享的 `SessionId`、`Session`、作用域 `Context`、已声明能力、`idle \| running` 调度状态、`submit`、定向 submission 取消和 `whenIdle`。创建调用方通过独立的 `AgentHandle` 获得 dispose 能力。`whenIdle` 仍是整个 agent 的完全停稳原语，绝不结算特定 submission。 |
 | Submission 接纳 | `submit` 校验请求，分配品牌化 `SubmissionId` 和带标识的用户消息，追加 `agent/submission/accepted`，然后返回 receipt。在该追加之前发生的失败会拒绝操作且不返回 receipt；之后发生的失败会结算 receipt。接纳表示 Harness 已负责该工作，不表示外部模型已观察到消息。 |
 | 启动关联 | Receipt 暴露启动 Promise。Router 分配轮次，并依次追加 `turn/start`、`agent/submission/started` 和规范 `user/message` 后完成该 Promise。排队期间被取消或随释放终止的 submission 以未启动结算，且不打开轮次。 |
 | 终态关联 | Receipt 暴露唯一结算 Promise。对于已启动工作，Router 追加 `turn/end`，再追加 `agent/submission/settled`，然后以轮次、`TurnEndReason` 和终态事件序号完成 receipt。此时规范 assistant 事件已经追加并完成同步分发；持久化 flush 和 transport 输出队列仍由调用方负责。 |
 | 取消竞态 | 取消以 `SubmissionId` 为目标、保持幂等，并返回它是否在终态结算前胜出。首个终态转换生效。Sink 关闭后观察到的提供方输出不能进入规范对话事件。Agent 释放会先用持久的 disposed cause 取消所有未结算 receipt，再返回。 |
-| 调度状态 | `Agent.status` 保持 `idle \| running`：它回答已发布 agent 是否持有工作。Profile 可用性和进程／协议阶段使用运行时事实，而不是增加 Agent 状态。失败的运行时会终结其 submission 并被释放；不可用 profile 不会发布 Agent。 |
-| 可选能力 | 注册能力集为 `continuation`、`steering`、`queuedInputRead`、`queuedInputMutation`、`injection`、`maintenance`、`imageInput`、`modelOverride`、`approvals`、`runtimeActivity`、`harnessTools`、`resume` 和 `coldResume` 使用稳定 id。能力专用 metadata 携带完整度或限制。空闲状态下的首次 submission、定向取消、规范 assistant 输出和结算是主运行时的必选能力。 |
-| 执行约束 | 每个可选操作都在 Service 或 Host 执行边界检查实时能力。缺少能力时抛出 `AGENT_CAPABILITY_UNSUPPORTED`，并携带 agent id、能力 id 和 operation；UI 可见性绝不是授权。 |
+| 调度状态 | `Agent.status` 保持 `idle \| running`：它回答已发布 agent 是否持有未结算工作。在 accepted 事件可见之前，接纳操作先把状态改为 `running`；只有 submission 与 maintenance 工作都不存在时，状态才恢复为 `idle`，`whenIdle` 观察同一边界。Profile 可用性和进程／协议阶段使用运行时事实，而不是增加 Agent 状态。失败的运行时会终结其 submission 并被释放；不可用 profile 不会发布 Agent。 |
+| 可选能力 | 注册能力集为 `continuation`、`steering`、`queuedInputRead`、`queuedInputMutation`、`injection`、`maintenance`、`imageInput`、`modelOverride`、`approvals`、`runtimeActivity`、`harnessTools`、`resume` 和 `coldResume` 使用稳定 id。提供方 preparation 在发布前返回不可变的有效能力集；已保证的能力若丢失，运行时会失败，而不是改变该集合。能力专用 metadata 携带完整度或限制。空闲状态下的首次 submission、定向取消、规范 assistant 输出和结算是主运行时的必选能力。 |
+| 执行约束 | 每个可选操作都在 Service 或 Host 执行边界检查已发布 Agent 的能力集。缺少能力时抛出 `AGENT_CAPABILITY_UNSUPPORTED`，并携带 agent id、能力 id 和 operation；UI 可见性绝不是授权。 |
 
 #### Router 生命周期
 
 Router 是唯一 `AgentFactory`，并执行一个覆盖回滚的事务：
 
 1. 在创建运行时资源之前，解析并校验有效 profile、提供方注册、调用方覆盖项、会话 identity 和不可变快照。
-2. 准备尚未发布的会话和 agent scope，再要求提供方返回 prepared runtime 句柄。提供方可以分配协议与进程资源，但不能注册会话或 Agent、追加规范事件或接纳输入。
-3. 运行调用方 setup 及其同步 publication commit。先 enter Session，再 enter Agent；先 announce `session/created`，再 announce `agent/created`。只有返回的已发布 handle 可以接纳 submission。
+2. 准备尚未发布的会话和 agent scope，再要求提供方返回包含不可变有效能力与初始规范化运行时事实的 prepared runtime 句柄。提供方可以分配协议与进程资源，但不能注册会话或 Agent、追加规范事件或接纳输入。
+3. 运行调用方 setup 及其同步 publication commit。先 enter Session，再 enter Agent，announce `session/created`，通过 Router 追加初始 `agent/runtime/facts`，最后 announce `agent/created`。如果 runtime facts 追加失败，事务会在 announce Agent 前回滚已 announce 的 Session。只有返回的已发布 handle 可以接纳 submission。
 4. 任何失败都会依次停止接纳、终结已接纳 submission、关闭提供方事件 sink、释放提供方并等待进程树完全停稳、展开 agent scope、detach Agent，最后 detach Session。任何已经开始的创建通知都会收到配对的释放通知。
-5. 正常释放使用同一条 memoized 反向路径。它在取消前停止接纳，允许有界终态提供方输出直到每个活动 submission 结算，在终止进程前关闭 sink，等待提供方完全停稳，展开 scope 注册，发出 `agent/disposed`，最后发出 `session/disposed`。重复或竞态释放等待同一个 Promise。
+5. 正常释放使用同一条 memoized 反向路径。它停止接纳并请求取消，只在所有活动 submission 结算或 graceful-shutdown deadline 到达前接收终态提供方输出，随后关闭 sink；如果 deadline 先到达，它会用持久的 disposed cause 终结所有剩余 receipt。最后，它通过最终进程树终止流程释放提供方，等待完全停稳，展开 scope 注册，发出 `agent/disposed`，再发出 `session/disposed`。重复或竞态释放等待同一个 Promise。
 
 提供方只拥有其 prepared 句柄返回的资源，并且必须保证 `dispose` 幂等且完全停稳。Router 拥有 Session preparation、scope、registry publication、receipt 和全部回滚顺序。提供方卸载会在注册消失前 drain 它准备的每个句柄。
 
@@ -76,7 +76,7 @@ F5 会改变 Session Header 和规范 assistant 事件表示，因此把 `SESSIO
 
 #### 错误与调用方迁移
 
-运行时失败使用单一可序列化 `AgentRuntimeError`，包含稳定 code、phase、安全 message、可选提供方 id 和已脱敏的有界 details。冻结 code 为 `PROFILE_NOT_FOUND`、`PROFILE_INVALID`、`RUNTIME_UNAVAILABLE`、`RUNTIME_INCOMPATIBLE`、`AGENT_CAPABILITY_UNSUPPORTED`、`AGENT_BUSY`、`SUBMISSION_REJECTED`、`RESUME_UNSUPPORTED`、`EXTERNAL_STATE_MISSING`、`SECURITY_POLICY_UNSATISFIED`、`START_TIMEOUT`、`TURN_TIMEOUT`、`RUNTIME_FAILED` 和 `DISPOSE_FAILED`。接纳后的取消是 receipt 终态结果，不是 exception。
+运行时失败使用单一可序列化 `AgentRuntimeError`，包含稳定 code、phase、安全 message、可选提供方 id 和已脱敏的有界 details。冻结 code 为 `PROFILE_NOT_FOUND`、`PROFILE_INVALID`、`RUNTIME_UNAVAILABLE`、`RUNTIME_INCOMPATIBLE`、`AGENT_CAPABILITY_UNSUPPORTED`、`AGENT_BUSY`、`SUBMISSION_REJECTED`、`RESUME_UNSUPPORTED`、`EXTERNAL_STATE_MISSING`、`SECURITY_POLICY_UNSATISFIED`、`START_TIMEOUT`、`TURN_TIMEOUT`、`RUNTIME_FAILED` 和 `DISPOSE_FAILED`。创建、恢复、探测与接纳前失败会以该错误拒绝操作。接纳后失败会结算 receipt；对于已启动工作，`turn/end` 使用同一安全失败。取消是终态结果，不是 exception。`AgentHandle.dispose()` 会完成全部 teardown 与生命周期通知后再以 `DISPOSE_FAILED` 拒绝，因此清理失败不会遗留已发布 Agent，也不会取代更早的 submission 结果。
 
 F1 增加运行时 Service Definition、identifier、receipt、capability、快照和错误类型，但不改变 active factory。F2 安装 Router 与 Native 提供方，并把 Native-only 行为移入能力。F5 将 Web Host、ACP Host、JSON-RPC SDK Server 与 Client 以及 Headless 原子迁移到 receipt，并移除它们对 inbox claim、`followup`、`steer` 或按消息猜测 `whenIdle` 的直接依赖。
 

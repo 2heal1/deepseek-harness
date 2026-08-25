@@ -96,3 +96,4 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | 2026-08-25 | P1 | 冻结 Agent 与 submission 行为、Router 事务、事件生产权、Runtime Profile snapshot、resume／fork identity、错误与调用方迁移以及 secure-launch 输入；等待文档门禁与 Draft PR |
 | 2026-08-25 | P1 | 双语配对、`doc-sync` 28 项、lint 与 `git diff --check` 通过；等待创建 Draft PR 和高级架构评审 |
 | 2026-08-25 | P1 | Draft [PR #5](https://github.com/2heal1/deepseek-harness/pull/5) 已创建；状态更新为 `in-review`，等待高级架构评审 |
+| 2026-08-25 | P1 | 高级架构复核明确 `AgentHandle` 的 dispose 所有权、不可变能力与初始运行时事实发布点、状态结算边界、非合作提供方的有界释放，以及运行时错误在创建／submission／dispose 路径中的承载方式 |
