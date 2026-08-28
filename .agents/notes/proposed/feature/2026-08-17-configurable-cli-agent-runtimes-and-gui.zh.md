@@ -29,6 +29,7 @@ DeepSeek Harness 存在两种执行模型。主 agent（智能体）通过 `dsh-
 | 主题 | 冻结约定 |
 | --- | --- |
 | 必选 `Agent` | 暴露共享的 `SessionId`、`Session`、作用域 `Context`、已声明能力、`idle \| running` 调度状态、`submit`、定向 submission 取消和 `whenIdle`。创建调用方通过独立的 `AgentHandle` 获得 dispose 能力。`whenIdle` 仍是整个 agent 的完全停稳原语，绝不结算特定 submission。 |
+| Submission 准入 | Router 拥有绑定到 Agent 的 admission 控制器，其状态为 `publishing \| open \| closed`。控制器初始处于 `publishing`；注册表可见性不会打开准入。`publishing` 状态下的 `submit` 会在分配 `SubmissionId` 或消息、追加事件或返回 receipt 之前拒绝，并使用 code 为 `SUBMISSION_REJECTED`、phase 为 `publication` 的 `AgentRuntimeError`。只有 Router 可以把 `publishing` 转换为 `open`；`closed` 是终态。 |
 | Submission 接纳 | `submit` 校验请求，分配品牌化 `SubmissionId` 和带标识的用户消息，追加 `agent/submission/accepted`，然后返回 receipt。在该追加之前发生的失败会拒绝操作且不返回 receipt；之后发生的失败会结算 receipt。接纳表示 Harness 已负责该工作，不表示外部模型已观察到消息。 |
 | 启动关联 | Receipt 暴露启动 Promise。Router 分配轮次，并依次追加 `turn/start`、`agent/submission/started` 和规范 `user/message` 后完成该 Promise。排队期间被取消或随释放终止的 submission 以未启动结算，且不打开轮次。 |
 | 终态关联 | Receipt 暴露唯一结算 Promise。对于已启动工作，Router 追加 `turn/end`，再追加 `agent/submission/settled`，然后以轮次、`TurnEndReason` 和终态事件序号完成 receipt。此时规范 assistant 事件已经追加并完成同步分发；持久化 flush 和 transport 输出队列仍由调用方负责。 |
@@ -42,12 +43,16 @@ DeepSeek Harness 存在两种执行模型。主 agent（智能体）通过 `dsh-
 Router 是唯一 `AgentFactory`，并执行一个覆盖回滚的事务：
 
 1. 在创建运行时资源之前，解析并校验有效 profile、提供方注册、调用方覆盖项、会话 identity 和不可变快照。
-2. 准备尚未发布的会话和 agent scope，再要求提供方返回包含不可变有效能力与初始规范化运行时事实的 prepared runtime 句柄。提供方可以分配协议与进程资源，但不能注册会话或 Agent、追加规范事件或接纳输入。
-3. 运行调用方 setup 及其同步 publication commit。先 enter Session，再 enter Agent，announce `session/created`，通过 Router 追加初始 `agent/runtime/facts`，最后 announce `agent/created`。如果 runtime facts 追加失败，事务会在 announce Agent 前回滚已 announce 的 Session。只有返回的已发布 handle 可以接纳 submission。
-4. 任何失败都会依次停止接纳、终结已接纳 submission、关闭提供方事件 sink、释放提供方并等待进程树完全停稳、展开 agent scope、detach Agent，最后 detach Session。任何已经开始的创建通知都会收到配对的释放通知。
+2. 准备尚未发布的会话、agent scope 和处于 `publishing` 的 admission 控制器，再要求提供方返回包含不可变有效能力与初始规范化运行时事实的 prepared runtime 句柄。在进入注册表前，根据这些结果构造 Agent 及其预先构造的 `AgentHandle`。提供方可以分配协议与进程资源，但不能注册会话或 Agent、追加规范事件、接纳输入或改变 admission 状态。
+3. 运行调用方 setup 及其同步 publication commit。先 enter Session，再 enter Agent，announce `session/created`，通过 Router 追加初始 `agent/runtime/facts`，最后同步 announce `agent/created`；在整个过程中 admission 保持 `publishing`。`agent/created` 分发成功返回后，Router 重新检查事务与 owner 存活性，把 admission 转换为 `open`，将其作为最后一个不会抛错的发布动作，然后在没有其他 await 或可能失败步骤的情况下返回预先构造的句柄。
+4. 任何失败都会在第一次回滚 await 前把 admission 转换为终态 `closed`，再依次终结已接纳 submission、关闭提供方事件 sink、释放提供方并等待进程树完全停稳、展开 agent scope、detach Agent，最后 detach Session。任何已经开始的创建通知都会收到配对的释放通知。同步监听器触发的存活性失败或 teardown 会关闭 admission，而不会打开它。
 5. 正常释放使用同一条 memoized 反向路径。它停止接纳并请求取消，只在所有活动 submission 结算或 graceful-shutdown deadline 到达前接收终态提供方输出，随后关闭 sink；如果 deadline 先到达，它会用持久的 disposed cause 终结所有剩余 receipt。最后，它通过最终进程树终止流程释放提供方，等待完全停稳，展开 scope 注册，发出 `agent/disposed`，再发出 `session/disposed`。重复或竞态释放等待同一个 Promise。
 
-提供方只拥有其 prepared 句柄返回的资源，并且必须保证 `dispose` 幂等且完全停稳。Router 拥有 Session preparation、scope、registry publication、receipt 和全部回滚顺序。提供方卸载会在注册消失前 drain 它准备的每个句柄。
+`AgentRegistry.enter()` 会有意在 `agent/created` 之前让 `get`、`list` 和 `roots` 查到 Agent，以保留现有同步生命周期行为。通过 `session/created` 监听器查到 Agent，或通过 `agent/created` 监听器参数取得 Agent 后调用 `submit`，都会得到相同的 `SUBMISSION_REJECTED` publication-phase 拒绝；只有在同步发布成功后运行的 continuation 才可能在 Router 打开 admission 后提交。
+
+如果追加初始 runtime facts 失败，Router 会先关闭 admission 再回滚。Agent 已 enter 但尚未 announce，因此 detach Agent 不会发出 `agent/disposed`；已 announce 的 Session 会收到配对的 `session/disposed`。为了保持有序回滚，注册表查询在回滚期间可能暂时看到已关闭的 Agent，但 Router 会在 create 或 resume 拒绝前 detach 两个条目，最终不会遗留可查询或可提交的 Agent。由于打开 admission 后到返回句柄前不存在失败点，创建回滚永远不会包含已接纳的 submission。
+
+提供方只拥有其 prepared 句柄返回的资源，并且必须保证 `dispose` 幂等且完全停稳。Router 拥有 admission 控制器、Session preparation、scope、registry publication、receipt 和全部回滚顺序。提供方、注册表和生命周期监听器都不能打开 admission。提供方卸载会在注册消失前 drain 它准备的每个句柄。
 
 #### Durable 事件与来源
 
@@ -62,7 +67,7 @@ Router 是唯一 `AgentFactory`，并执行一个覆盖回滚的事务：
 
 `deriveMessages` 使用显式的规范事件 allowlist，并排除所有运行时事实与 activity 事件。运行时事件 sink 在追加前校验打开的 submission 与轮次、事件顺序、已声明的 activity 能力、JSON 上限、provenance 和脱敏。提供方绝不会获得不受限的 `Session.append` 权限。
 
-F5 会改变 Session Header 和规范 assistant 事件表示，因此把 `SESSION_FORMAT_VERSION` 从 `0` 增加到 `1`；预发布 loader 会拒绝版本 `0`，而不是猜测 provenance 或运行时 identity。
+当前预发布阶段保持 `SESSION_FORMAT_VERSION` 为 `0`。即使 F5 改变 Session Header 或规范 assistant 事件表示，也不会增加该版本。Loader 会按照预发布阶段不承诺兼容的策略校验当前结构并明确拒绝不兼容的旧数据；它绝不会推断缺失字段、默认 provenance 或默认 runtime identity，F5 也不会增加兼容猜测或从 `0` 到 `1` 的迁移。
 
 #### 快照、恢复与 fork
 
@@ -77,6 +82,8 @@ F5 会改变 Session Header 和规范 assistant 事件表示，因此把 `SESSIO
 #### 错误与调用方迁移
 
 运行时失败使用单一可序列化 `AgentRuntimeError`，包含稳定 code、phase、安全 message、可选提供方 id 和已脱敏的有界 details。冻结 code 为 `PROFILE_NOT_FOUND`、`PROFILE_INVALID`、`RUNTIME_UNAVAILABLE`、`RUNTIME_INCOMPATIBLE`、`AGENT_CAPABILITY_UNSUPPORTED`、`AGENT_BUSY`、`SUBMISSION_REJECTED`、`RESUME_UNSUPPORTED`、`EXTERNAL_STATE_MISSING`、`SECURITY_POLICY_UNSATISFIED`、`START_TIMEOUT`、`TURN_TIMEOUT`、`RUNTIME_FAILED` 和 `DISPOSE_FAILED`。创建、恢复、探测与接纳前失败会以该错误拒绝操作。接纳后失败会结算 receipt；对于已启动工作，`turn/end` 使用同一安全失败。取消是终态结果，不是 exception。`AgentHandle.dispose()` 会完成全部 teardown 与生命周期通知后再以 `DISPOSE_FAILED` 拒绝，因此清理失败不会遗留已发布 Agent，也不会取代更早的 submission 结果。
+
+Code 为 `SUBMISSION_REJECTED`、phase 为 `publication` 的错误专门用于 admission 处于 `publishing` 时调用 `submit`。该拒绝不会创建 receipt 或持久 submission 事件；无论调用方是在 `session/created` 期间通过 `AgentRegistry.get()` 得到 Agent，还是从 `agent/created` payload 得到 Agent，结果都相同。
 
 F1 增加运行时 Service Definition、identifier、receipt、capability、快照和错误类型，但不改变 active factory。F2 安装 Router 与 Native 提供方，并把 Native-only 行为移入能力。F5 将 Web Host、ACP Host、JSON-RPC SDK Server 与 Client 以及 Headless 原子迁移到 receipt，并移除它们对 inbox claim、`followup`、`steer` 或按消息猜测 `whenIdle` 的直接依赖。
 
@@ -260,6 +267,8 @@ agent 运行时 Service Definition 负责提供方注册、品牌化标识、请
 ## Alternatives considered
 
 **让 Router 转发给提供方自有的完整 `AgentFactory` 实现。** 这种方式使初始提取更小，但会在每个提供方复制 Session 发布、回滚、取消和资源释放。Router 改为负责公共事务，提供方返回已准备 Runtime handle。
+
+**在 `agent/created` 完成前对 `AgentRegistry.get()` 隐藏已 enter 的 Agent。** 现有同步生命周期监听器会在 `session/created` 期间解析 Agent，而 `agent/created` 监听器即使无法查询也会直接收到 Agent。Router 自有 admission 控制器既保留注册表生命周期语义，也能关闭两条路径，且不留下可重入 submission 空窗。
 
 **把 `ctx.agents` 改成公开的多 Factory API。** 每个调用方都需要实现运行时选择和回退逻辑。保留唯一 Router 可以集中创建入口，而运行时无关 Agent 行为让调用方真正可移植。
 
