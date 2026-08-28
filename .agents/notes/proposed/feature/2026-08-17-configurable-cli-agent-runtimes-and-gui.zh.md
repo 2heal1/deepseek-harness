@@ -87,6 +87,14 @@ Code 为 `SUBMISSION_REJECTED`、phase 为 `publication` 的错误专门用于 a
 
 F1 增加运行时 Service Definition、identifier、receipt、capability、快照和错误类型，但不改变 active factory。F2 安装 Router 与 Native 提供方，并把 Native-only 行为移入能力。F5 将 Web Host、ACP Host、JSON-RPC SDK Server 与 Client 以及 Headless 原子迁移到 receipt，并移除它们对 inbox claim、`followup`、`steer` 或按消息猜测 `whenIdle` 的直接依赖。
 
+#### F1 Service Definition
+
+`@deepseek-ai/dsh-agent-runtime` 在 `ctx.agentRuntimes` 安装 `AgentRuntimeRegistry`。其由 effect 管理生命周期的注册表公开 `registerProvider`、`getProvider` 和 `listProviders`，以 `AgentRuntimeError` 拒绝格式错误或重复的 provider metadata，并在对应注册表提交点发出 provider-added 和 provider-removed 通知。移除注册会阻止后续选择，但不会撤销 prepared handle；每个 Provider 插件都会在释放注册前排空自己 prepared 的所有 handle。
+
+`AgentRuntimeProvider` 公开 `probe` 和 `prepare`。prepare 接收预留的 runtime 与 Session identity、不可变的非秘密 `RuntimeProfileSnapshot`、未发布的 Agent context、取消 signal 和受限的 `AgentRuntimeEventSink`；它返回 `PreparedAgentRuntime`，其中包含不可变 capability、初始规范化 facts、submission 执行、定向取消和达到完全停稳的 dispose。Service Definition 还拥有品牌化 identifier、capability id、规范化 fact 与 activity 报告、`SubmissionReceipt`，以及 `AgentRuntimeError` 携带的冻结可序列化 failure。capability 与 fact 快照 helper 会拒绝重复或非 JSON 声明并深度冻结分离副本；failure details 由生产者脱敏，必须是无损 JSON，并限制为 4096 个 UTF-8 字节。
+
+本包不安装 `AgentFactory`，不发布 Session 或 Agent，不解析 Runtime Profile，也不追加持久事件。这些职责仍分别属于 F2 Router、F3 profile Consumer 和 F5 事件实现。
+
 Web RPC schema 在本预发布阶段同步更新。ACP 协议行为保持版本 1；ACP Host 把 receipt settlement 转换为现有 ACP 响应，并自行 flush 有序输出队列。JSON-RPC `serverInfo.version` 更新为 `0.0.2`；`session/prompt` 同时返回 message id 与 submission id，submission start 和 settlement 通知取代 inbox-splice 推断。旧 SDK Client 会因 version／schema 校验失败，而不会获得兼容模拟。Headless 等待 receipt settlement，随后只 flush 与其关联的会话区间。
 
 #### 安全启动

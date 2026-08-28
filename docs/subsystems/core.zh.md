@@ -558,6 +558,40 @@ Types: [ScopeKey](scope.md)
 
 Source: [`packages/preset/agent-presets/src/index.ts:82`](../../packages/preset/agent-presets/src/index.ts)
 
+<a id="ctxagentruntimes--agentruntimeregistry"></a>
+
+### `ctx.agentRuntimes` — `AgentRuntimeRegistry`
+
+Effect-scoped named registry for agent runtime providers.
+
+```ts cordis-catalog
+/**
+ * Register one provider. Removing it blocks later selection but does not
+ * revoke prepared handles; the Provider plugin must drain those handles
+ * before disposing this registration.
+ *
+ * @param provider - trusted same-process Provider implementation.
+ * @returns the exact Cordis effect disposer.
+ * @throws {AgentRuntimeError} code `RUNTIME_INCOMPATIBLE` for malformed or duplicate registration.
+ */
+registerProvider(provider: AgentRuntimeProvider): () => void
+
+/**
+ * Look up one currently selectable provider.
+ * @param id - stable provider identity.
+ * @returns the provider, or `undefined` when absent.
+ */
+getProvider(id: AgentRuntimeProviderId): AgentRuntimeProvider | undefined
+
+/**
+ * List currently selectable providers in registration order.
+ * @returns a detached provider array.
+ */
+listProviders(): AgentRuntimeProvider[]
+```
+
+Source: [`packages/core/agent-runtime/src/index.ts:184`](../../packages/core/agent-runtime/src/index.ts)
+
 <a id="ctxagents--agentregistry"></a>
 
 ### `ctx.agents` — `AgentRegistry`
@@ -1075,4 +1109,42 @@ One session committed a different agent preset to its durable log. Consumers inv
 ```
 
 Source: [`packages/preset/agent-presets/src/types.ts:13`](../../packages/preset/agent-presets/src/types.ts)
+
+<a id="agent-runtime-events"></a>
+
+### `agent-runtime/*` events
+
+<a id="agent-runtimeprovider-added--emit"></a>
+
+#### `agent-runtime/provider-added` — emit
+
+An agent runtime provider became selectable.
+
+```ts cordis-catalog
+/**
+ * An agent runtime provider became selectable.
+ * @param provider - registered provider.
+ * @mode emit
+ */
+'agent-runtime/provider-added'(provider: AgentRuntimeProvider): void
+```
+
+Source: [`packages/core/agent-runtime/src/index.ts:96`](../../packages/core/agent-runtime/src/index.ts)
+
+<a id="agent-runtimeprovider-removed--emit"></a>
+
+#### `agent-runtime/provider-removed` — emit
+
+An agent runtime provider stopped being selectable.
+
+```ts cordis-catalog
+/**
+ * An agent runtime provider stopped being selectable.
+ * @param providerId - provider identity removed from the registry.
+ * @mode emit
+ */
+'agent-runtime/provider-removed'(providerId: AgentRuntimeProviderId): void
+```
+
+Source: [`packages/core/agent-runtime/src/index.ts:102`](../../packages/core/agent-runtime/src/index.ts)
 <!-- END GENERATED cordis-surface -->

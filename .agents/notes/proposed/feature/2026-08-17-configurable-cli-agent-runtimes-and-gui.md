@@ -87,6 +87,14 @@ Runtime failures use one serializable `AgentRuntimeError` with a stable code, ph
 
 F1 adds the runtime Service Definition, identifiers, receipt, capability, snapshot, and error types without changing the active factory. F2 installs the router and Native provider and moves Native-only behavior behind capabilities. F5 atomically migrates Web Host, ACP Host, JSON-RPC SDK Server and Client, and Headless to receipts and removes their direct dependence on inbox claims, `followup`, `steer`, or message-scoped `whenIdle` guesses.
 
+#### F1 Service Definition
+
+`@deepseek-ai/dsh-agent-runtime` installs the `AgentRuntimeRegistry` at `ctx.agentRuntimes`. Its effect-scoped registry exposes `registerProvider`, `getProvider`, and `listProviders`, rejects malformed or duplicate provider metadata with `AgentRuntimeError`, and emits provider-added and provider-removed notifications at the matching registry commit points. Registration removal prevents later selection but does not revoke a prepared handle; each Provider plugin drains every handle it prepared before disposing its registration.
+
+`AgentRuntimeProvider` exposes `probe` and `prepare`. Preparation receives the reserved runtime and Session identities, immutable non-secret `RuntimeProfileSnapshot`, unpublished Agent context, cancellation signal, and restricted `AgentRuntimeEventSink`; it returns a `PreparedAgentRuntime` with immutable capabilities, initial normalized facts, submission execution, targeted cancellation, and quiescent disposal. The Service Definition also owns the branded identifiers, capability ids, normalized fact and activity reports, `SubmissionReceipt`, and the frozen serializable failure carried by `AgentRuntimeError`. Capability and fact snapshot helpers reject duplicate or non-JSON declarations and deep-freeze detached copies; failure details are redacted by their producer, lossless JSON, and limited to 4096 UTF-8 bytes.
+
+The package does not install `AgentFactory`, publish a Session or Agent, resolve Runtime Profiles, or append durable events. Those responsibilities remain with the F2 Router, F3 profile Consumer, and F5 event implementation.
+
 Web RPC schemas move in lockstep during this pre-release. ACP wire behavior remains protocol version 1; the ACP Host translates receipt settlement to the existing ACP response and flushes its own ordered output queue. JSON-RPC `serverInfo.version` becomes `0.0.2`; `session/prompt` returns both message and submission ids, and submission start and settlement notifications replace inbox-splice inference. Old SDK clients fail version/schema validation instead of receiving compatibility emulation. Headless awaits the receipt settlement and then flushes only its correlated Session interval.
 
 #### Secure launch

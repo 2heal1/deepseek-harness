@@ -341,6 +341,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation.',
   },
   {
+    key: 'agentRuntimes',
+    pkg: 'agent-runtime',
+    title: 'Configurable Agent runtime registry',
+    mode: 'seam',
+    note: 'Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary; Router and concrete Provider packages are separate roles.',
+  },
+  {
     key: 'agentDefaultModel',
     pkg: 'agent-default-model',
     title: 'Default Agent model selection',

@@ -210,6 +210,32 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'agentRuntimes',
+    summary: 'Effect-scoped named registry for agent runtime providers.',
+    description: 'Effect-scoped named registry for agent runtime providers.',
+    methods: [
+      {
+        signature: 'registerProvider(provider: AgentRuntimeProvider): () => void',
+        description: 'Register one provider. Removing it blocks later selection but does not revoke prepared handles; the Provider plugin must drain those handles before disposing this registration.',
+        parameters: [{ name: 'provider', description: 'trusted same-process Provider implementation.' }],
+        returns: 'the exact Cordis effect disposer.',
+        throws: ['{AgentRuntimeError} code `RUNTIME_INCOMPATIBLE` for malformed or duplicate registration.'],
+      },
+      {
+        signature: 'getProvider(id: AgentRuntimeProviderId): AgentRuntimeProvider | undefined',
+        description: 'Look up one currently selectable provider.',
+        parameters: [{ name: 'id', description: 'stable provider identity.' }],
+        returns: 'the provider, or `undefined` when absent.',
+      },
+      {
+        signature: 'listProviders(): AgentRuntimeProvider[]',
+        description: 'List currently selectable providers in registration order.',
+        parameters: [],
+        returns: 'a detached provider array.',
+      },
+    ],
+  },
+  {
     key: 'agents',
     summary: 'Agent service (`ctx.agents`): tracks live agents and carries the initiating Agent through one process-local asynchronous driver chain.',
     description: 'Agent service (`ctx.agents`): tracks live agents and carries the initiating Agent through one process-local asynchronous driver chain. Agent *creation* is provided by whichever plugin implements the AgentFactory (`@deepseek-ai/dsh-agent-loop`), registered via setFactory.\n\nInitiator methods provide same-process causal attribution only. Ambient presence is neither liveness proof nor authorization; subjects and owners remain explicit, as does identity at worker, process, persistence, and wire boundaries. Returned Promise boundaries drain during teardown, except a nested lineage that starts an owning-fiber unload is excluded from its own drain.',
@@ -2285,6 +2311,22 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'sessionId', description: 'the session whose composition changed.' }, { name: 'agentPreset', description: 'the preset recorded by the committed selection.' }],
   },
   {
+    name: 'agent-runtime/provider-added',
+    mode: 'emit',
+    signature: '\'agent-runtime/provider-added\'(provider: AgentRuntimeProvider): void',
+    summary: 'An agent runtime provider became selectable.',
+    description: 'An agent runtime provider became selectable.',
+    parameters: [{ name: 'provider', description: 'registered provider.' }],
+  },
+  {
+    name: 'agent-runtime/provider-removed',
+    mode: 'emit',
+    signature: '\'agent-runtime/provider-removed\'(providerId: AgentRuntimeProviderId): void',
+    summary: 'An agent runtime provider stopped being selectable.',
+    description: 'An agent runtime provider stopped being selectable.',
+    parameters: [{ name: 'providerId', description: 'provider identity removed from the registry.' }],
+  },
+  {
     name: 'agent/created',
     mode: 'emit',
     signature: '\'agent/created\'(this: Scoped<Agent>, payload: { agent: Agent }): void',
@@ -2747,6 +2789,86 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AgentPreset',
     declaration: 'export interface AgentPreset {\n    readonly id: string;\n    readonly trust: PresetTrust;\n    readonly path: string;\n    readonly name?: string;\n    readonly description?: string;\n    readonly order?: number;\n    readonly broken?: string;\n}',
+  },
+  {
+    name: 'AgentRuntimeActivity',
+    declaration: 'export interface AgentRuntimeActivity {\n    readonly runtimeId: AgentRuntimeId;\n    readonly submissionId?: SubmissionId;\n    readonly kind: string;\n    readonly phase: string;\n    readonly fidelity: AgentRuntimeActivityFidelity;\n    readonly data: JsonValue;\n}',
+  },
+  {
+    name: 'AgentRuntimeActivityFidelity',
+    declaration: 'export type AgentRuntimeActivityFidelity = \'complete\' | \'partial\';',
+  },
+  {
+    name: 'AgentRuntimeAssistantChunk',
+    declaration: 'export type AgentRuntimeAssistantChunk = {\n    readonly kind: \'text-delta\';\n    readonly text: string;\n} | {\n    readonly kind: \'reasoning-delta\';\n    readonly text: string;\n} | {\n    readonly kind: \'content-block\';\n    readonly block: ContentBlock;\n};',
+  },
+  {
+    name: 'AgentRuntimeAssistantOutput',
+    declaration: 'export interface AgentRuntimeAssistantOutput {\n    readonly content: readonly ContentBlock[];\n}',
+  },
+  {
+    name: 'AgentRuntimeCapabilities',
+    declaration: 'export type AgentRuntimeCapabilities = readonly AgentRuntimeCapability[];',
+  },
+  {
+    name: 'AgentRuntimeCapability',
+    declaration: 'export interface AgentRuntimeCapability {\n    readonly id: AgentRuntimeCapabilityId;\n    readonly metadata?: JsonValue;\n}',
+  },
+  {
+    name: 'AgentRuntimeCapabilityId',
+    declaration: 'export type AgentRuntimeCapabilityId = \'continuation\' | \'steering\' | \'queuedInputRead\' | \'queuedInputMutation\' | \'injection\' | \'maintenance\' | \'imageInput\' | \'modelOverride\' | \'approvals\' | \'runtimeActivity\' | \'harnessTools\' | \'resume\' | \'coldResume\';',
+  },
+  {
+    name: 'AgentRuntimeCreateRequest',
+    declaration: 'export interface AgentRuntimeCreateRequest extends AgentRuntimePrepareBase {\n    readonly kind: \'create\';\n}',
+  },
+  {
+    name: 'AgentRuntimeEventSink',
+    declaration: 'export interface AgentRuntimeEventSink {\n    facts(facts: AgentRuntimeFacts): void;\n    assistantChunk(submissionId: SubmissionId, chunk: AgentRuntimeAssistantChunk): void;\n    assistantMessage(submissionId: SubmissionId, output: AgentRuntimeAssistantOutput): void;\n    activity(activity: AgentRuntimeActivity): void;\n}',
+  },
+  {
+    name: 'AgentRuntimeFacts',
+    declaration: 'export interface AgentRuntimeFacts {\n    readonly runtimeId: AgentRuntimeId;\n    readonly providerId: AgentRuntimeProviderId;\n    readonly capabilities: AgentRuntimeCapabilities;\n    readonly phase: AgentRuntimePhase;\n    readonly product?: SourcedRuntimeFact<string>;\n    readonly productVersion?: SourcedRuntimeFact<string>;\n    readonly protocol?: SourcedRuntimeFact<string>;\n    readonly protocolVersion?: SourcedRuntimeFact<string>;\n    readonly externalSessionId?: ExternalSessionId;\n}',
+  },
+  {
+    name: 'AgentRuntimeFactSource',
+    declaration: 'export type AgentRuntimeFactSource = \'profile\' | \'protocol\';',
+  },
+  {
+    name: 'AgentRuntimePhase',
+    declaration: 'export type AgentRuntimePhase = \'starting\' | \'ready\' | \'running\' | \'stopping\' | \'stopped\' | \'failed\';',
+  },
+  {
+    name: 'AgentRuntimePrepareBase',
+    declaration: 'export interface AgentRuntimePrepareBase {\n    readonly runtimeId: AgentRuntimeId;\n    readonly sessionId: SessionId;\n    readonly profile: RuntimeProfileSnapshot;\n    readonly agentCtx: Context;\n    readonly sink: AgentRuntimeEventSink;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'AgentRuntimePrepareRequest',
+    declaration: 'export type AgentRuntimePrepareRequest = AgentRuntimeCreateRequest | AgentRuntimeResumeRequest;',
+  },
+  {
+    name: 'AgentRuntimeProbeRequest',
+    declaration: 'export interface AgentRuntimeProbeRequest {\n    readonly profile: RuntimeProfileSnapshot;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'AgentRuntimeProbeResult',
+    declaration: 'export interface AgentRuntimeProbeResult {\n    readonly productVersion?: string;\n    readonly protocolVersion?: string;\n    readonly capabilities: AgentRuntimeCapabilities;\n    readonly permissionEnforcement: \'enforced\' | \'best-effort\' | \'unsupported\';\n    readonly details?: JsonValue;\n}',
+  },
+  {
+    name: 'AgentRuntimeProvider',
+    declaration: 'export interface AgentRuntimeProvider {\n    readonly id: AgentRuntimeProviderId;\n    readonly profileSnapshotVersions: readonly number[];\n    probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult>;\n    prepare(request: AgentRuntimePrepareRequest): Promise<PreparedAgentRuntime>;\n}',
+  },
+  {
+    name: 'AgentRuntimeResumeRequest',
+    declaration: 'export interface AgentRuntimeResumeRequest extends AgentRuntimePrepareBase {\n    readonly kind: \'resume\';\n    readonly externalSessionId: ExternalSessionId;\n}',
+  },
+  {
+    name: 'AgentRuntimeSubmissionRequest',
+    declaration: 'export interface AgentRuntimeSubmissionRequest {\n    readonly submissionId: SubmissionId;\n    readonly message: UserMessage;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'AgentRuntimeSubmissionResult',
+    declaration: 'export interface AgentRuntimeSubmissionResult {\n    readonly reason: TurnEndReason;\n}',
   },
   {
     name: 'AgentSetup',
@@ -3605,6 +3727,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PostToolDecision = {\n    kind: \'accept\';\n    content?: ContentBlock[];\n    value?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'accept\';\n    value: JsonValue;\n    content?: never;\n    additionalContexts?: UserMessage[];\n} | {\n    kind: \'block\';\n    feedback: ContentBlock[];\n    additionalContexts?: UserMessage[];\n};',
   },
   {
+    name: 'PreparedAgentRuntime',
+    declaration: 'export interface PreparedAgentRuntime {\n    readonly runtimeId: AgentRuntimeId;\n    readonly capabilities: AgentRuntimeCapabilities;\n    readonly initialFacts: AgentRuntimeFacts;\n    submit(request: AgentRuntimeSubmissionRequest): Promise<AgentRuntimeSubmissionResult>;\n    cancel(submissionId: SubmissionId, cause: AgentCancelCause): void;\n    dispose(): Promise<void>;\n}',
+  },
+  {
     name: 'PreparedLlmCall',
     declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
   },
@@ -3779,6 +3905,50 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RunnerFailureRule',
     declaration: 'export interface RunnerFailureRule {\n    allowedExitCodes?: readonly number[];\n    fatalSignatures: readonly string[];\n    informationalLines?: readonly string[];\n}',
+  },
+  {
+    name: 'RuntimeCapacitySnapshot',
+    declaration: 'export interface RuntimeCapacitySnapshot {\n    readonly maxConcurrentRuns: number;\n}',
+  },
+  {
+    name: 'RuntimeCredentialMapping',
+    declaration: 'export interface RuntimeCredentialMapping {\n    readonly target: string;\n    readonly credentialRef: CredentialRef;\n}',
+  },
+  {
+    name: 'RuntimeExecutableResolution',
+    declaration: 'export type RuntimeExecutableResolution = {\n    readonly kind: \'absolute\';\n} | {\n    readonly kind: \'search-path\';\n    readonly paths: readonly string[];\n};',
+  },
+  {
+    name: 'RuntimeHarnessToolSnapshot',
+    declaration: 'export interface RuntimeHarnessToolSnapshot {\n    readonly transport: \'none\' | \'mcp\';\n    readonly allowed: readonly string[];\n}',
+  },
+  {
+    name: 'RuntimeLaunchSnapshot',
+    declaration: 'export interface RuntimeLaunchSnapshot {\n    readonly executable: string;\n    readonly resolution: RuntimeExecutableResolution;\n    readonly args: readonly string[];\n    readonly cwd: RuntimeWorkingDirectoryPolicy;\n    readonly ambientEnv: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n}',
+  },
+  {
+    name: 'RuntimeModelSnapshot',
+    declaration: 'export interface RuntimeModelSnapshot {\n    readonly default?: string;\n    readonly allowSessionOverride: boolean;\n}',
+  },
+  {
+    name: 'RuntimeNativeToolSnapshot',
+    declaration: 'export interface RuntimeNativeToolSnapshot {\n    readonly allowed: readonly string[];\n}',
+  },
+  {
+    name: 'RuntimePermissionSnapshot',
+    declaration: 'export interface RuntimePermissionSnapshot {\n    readonly policy: JsonValue;\n    readonly enforcement: \'required\' | \'best-effort\';\n    readonly approval: \'unattended-fail-closed\';\n}',
+  },
+  {
+    name: 'RuntimeProcessDeadlines',
+    declaration: 'export interface RuntimeProcessDeadlines {\n    readonly startupMs: number;\n    readonly turnMs: number;\n    readonly shutdownMs: number;\n    readonly terminationMs: number;\n}',
+  },
+  {
+    name: 'RuntimeProfileSnapshot',
+    declaration: 'export interface RuntimeProfileSnapshot {\n    readonly schemaVersion: number;\n    readonly profileId: RuntimeProfileId;\n    readonly settingsRevision: number;\n    readonly provider: {\n        readonly id: AgentRuntimeProviderId;\n        readonly optionsVersion: number;\n        readonly options: JsonValue;\n    };\n    readonly launch: RuntimeLaunchSnapshot;\n    readonly model: RuntimeModelSnapshot;\n    readonly product: JsonValue;\n    readonly permissions: RuntimePermissionSnapshot;\n    readonly nativeTools: RuntimeNativeToolSnapshot;\n    readonly harnessTools: RuntimeHarnessToolSnapshot;\n    readonly credentials: readonly RuntimeCredentialMapping[];\n    readonly deadlines: RuntimeProcessDeadlines;\n    readonly capacity: RuntimeCapacitySnapshot;\n}',
+  },
+  {
+    name: 'RuntimeWorkingDirectoryPolicy',
+    declaration: 'export type RuntimeWorkingDirectoryPolicy = {\n    readonly kind: \'session-workspace\';\n} | {\n    readonly kind: \'parent-workspace\';\n} | {\n    readonly kind: \'fixed\';\n    readonly path: string;\n};',
   },
   {
     name: 'SandboxEnforcement',
@@ -4199,6 +4369,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SkillViewOptions',
     declaration: 'export interface SkillViewOptions extends SkillLookupOptions {\n    readonly scope?: ScopeKey | undefined;\n}',
+  },
+  {
+    name: 'SourcedRuntimeFact',
+    declaration: 'export interface SourcedRuntimeFact<T extends JsonValue> {\n    readonly value: T;\n    readonly source: AgentRuntimeFactSource;\n}',
   },
   {
     name: 'SpawnTeammateRequest',
