@@ -11,10 +11,11 @@
 | [`system-prompt/`](system-prompt/README.md) | 提示词和工具 schema 组装注册表 | `ctx.systemPrompt` |
 | [`tools/`](tools/README.md) | 作用域工具注册表和执行流水线 | `ctx.tools` |
 | [`agent/`](agent/README.md) | Agent 接口、注册表和事件词汇 | `ctx.agents` |
+| [`agent-runtime/`](agent-runtime/README.md) | 可配置运行时 Provider 注册表和提供方无关词汇 | `ctx.agentRuntimes` |
 | [`agent-default-model/`](agent-default-model/README.md) | 各 Agent 入口共享的默认模型选择 | `ctx.agentDefaultModel` |
 | [`agent-loop/`](agent-loop/README.md) | 默认具体 agent 驱动器 | `ctx.agentLoop` |
 
-`scope` 提供共享作用域原语。`agent` 负责公开约定，`agent-loop` 是其默认实现；扩展插件依赖该 seam，从而保持驱动器可替换。`agent-default-model` 负责部署选择，Agent 入口仅在会话自身没有选择时使用它。
+`scope` 提供共享作用域原语。`agent` 负责公开 Agent 约定；`agent-runtime` 定义可配置运行时 Provider，而运行时 Router Consumer 和具体 Provider 位于独立包中。`agent-loop` 仍是当前默认具体驱动器。`agent-default-model` 负责部署选择，Agent 入口仅在会话自身没有选择时使用它。
 
 可运行组合属于 [`examples/agent-spine-demo`](../examples/agent-spine-demo/README.md)；该分组只负责可替换的主干组件。
 

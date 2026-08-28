@@ -46,6 +46,7 @@ dsh --profile web --dump-config
 | [`core/system-prompt`](subsystems/system-prompt.md) | 提示词片段与工具 schema 的组装 | `ctx.systemPrompt` |
 | [`core/tools`](subsystems/tools.md) | 作用域化的工具注册表和带把关的执行流水线 | `ctx.tools` |
 | [`core/agent`](subsystems/core.md) | `Agent` 接口、活跃 agent 注册表和 `agent/*` 事件 | `ctx.agents` |
+| [`core/agent-runtime`](../packages/core/agent-runtime/README.md) | 可配置运行时 Provider 注册表和提供方无关词汇 | `ctx.agentRuntimes` |
 | [`core/agent-loop`](subsystems/core.md) | 实现该接口的默认驱动器 | `ctx.agentLoop` |
 | [`core/scope`](subsystems/scope.md) | 按 agent 划分作用域的注册原语 | 库，无 ctx 键 |
 | [`llm/llm`](subsystems/llm-streaming.md) | 消息与流式词汇表，以及适配器 seam | `ctx.llm` |

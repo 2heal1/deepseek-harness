@@ -11,10 +11,11 @@ The session log, system-prompt assembly, tool registry, agent vocabulary, deploy
 | [`system-prompt/`](system-prompt/README.md) | Prompt and tool-schema assembly registry | `ctx.systemPrompt` |
 | [`tools/`](tools/README.md) | Scoped tool registry and execution pipeline | `ctx.tools` |
 | [`agent/`](agent/README.md) | Agent interface, registry, and event vocabulary | `ctx.agents` |
+| [`agent-runtime/`](agent-runtime/README.md) | Configurable runtime Provider registry and provider-neutral vocabulary | `ctx.agentRuntimes` |
 | [`agent-default-model/`](agent-default-model/README.md) | Default model selection shared by Agent entry points | `ctx.agentDefaultModel` |
 | [`agent-loop/`](agent-loop/README.md) | Default concrete agent driver | `ctx.agentLoop` |
 
-`scope` supplies the shared scoping primitive. `agent` owns the public contract, while `agent-loop` is its default implementation; extension plugins depend on the seam so the driver remains swappable. `agent-default-model` owns the deployment selection an Agent entry point uses only when a session has no selection of its own.
+`scope` supplies the shared scoping primitive. `agent` owns the public Agent contract; `agent-runtime` defines configurable runtime Providers, while the runtime Router Consumer and concrete Providers live separately. `agent-loop` remains the current default concrete driver. `agent-default-model` owns the deployment selection an Agent entry point uses only when a session has no selection of its own.
 
 Runnable compositions belong to [`examples/agent-spine-demo`](../examples/agent-spine-demo/README.md); this group owns only the swappable spine pieces.
 

@@ -169,6 +169,7 @@
     { "path": "./packages/session/session-telemetry-otel" },
     { "path": "./packages/core/system-prompt" },
     { "path": "./packages/core/agent" },
+    { "path": "./packages/core/agent-runtime" },
     { "path": "./packages/core/agent-default-model" },
     { "path": "./packages/interaction/commands" },
     { "path": "./packages/goal/goal" },
