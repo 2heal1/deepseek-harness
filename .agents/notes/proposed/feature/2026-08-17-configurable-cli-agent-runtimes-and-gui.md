@@ -20,6 +20,88 @@ Introduce an agent-runtime capability seam used by main-agent creation and runti
 
 The first useful release supports native execution, a Codex App Server-compatible streaming main agent, an ACP-compatible one-shot child, and a per-session MCP gateway. It does not claim cold resume, continuable external children, generic JSONL execution, terminal replay, cross-session process pooling, or desktop packaging.
 
+### P1 frozen contracts
+
+The following contracts are the implementation input for F1, F2, F4, and F5. Those work packages may add private helpers and provider-specific data, but changing these public identities, ownership rules, event producers, persistence rules, or security guarantees requires another decision update.
+
+#### Agent, submissions, and capabilities
+
+| Subject | Frozen contract |
+| --- | --- |
+| Mandatory `Agent` | Exposes the shared `SessionId`, `Session`, scoped `Context`, declared capabilities, `idle \| running` scheduling status, `submit`, targeted submission cancellation, and `whenIdle`. The creating caller receives the separate `AgentHandle` disposal capability. `whenIdle` remains a whole-agent quiescence primitive and never settles a particular submission. |
+| Submission admission | The router owns an admission controller bound to the Agent with states `publishing \| open \| closed`. It starts in `publishing`; registry visibility does not open it. `submit` in `publishing` rejects before allocating a `SubmissionId` or message, appending an event, or returning a receipt, using `AgentRuntimeError` code `SUBMISSION_REJECTED` and phase `publication`. Only the router may transition `publishing` to `open`; `closed` is terminal. |
+| Submission acceptance | `submit` validates the request, allocates a branded `SubmissionId` and identified user message, appends `agent/submission/accepted`, and returns a receipt. Failures before that append reject without a receipt; failures afterward settle the receipt. Acceptance means Harness owns the work, not that an external model has observed the message. |
+| Start correlation | A receipt exposes a start promise. The router resolves it after allocating the turn and appending `turn/start`, `agent/submission/started`, and the canonical `user/message`, in that order. A submission cancelled or disposed while queued settles as not started and opens no turn. |
+| Terminal correlation | A receipt exposes one settlement promise. For started work, the router appends `turn/end`, then `agent/submission/settled`, then resolves the receipt with the turn, `TurnEndReason`, and terminal event sequence. Canonical assistant events have already been appended and synchronously dispatched at that point; persistence flushes and transport output queues remain caller-owned. |
+| Cancellation race | Cancellation targets a `SubmissionId`, is idempotent, and returns whether it won before terminal settlement. The first terminal transition wins. Provider output observed after the sink closes cannot enter canonical conversation events. Agent disposal cancels every unsettled receipt with the durable disposed cause before returning. |
+| Scheduling status | `Agent.status` remains `idle \| running`: it answers whether the published agent owns unsettled work. Acceptance changes it to `running` before the accepted event is observable; it returns to `idle` only after no submission or maintenance work remains, and `whenIdle` observes that same boundary. Profile availability and process/protocol phases use runtime facts, not extra Agent states. A failed runtime terminalizes its submissions and is disposed; an unavailable profile never publishes an Agent. |
+| Optional capabilities | The registered capability set uses stable ids for `continuation`, `steering`, `queuedInputRead`, `queuedInputMutation`, `injection`, `maintenance`, `imageInput`, `modelOverride`, `approvals`, `runtimeActivity`, `harnessTools`, `resume`, and `coldResume`. Provider preparation returns the immutable effective set before publication; losing a guaranteed capability fails the runtime instead of mutating the set. Capability-specific metadata carries fidelity or limits. Initial idle submission, targeted cancellation, canonical assistant output, and settlement are mandatory for a main runtime. |
+| Execution enforcement | Every optional operation checks the published Agent's capability set at the service or Host execution boundary. A missing capability raises `AGENT_CAPABILITY_UNSUPPORTED` with the agent id, capability id, and operation; UI visibility is never authorization. |
+
+#### Router lifecycle
+
+The router is the only `AgentFactory` and performs one rollback-covered transaction:
+
+1. Resolve and validate the effective profile, provider registration, caller overrides, Session identity, and immutable snapshot before creating runtime resources.
+2. Prepare an unpublished Session, agent scope, and `publishing` admission controller, then ask the provider for a prepared runtime handle containing its immutable effective capabilities and initial normalized runtime facts. Construct the Agent and its prebuilt `AgentHandle` from those results before registry entry. The provider may allocate protocol and process resources but cannot register the Session or Agent, append canonical events, admit input, or change admission state.
+3. Run caller setup and its synchronous publication commit. Enter the Session first and the Agent second, announce `session/created`, append the initial `agent/runtime/facts` through the router, then synchronously announce `agent/created`; admission remains `publishing` throughout. After `agent/created` dispatch returns successfully, the router rechecks transaction and owner liveness, transitions admission to `open` as the final non-throwing publication action, and returns the prebuilt handle without another await or fallible step.
+4. On any failure, transition admission to terminal `closed` before the first rollback await, terminalize accepted submissions, close the provider event sink, dispose the provider to process-tree quiescence, unwind the agent scope, detach the Agent, and detach the Session. Any creation announcement that began receives its matching disposal announcement. A liveness failure or teardown requested by a synchronous listener closes admission instead of opening it.
+5. Normal disposal uses the same memoized reverse path. It stops admission, requests cancellation, and accepts terminal provider output only until every active submission settles or the graceful-shutdown deadline expires. It then closes the sink; when the deadline wins, it terminalizes every remaining receipt with the durable disposed cause. Finally it disposes the provider through final process-tree termination, awaits quiescence, unwinds scope registrations, emits `agent/disposed`, then emits `session/disposed`. Repeated or racing disposal joins the same promise.
+
+`AgentRegistry.enter()` intentionally makes the Agent visible to `get`, `list`, and `roots` before `agent/created`, preserving the existing synchronous lifecycle behavior. A `session/created` listener that finds the Agent and an `agent/created` listener that receives it both get the same `SUBMISSION_REJECTED` publication-phase rejection from `submit`; a continuation running after successful synchronous announcement may submit only after the router opens admission.
+
+If the initial runtime-facts append fails, the router closes admission before rollback. The Agent was entered but not announced, so detaching it emits no `agent/disposed`; the announced Session receives its matching `session/disposed`. Lookup may continue to expose the closed Agent while ordered rollback is in progress, but the router detaches both entries before create or resume rejects, leaving no queryable or submittable Agent. Because no failure point follows the admission-open transition before handle return, creation rollback never has an accepted submission.
+
+The provider owns only resources returned in its prepared handle and must make `dispose` idempotent and quiescent. The router owns the admission controller, Session preparation, scope, registry publication, receipts, and all rollback ordering. Neither the provider, registry, nor lifecycle listeners can open admission. A provider unload drains every handle it prepared before its registration disappears.
+
+#### Durable events and provenance
+
+| Event family | Sole producer and rule |
+| --- | --- |
+| `session/*`, `agent/created`, `agent/disposed`, `agent/status` | Session Store and router retain their existing ownership. The router wrapper emits the two-state scheduling transition; providers report process phases through runtime facts. |
+| `agent/submission/accepted`, `started`, `settled`; `turn/start`, `turn/end`; `user/message` | Router only. Submission events carry `SubmissionId` and `MessageId`; started and settled records carry the allocated turn. A not-started settlement carries no turn. |
+| `agent/runtime/facts` | A provider reports facts only through the router sink. Records identify the runtime and provider, carry negotiated product and protocol versions, capabilities, safe external-session id, and `starting \| ready \| running \| stopping \| stopped \| failed` process phase, and label each profile-derived or protocol-observed source. |
+| `assistant/chunk`, `assistant/message` | A provider writes only through the router-owned event sink for one open submission. Native records include their step; external records omit step and carry `{ kind: "runtime", provider, source: "protocol" }` provenance. Profile-derived model identity uses `source: "profile"` in runtime facts, not assistant content provenance. |
+| `step/*`, `request/*`, `agent/pre-step`, `agent/request*`, `agent/turn-stopping`, `agent/inbox/*` | Native runtime only. F5 permits canonical user and assistant events directly inside an external open turn without inventing a Harness step. |
+| `tool/*` and `agent/runtime/activity` | Harness ToolRuntime alone produces `tool/call` and `tool/result`. Providers report product-native command, tool, file, diff, usage, and status observations as runtime activity with runtime id, submission id when known, kind, phase, `complete \| partial` fidelity, and bounded redacted JSON data. |
+
+`deriveMessages` uses an explicit canonical-event allowlist and excludes every runtime fact and activity event. The runtime event sink verifies the open submission and turn, event order, declared activity capability, JSON bounds, provenance, and redaction before append. Providers never receive unrestricted `Session.append` authority.
+
+The current pre-release keeps `SESSION_FORMAT_VERSION` at `0`. F5 does not increment it even when it changes the Session Header or canonical assistant event representation. Loaders validate the current structure and explicitly reject incompatible older data under the pre-release no-compatibility policy; they never infer missing fields, default provenance, or default runtime identity, and F5 adds no compatibility guess or `0`-to-`1` migration.
+
+#### Snapshot, resume, and fork
+
+Every new Session Header contains one immutable `RuntimeProfileSnapshot` with `schemaVersion`, `profileId`, settings revision, provider id and provider-options version, executable plus resolution policy, argument array, working-directory policy, model policy, product configuration, permissions and enforcement claim, native-tool policy, Harness-tool transport and allowlist, credential target-to-`CredentialRef` mappings, process deadlines, and capacity. Defaulting and caller overrides are resolved before this snapshot is created. The snapshot contains no resolved credential, generated gateway token, temporary path, process id, negotiated capability, or external-session id.
+
+Resume uses only the stored snapshot. The named Settings profile may be edited or absent. Resume fails with a typed error when the provider or snapshot version is incompatible, the runtime lacks `resume`, or required product state or external identity is missing; it never selects the current default, creates a replacement external identity, or falls back to Native.
+
+A normal fork copies the parent's snapshot byte-for-byte and records ordinary Session lineage, but excludes negotiated facts and external identity. The child always creates a new external product session and appends its own runtime facts. A new-from-transcript operation may resolve a different profile, but it creates a new Session without resume semantics and is presented as a new identity.
+
+Credentials are resolved from the snapshot's references for every process start. Rotation changes the value supplied to a later start without mutating the snapshot; a missing reference fails before process creation.
+
+#### Errors and consumer migration
+
+Runtime failures use one serializable `AgentRuntimeError` with a stable code, phase, safe message, optional provider id, and redacted bounded details. The frozen codes are `PROFILE_NOT_FOUND`, `PROFILE_INVALID`, `RUNTIME_UNAVAILABLE`, `RUNTIME_INCOMPATIBLE`, `AGENT_CAPABILITY_UNSUPPORTED`, `AGENT_BUSY`, `SUBMISSION_REJECTED`, `RESUME_UNSUPPORTED`, `EXTERNAL_STATE_MISSING`, `SECURITY_POLICY_UNSATISFIED`, `START_TIMEOUT`, `TURN_TIMEOUT`, `RUNTIME_FAILED`, and `DISPOSE_FAILED`. Create, resume, probe, and pre-acceptance failures reject with this error. Post-acceptance failures settle the receipt and, for started work, use the same safe failure in `turn/end`; cancellation is a terminal result, not an exception. `AgentHandle.dispose()` completes all teardown and lifecycle notifications before rejecting with `DISPOSE_FAILED`, so cleanup failure never leaves a published Agent or replaces an earlier submission result.
+
+`SUBMISSION_REJECTED` with phase `publication` is reserved for `submit` while admission is `publishing`. This rejection creates no receipt or durable submission event and is identical whether the caller obtained the Agent from `AgentRegistry.get()` during `session/created` or from the `agent/created` payload.
+
+F1 adds the runtime Service Definition, identifiers, receipt, capability, snapshot, and error types without changing the active factory. F2 installs the router and Native provider and moves Native-only behavior behind capabilities. F5 atomically migrates Web Host, ACP Host, JSON-RPC SDK Server and Client, and Headless to receipts and removes their direct dependence on inbox claims, `followup`, `steer`, or message-scoped `whenIdle` guesses.
+
+Web RPC schemas move in lockstep during this pre-release. ACP wire behavior remains protocol version 1; the ACP Host translates receipt settlement to the existing ACP response and flushes its own ordered output queue. JSON-RPC `serverInfo.version` becomes `0.0.2`; `session/prompt` returns both message and submission ids, and submission start and settlement notifications replace inbox-splice inference. Old SDK clients fail version/schema validation instead of receiving compatibility emulation. Headless awaits the receipt settlement and then flushes only its correlated Session interval.
+
+#### Secure launch
+
+F4 implements one launcher used by every external runtime under these rules:
+
+1. Resolve an executable without a shell. Absolute paths are revalidated immediately before spawn; bare names resolve against the launch policy's explicit search path. Failure never falls back to another executable or Native.
+2. Build the child environment from an empty map: launcher-required operating-system entries, driver-required entries, explicitly allowlisted non-secret ambient names, profile literals, and freshly resolved credential targets. Windows key comparison is case-insensitive. Ambient credential-shaped names and every reserved key are rejected even when listed.
+3. Each driver declares reserved arguments and environment keys for protocol mode, output mode, model, session, gateway, policy, and credentials. Driver-owned injection is the only writer; duplicates or profile attempts to set them fail before spawn. V1 credentials are environment-only and never enter argv.
+4. Spawn native Windows executables directly. A driver may opt into `.cmd` or `.bat` only through the shared `ComSpec /d /s /c` launcher, whose encoder rejects CR, LF, NUL, `%`, `!`, and command metacharacters in dynamic arguments and has native Windows fixtures for spaces, quotes, extension precedence, and rejection. Profiles cannot provide a shell command string.
+5. Create authentication files only in a random owner-only directory with exclusive owner-only files. The prepared handle records non-secret cleanup metadata before publication, removes files on every normal or rollback path, and a startup scavenger removes stale files owned by this installation without following links.
+6. Install a launch-scoped known-value redactor before any provider diagnostic can reach a logger, error, Session event, API response, or retained output. It handles values split across stream chunks and replaces every non-empty resolved credential value; encoded or transformed secrets remain outside the guarantee.
+7. Enforce positive startup, turn, graceful-shutdown, and final-termination deadlines from the snapshot. Timeout stops admission, requests protocol cancellation when available, closes protocol input, escalates through the subprocess process-tree terminator, awaits `waitForExit`, and only then completes rollback or disposal.
+8. Capacity remains held until complete process-tree quiescence and temporary-material cleanup. A cancellation or cleanup failure preserves the original terminal reason and independently reports `DISPOSE_FAILED`; no success result may hide incomplete cleanup.
+
 ### Terms and ownership
 
 | Term | Meaning | Owner |
@@ -185,6 +267,8 @@ Implementation status, hard dependencies, parallel groups, coding-agent level, w
 ## Alternatives considered
 
 **Let the router forward to complete provider-owned `AgentFactory` implementations.** This makes initial extraction smaller but duplicates Session publication, rollback, cancellation, and disposal in every provider. The router instead owns the common transaction and providers return prepared runtime handles.
+
+**Hide entered Agents from `AgentRegistry.get()` until `agent/created` completes.** Existing synchronous lifecycle listeners resolve the Agent during `session/created`, and `agent/created` listeners receive the Agent directly even if lookup hides it. A router-owned admission controller preserves registry lifecycle semantics and closes both paths without a reentrant submission window.
 
 **Replace `ctx.agents` with a public multi-factory API.** Every caller would need runtime selection and fallback logic. One router keeps the creation entry centralized while the runtime-neutral Agent behavior makes callers genuinely portable.
 
