@@ -200,8 +200,7 @@ export class AgentRuntimeRegistry extends Service {
   registerProvider(provider: AgentRuntimeProvider): () => void {
     validateProvider(provider)
     const id = provider.id
-    // oxlint-disable-next-line typescript/no-misused-promises -- synchronous cleanup; direct return preserves disposer identity
-    return this.ctx.effect(function* (this: AgentRuntimeRegistry) {
+    const dispose = this.ctx.effect(function* (this: AgentRuntimeRegistry) {
       if (this.providers.has(id)) {
         throw new AgentRuntimeError({
           code: 'RUNTIME_INCOMPATIBLE',
@@ -217,6 +216,8 @@ export class AgentRuntimeRegistry extends Service {
       }
       this.ctx.emit('agent-runtime/provider-added', provider)
     }.bind(this), 'agentRuntimes.registerProvider()')
+    // oxlint-disable-next-line typescript/no-misused-promises -- synchronous cleanup; direct return preserves disposer identity
+    return dispose
   }
 
   /**
