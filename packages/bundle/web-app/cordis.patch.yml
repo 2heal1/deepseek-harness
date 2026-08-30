@@ -152,6 +152,11 @@
     - id: modules
       name: '@deepseek-ai/dsh-client-modules'
 
+    # Projects the active profile's URL-backed Bundle builds into the page;
+    # its browser half loads their client plugins directly from those URLs.
+    - id: remote-bundles
+      name: '@deepseek-ai/dsh-client-remote-bundles'
+
     # Owns both ends of the web transport: node half binds the gateway to the
     # webserver under /api; browser half is the fetch/SSE client.
     - id: connection

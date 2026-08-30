@@ -63,6 +63,18 @@ export function apply() {
 
 没有 `dsh.bundle` 声明的包仍然可以安装，但只作为普通依赖：`dsh plugin` 会打印警告，且不激活任何层。如果一个库供插件包 import，而不是供用户启用，就使用这种包格式。
 
+### 从一份源码构建 package 和 remote 两种形式
+
+上面的手写 JavaScript 包足以用于本地和 registry 交付。对于 TypeScript 组合包或远程交付，请使用 `@deepseek-ai/dsh-bundle-builder`，而不是维护两套构建配置。它的零配置布局使用 `package.json`、`cordis.patch.yml`、`src/index.ts` 和可选的 `src/client/index.ts`；`@deepseek-ai/cordis` 必须是 peer dependency，使每个运行时提供自己的单例。
+
+```sh
+pnpm add -D @deepseek-ai/dsh-bundle-builder typescript
+pnpm exec dsh-bundle lint
+pnpm exec dsh-bundle build
+```
+
+默认的 `dual` target 会把普通可安装组合包及其类型声明直接写入 `dist/`，并在其下写入 `dist/remote/dsh-bundle.json` 和不可变的 `dist/remote/builds/<buildId>/` 运行时资源。只需要一种形式时使用 `--target package` 或 `--target remote`。约定路径不需要任何构建器配置；只有需要修改路径、显式映射 patch 模块或选择 target 时，才使用 `package.json#dsh.bundleBuilder`。各字段和当前浏览器聚合限制以[构建器参考](../../../../packages/bundle/bundle-builder/README.zh.md)为准。
+
 ### profile manifest
 
 profile 目录包含两个文件：
@@ -108,6 +120,25 @@ dsh --profile demo
 ```
 
 `dsh plugin --profile demo remove dsh-hello-plugin` 会同时移除依赖和对应的层。
+
+## 订阅远程组合包
+
+使用普通 HTTP(S) URL 发布 `dist/remote/` 的全部内容，保持 `dsh-bundle.json` 地址稳定，并保证每个 `builds/<buildId>/` 路径不可变。然后以 manifest 声明的名称添加其 URL：
+
+```sh
+dsh plugin --profile demo add private-map-tools@https://plugins.example.test/maps/dsh-bundle.json
+dsh --profile demo
+```
+
+`dsh plugin add` 添加的是组合包来源，只是该命令保留了历史名称 `plugin`。add 会校验一次 manifest，并把 `{ type: "remote", name, url }` 写入和 package 组合包相同的有序 profile 列表。此后每次进程启动会获取一次稳定 manifest 并选择其当前不可变构建；系统不会运行后台更新器或实时替换。发布新构建时改指稳定 manifest，再由用户或进程管理器决定何时重启 DSH 以应用更新。
+
+Node 进程会下载并执行不可变 Node 入口；Web 页面会从发布源加载可选的浏览器入口及其 chunks。运行时 URL 不携带 TypeScript 声明：如果消费方需要针对组合包 service 类型进行编译，请发布或以其他方式分发 `dist/` 作为开发依赖。
+
+按名称移除订阅：
+
+```sh
+dsh plugin --profile demo remove private-map-tools
+```
 
 ## 加载顺序
 

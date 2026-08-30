@@ -26,12 +26,15 @@ interface DemoPolicy {
 /** Public product launcher plus the private build-only WebWorker packer. */
 const MANIFEST_BIN_ALLOWLIST = new Map<string, ManifestBin>([
   ['apps/cli/package.json', { dsh: 'lib/bin.js' }],
+  ['packages/bundle/bundle-builder/package.json', { 'dsh-bundle': './bin.js' }],
   ['packages/experimental/webworker-packer/package.json', { 'dsh-pack-vfs-image': './bin.js' }],
 ])
 
 /** Every executable in a Node application workspace has one explicit role. */
 const EXECUTABLE_SOURCE_ALLOWLIST = new Map<string, string>([
   ['apps/cli/src/bin.ts', 'supported dsh application launcher'],
+  ['packages/bundle/bundle-builder/bin.js', 'public build-only wrapper'],
+  ['packages/bundle/bundle-builder/src/bin.ts', 'public build-only implementation'],
   ['packages/context/time-context/tests/fixtures/driver.ts', 'test-only subprocess driver'],
   ['packages/experimental/webworker-packer/bin.js', 'private build-only wrapper'],
   ['packages/experimental/webworker-packer/src/bin.ts', 'private build-only implementation'],

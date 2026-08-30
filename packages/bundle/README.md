@@ -22,6 +22,7 @@ This group maps the installable patch layers used by `dsh --profile`. Each packa
 
 | Package | Role | ctx key |
 |---|---|---|
+| [`bundle-builder`](bundle-builder/README.md) | Build installable and URL-loadable Bundle artifacts | — (build-time tool) |
 | [`base`](base/README.md) | Shared core for base-backed profiles | — (patch only) |
 | [`acp-app`](acp-app/README.md) | Automation-only ACP stdio application over base | mounts the ACP bridge |
 | [`web-app`](web-app/README.md) | Browser application layer over base | mounts Web rows |
@@ -29,13 +30,14 @@ This group maps the installable patch layers used by `dsh --profile`. Each packa
 | [`sdk-app`](sdk-app/README.md) | SDK JSON-RPC stdio application over base | mounts the SDK server |
 | [`sdk-minimal`](sdk-minimal/README.md) | Standalone minimal SDK application without base or Web | — (complete patch tree) |
 
-In-box bundles resolve from the dsh installation; out-of-tree bundles install into a profile through `dsh plugin --profile <name> add <package>`.
+In-box bundles resolve from the dsh installation. Out-of-tree Bundles enter a Profile either as a package through `dsh plugin --profile <name> add <package>` or as a remote subscription through `dsh plugin --profile <name> add name@https://…/dsh-bundle.json`.
 
 <a id="related-documentation"></a>
 ## Related documentation
 
 - [dsh app](../../apps/cli/README.md) — the `dsh` command that starts a profile.
 - [app-boot](../boot/app-boot/README.md) — how profiles are resolved, layered, and customized.
+- [DSH Bundle Builder](bundle-builder/README.md) — the conventional dual package/remote build.
 - [Profile plugin bundles note](../../.agents/notes/implemented/architecture/2026-08-05-profile-plugin-bundles.md) — the profile and bundle composition design.
 - [Generated composition graph](../../apps/cli/composition.md) — the exact composition each shipped profile uses.
 

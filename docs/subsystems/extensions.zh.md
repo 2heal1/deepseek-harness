@@ -274,6 +274,28 @@ publish(topic: string, payload: InspectorJsonValue, monotonicMs?: number): void
 
 Source: [`packages/experimental/inspector/src/index.ts`](../../packages/experimental/inspector/src/index.ts)
 
+<a id="ctxremotebundles--remotebundleregistry"></a>
+
+### `ctx.remoteBundles` — `RemoteBundleRegistry`
+
+Profile-scoped registry consumed by boot and the optional Web bridge.
+
+```ts cordis-catalog
+/**
+ * Install every remote module namespace into the active Loader.
+ * @param ctx - root context after Loader creation and before entries mount.
+ */
+install(ctx: Context): void
+
+/**
+ * Return browser builds selected by this profile.
+ * @returns browser descriptors in profile order.
+ */
+web(): ResolvedRemoteWebBundle[]
+```
+
+Source: [`packages/boot/app-boot/src/remote-bundle.ts`](../../packages/boot/app-boot/src/remote-bundle.ts)
+
 <a id="cordis-events"></a>
 
 ### `cordis/*` events

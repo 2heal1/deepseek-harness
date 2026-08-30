@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/types.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../boot/app-boot" },
+    { "path": "../../util/atomic-write" },
+    { "path": "../../runtime-diagnostics/invariants" },
+    { "path": "../../../vendor/cordis" }
+  ]
+}

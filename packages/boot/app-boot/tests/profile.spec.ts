@@ -11,12 +11,13 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   composeEntries,
   healProfilesModuleFallback,
   initProfile,
   loadProfile,
+  loadProfileWithRemotes,
   PROFILE_PATCH_FILENAME,
   PROFILE_TEMPLATES,
   readProfileManifest,
@@ -25,6 +26,12 @@ import {
   writeProfileManifest,
   type Profile,
 } from '../src/index.ts'
+
+const federationLoadRemote = vi.hoisted(() => vi.fn())
+
+vi.mock('@module-federation/runtime', () => ({
+  createInstance: () => ({ loadRemote: federationLoadRemote }),
+}))
 
 const tmp = (): string => mkdtempSync(join(tmpdir(), 'dsh-profile-'))
 
@@ -68,6 +75,7 @@ function stageProfile(home: string, name: string, bundleAnchor: string): Profile
     name,
     dir,
     layers: [{
+      type: 'package',
       packageName,
       packageDir: join(bundleAnchor, '..'),
       patchPath: join(bundleAnchor, '..', 'cordis.patch.yml'),
@@ -179,6 +187,96 @@ describe('loadProfile', () => {
     const bare = loadProfile('t', 'demo', anchor, home)
     expect(bare.layers).toEqual([])
     expect(bare.patchReload).toBe('live')
+  })
+
+  it('persists remote sources but requires the asynchronous loader to resolve them', () => {
+    const anchor = stageInstallation({})
+    const home = tmp()
+    const dir = resolveProfileDir('remote', home)
+    const source = {
+      type: 'remote' as const,
+      name: 'private-map-tools',
+      url: 'https://plugins.example.test/dsh-bundle.json',
+    }
+    initProfile(dir, [source])
+    expect(readProfileManifest('t', dir).dsh?.profile?.bundles).toEqual([source])
+    expect(() => loadProfile('t', 'remote', anchor, home)).toThrow('use asynchronous profile loading')
+  })
+
+  it('rejects malformed and duplicate remote profile sources', () => {
+    const anchor = stageInstallation({})
+    const home = tmp()
+    const dir = resolveProfileDir('remote', home)
+    initProfile(dir, [])
+    for (const bundles of [
+      {},
+      [''],
+      ['a', 'a'],
+      [null],
+      [[]],
+      [{ type: 'url', name: 'a', url: 'https://example.test/a' }],
+      [{ type: 'remote', name: '', url: 'https://example.test/a' }],
+      [{ type: 'remote', name: 'a', url: '' }],
+      ['a', { type: 'remote', name: 'a', url: 'https://example.test/a' }],
+    ]) {
+      writeProfileManifest(dir, { name: 'remote', dsh: { profile: { bundles: bundles as never } } })
+      expect(() => loadProfile('t', 'remote', anchor, home)).toThrow()
+    }
+  })
+
+  it('loads package and remote layers in manifest order and excludes remotes from module healing', async () => {
+    const anchor = stageInstallation({
+      'bundle-a': { patch: '- insert:\n    - id: a\n      name: cordis:loader\n' },
+    })
+    const cordisDir = join(anchor, '..', 'node_modules', ...'@deepseek-ai/cordis'.split('/'))
+    mkdirSync(cordisDir, { recursive: true })
+    writeFileSync(join(cordisDir, 'package.json'), JSON.stringify({
+      name: '@deepseek-ai/cordis',
+      version: '4.0.0',
+    }))
+    const home = tmp()
+    const dir = resolveProfileDir('mixed', home)
+    const remote = {
+      type: 'remote' as const,
+      name: 'remote-bundle',
+      url: 'https://example.test/dsh-bundle.json',
+    }
+    initProfile(dir, ['bundle-a', remote])
+    federationLoadRemote.mockResolvedValue({ modules: { 'remote-bundle': { apply: () => {} } } })
+    const manifest = {
+      schemaVersion: 1,
+      name: 'remote-bundle',
+      buildId: 'build-mixed',
+      patch: 'cordis.patch.yml',
+      node: {
+        entry: 'node/remoteEntry.js',
+        shared: [{ request: '@deepseek-ai/cordis', requiredVersion: '^4.0.0' }],
+      },
+    }
+    const fetchImpl = vi.fn(async (input: string | URL) => new Response(
+      String(input).endsWith('dsh-bundle.json')
+        ? JSON.stringify(manifest)
+        : '- insert:\n    - id: remote\n      name: remote-bundle\n',
+    ))
+
+    const profile = await loadProfileWithRemotes('t', 'mixed', anchor, home, { fetch: fetchImpl })
+
+    expect(profile.layers.map(layer => layer.type)).toEqual(['package', 'remote'])
+    expect(profile.layers[1]).toMatchObject({
+      packageName: 'remote-bundle',
+      patchPath: remote.url,
+      remote: { manifest: { buildId: 'build-mixed' } },
+    })
+    await healProfilesModuleFallback({ installAnchor: anchor, profile, home })
+
+    vi.stubGlobal('fetch', fetchImpl)
+    try {
+      await expect(loadProfileWithRemotes('t', 'mixed', anchor, home)).resolves.toMatchObject({
+        layers: [{ type: 'package' }, { type: 'remote' }],
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('auto-initializes only shipped templates and fails loud otherwise', () => {
@@ -415,6 +513,7 @@ describe('healProfilesModuleFallback', () => {
       name: 'symlinked',
       dir,
       layers: [{
+        type: 'package',
         packageName: 'selected-bundle',
         packageDir: bundleLink,
         patchPath: join(bundleLink, 'cordis.patch.yml'),
@@ -460,6 +559,7 @@ describe('healProfilesModuleFallback', () => {
       name: 'explicit-roots',
       dir,
       layers: ([['bundle-a', bundleA], ['bundle-b', bundleB]] as const).map(([packageName, packageDir]) => ({
+        type: 'package' as const,
         packageName,
         packageDir,
         patchPath: join(packageDir, 'cordis.patch.yml'),
@@ -500,6 +600,7 @@ describe('healProfilesModuleFallback', () => {
       name: 'ordered',
       dir,
       layers: ([['bundle-a', bundleA], ['bundle-b', bundleB]] as const).map(([packageName, packageDir]) => ({
+        type: 'package' as const,
         packageDir,
         packageName,
         patchPath: join(packageDir, 'cordis.patch.yml'),

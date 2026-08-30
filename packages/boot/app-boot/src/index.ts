@@ -34,6 +34,7 @@ export {
   healProfilesModuleFallback,
   initProfile,
   loadProfile,
+  loadProfileWithRemotes,
   PROFILE_PATCH_FILENAME,
   PROFILE_TEMPLATES,
   PROFILES_DIR,
@@ -44,13 +45,31 @@ export {
   type DshBundleManifest,
   type DshManifestSection,
   type DshProfileManifest,
+  type PackageProfileLayer,
   type Profile,
+  type ProfileBundleSource,
   type ProfileLayer,
   type ProfileManifest,
   type ProfileModuleFallbackOptions,
   type ProfilePatchReload,
   type ProfileTemplate,
+  type RemoteProfileLayer,
 } from './profile.ts'
+export {
+  fetchRemoteBundleManifest,
+  loadRemoteBundle,
+  parseRemoteBundleManifest,
+  remoteContainerName,
+  RemoteBundleRegistry,
+  type RemoteBundleFetch,
+  type RemoteBundleManifest,
+  type RemoteBundleSharedModule,
+  type RemoteBundleWebManifest,
+  type RemoteProfileBundleSource,
+  type ResolvedRemoteBundle,
+  type ResolvedRemoteSharedModule,
+  type ResolvedRemoteWebBundle,
+} from './remote-bundle.ts'
 
 /**
  * Resolve the config to boot. Replay swaps a `cordis.yml` basename for
@@ -286,6 +305,17 @@ export function loadOptionalPatches(binName: string, file: string): PatchOptions
     throw new Error(`${binName}: failed to read patches ${file}: ${String(error)}`)
   }
   return parsePatchList(binName, file, content, 'patches')
+}
+
+/**
+ * Parse a named patch document received from a non-filesystem source.
+ * @param binName - diagnostic prefix.
+ * @param source - source URL or other stable document name.
+ * @param content - YAML patch document.
+ * @returns the validated patch list.
+ */
+export function parsePatchSource(binName: string, source: string, content: string): PatchOptions[] {
+  return parsePatchList(binName, source, content, 'overlay')
 }
 
 /**

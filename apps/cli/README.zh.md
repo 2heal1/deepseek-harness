@@ -14,7 +14,8 @@
 | `dsh --profile sdk` | 通过 JSON-RPC stdio 为 SDK client 提供服务，直至关闭或断开连接。 |
 | `dsh --profile sdk-minimal` | 以独立极简 agent 配置树为 SDK client 提供服务。 |
 | `dsh web` | `--profile web` 的别名。 |
-| `dsh plugin --profile <name> <pnpm args>` | 通过在 profile 目录中转发给 pnpm 来管理该 profile 的插件。 |
+| `dsh plugin --profile <name> add <package>` | 通过 pnpm 添加 npm、Git、tarball 或路径组合包。 |
+| `dsh plugin --profile <name> add name@https://…/dsh-bundle.json` | 添加远程组合包订阅。 |
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web`、`headless`、`sdk`、`sdk-minimal` 和 `acp` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
 
@@ -33,14 +34,14 @@ dsh --help                          # the launcher's own help
 <a id="profiles"></a>
 ## Profile
 
-profile 目录包含一个 `package.json`，其中记录树外插件依赖，以及 profile manifest（元数据清单）`dsh.profile`、其中按顺序排列的 `bundles` 列表与 `patchReload` 生命周期；还包含一个 `cordis.patch.yml`，其中保存用户自己的 patch 层。`patchReload: live` 监视 profile 与 home 级 patch 文件，`startup` 则只应用一次。
+profile 目录包含一个 `package.json`，其中记录树外包依赖，以及 profile manifest（元数据清单）`dsh.profile`、其中按顺序排列的 package 或 remote 组合包来源与 `patchReload` 生命周期；还包含一个 `cordis.patch.yml`，其中保存用户自己的 patch 层。`patchReload: live` 监视 profile 与 home 级 patch 文件，`startup` 则只应用一次。
 
 配置树以空根为起点，依次叠加以下配置层：
 - `dsh.profile.bundles` 中各组合包的 patch
 - profile 自身的 `cordis.patch.yml`，然后是 home 级的 `$DSH_HOME/cordis.patch.yml`
 - `--patch` 指定的覆盖层
 
-`dsh.profile.bundles` 中列出的组合包先从 dsh 安装目录解析（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@deepseek-ai/dsh-headless`、`@deepseek-ai/dsh-sdk-app`、`@deepseek-ai/dsh-sdk-minimal`、`@deepseek-ai/dsh-acp-app`），再从 profile 自身的 `node_modules` 解析；pnpm 会将树外插件安装到该目录。
+`dsh.profile.bundles` 中按名称列出的 package 组合包先从 dsh 安装目录解析（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@deepseek-ai/dsh-headless`、`@deepseek-ai/dsh-sdk-app`、`@deepseek-ai/dsh-sdk-minimal`、`@deepseek-ai/dsh-acp-app`），再从 profile 自身的 `node_modules` 解析；pnpm 会将树外包安装到该目录。remote 条目保存组合包名称和稳定的 HTTP(S) manifest URL；每次进程启动都会从该 URL 解析当前不可变构建。
 
 使用 `--dump-default-config` 和 `--dump-config` 可在不启动的情况下检查组合后的配置树。
 

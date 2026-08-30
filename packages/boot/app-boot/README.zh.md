@@ -47,6 +47,8 @@ const ctx = await boot('dsh', resolveConfigPath(argv[2], process.env.DSH_SNAPSHO
 
 profile 是同一套 dsh 安装提供不同应用界面的方式：`web`、`headless`、`acp`、`sdk` 与 `sdk-minimal` 从同一 launcher 启动不同组合。profile 位于 `$DSH_HOME/profiles/<name>`，由可安装 bundle、自身 `cordis.patch.yml` 与 `patchReload: live | startup` 组成；自定义 profile 省略 reload 策略时保留历史 `live` 默认值。随产品交付的 `web` 模板实时重载，其他随附模板只在启动时应用 patch。`sdk-minimal` 只列出自身的独立 bundle，其他模板保留 base 加模式 bundle 的栈。`dsh plugin` 创建自定义 profile；缺失 bundle 或未声明 patch 的 bundle 会让启动明确失败。
 
+每个有序组合包来源要么是包名，要么是包含 `{ type: "remote", name, url }` 的远程订阅。远程启动会获取稳定 HTTP(S) manifest 和 patch，校验名称与订阅一致，解析由 Host 共享的 peer 版本，加载不可变 Node 容器，然后在该来源所在的列表位置组合 patch。运行中的进程不会轮询或替换已经选择的构建。当 remote 暴露 Web 部分时，启动注册表会把它的不可变 URL 交给 Web 桥接器，由浏览器直接从发布方加载。
+
 你的机器本地偏好同样位于 harness home 中：
 
 - **`.env`**——你的普通环境层：调用目录的文件优先于 harness home 的文件，两者都低于继承环境。决定进程如何启动的变量（`PATH`、代理、`DSH_*`、`XDG_*` 等）会被文件拒绝：请改为导出。对于只想加载某个目录 `.env` 的非产品 bin，文件缺失不影响启动，文件无法加载时输出一行带标签的警告。
@@ -83,6 +85,7 @@ profile 是同一套 dsh 安装提供不同应用界面的方式：`web`、`head
 - **与渠道无关的库。** 此包不包含 loader 钩子，也不提供开发模式接口；[`dsh` 应用](../../../apps/cli/README.zh.md) 持有自己的 Node 源码启动钩子，并在启动序列中使用这些 helper，构建后的消费方则使用普通 Node 包解析。
 - **两个 Loader builtin。** `mountRootInclude` 把 `cordis:include` 与 `cordis:group` 注册为 Loader builtin：group 行能把一个提供方与它的消费方放进同一个 `isolate` realm，而位于本工作区之外的 agent preset 无法按名称解析 `@deepseek-ai/cordis-plugin-group`。两者都通过宿主的模块管线加载，而非被包含树自身的说明符解析。
 - **Profile 模块后备机制。** 裸插件 specifier 由 Loader 从配置目录解析。普通 Node 会为安装依赖闭包中的每个包维护一个符号链接。打包可执行文件无法让操作系统符号链接进入 pkg 的 `/snapshot` 树，因此会按 Node ESM 条件读取已安装包的 export map，并写入重新导出虚拟模块 URL 的真实代理包。缺失 export 保持不可用，错误 export map 会让启动失败，跨进程 writer lock 则会在不暴露部分代理的情况下替换陈旧条目。所选外部 bundle 若不在安装闭包中，则会获得 profile 本地的 `.dsh-module-fallback` 链接；已有 pnpm 条目优先，后续闭包发现会排除投影链接，清理也只删除 dsh 自有链接。
+- **远程 Loader builtin。** 远程 Node 容器返回 patch 所引用的每个模块命名空间。app boot 会在组合前把这些插入名称改写成进程本地 Loader builtin，因此激活与卸载继续经过普通 Loader 路径，同时容器消费 Host 的 Cordis 单例和声明的 peer。
 - **单一 rejection 检查点。** `assertEntriesActivated` 把折入启动诊断的确切原因保持到下一个进程级 rejection 检查点可见，使 `installFailLoud` 能合并 Loader 的重复通知，而所有无关的未处理 rejection 仍然致命。
 - **两阶段失败标签。** `boot()` 区分 `host preparation failed`（`prepare` 在任何配置树条目挂载前抛出）与 `plugin tree failed to load`（此后的一切失败），并追加最深层插件错误的堆栈，使启动诊断保留原始激活错误，而不只是包装链。
 
@@ -96,6 +99,7 @@ profile 是同一套 dsh 安装提供不同应用界面的方式：`web`、`head
 |---|---|
 | [`src/index.ts`](src/index.ts) | 启动 helper：配置解析、环境加载、会明确报错的保护机制、激活审计、patch 解析、配置 dump、harness 源码段落 |
 | [`src/profile.ts`](src/profile.ts) | profile 发现、初始化、组合包解析、模块后备机制 |
+| [`src/remote-bundle.ts`](src/remote-bundle.ts) | 远程 manifest 校验、不可变 Node 加载、patch 改写和浏览器描述注册表 |
 | [`src/invariant.ts`](src/invariant.ts) | 不变式伴生插件（无运行时不变式；边界与回放测试覆盖其协议映射） |
 
 </details>
@@ -111,6 +115,7 @@ profile 是同一套 dsh 安装提供不同应用界面的方式：`web`、`head
 - [dsh 应用](../../../apps/cli/README.zh.md)——消费这些 helper 的 `dsh` bin。
 - [dsh-cmdline](../cmdline/README.zh.md)——各 bin 使用的启动器到应用命令行交接。
 - [Profile 组合包](../../bundle/README.zh.md)——组合进 `dsh --profile` 的可安装 patch 层。
+- [DSH 组合包构建器](../../bundle/bundle-builder/README.zh.md)——输出本包消费的 package 与 remote 产物。
 - [dsh-home-paths](../../util/home-paths/README.zh.md)——harness home 解析器（`resolveDshHome`）。
 - [配置来源归属](../../../.agents/notes/implemented/architecture/2026-08-04-configuration-source-ownership.zh.md)——被发现的文件为何不得决定 bootstrap 行为。
 - [Profile 插件组合包](../../../.agents/notes/implemented/architecture/2026-08-05-profile-plugin-bundles.zh.md)——profile 与组合包组合设计。
@@ -137,6 +142,7 @@ profile 是同一套 dsh 安装提供不同应用界面的方式：`web`、`head
 - **快照回放替换仅识别特定 basename**——只有以 `cordis.yml` 或 `cordis.yaml` 结尾的配置会映射到同级 `cordis.snapshot.yml`；自定义配置名称需要调用方自行选择。
 - **环境发现以启动为界**——`loadLayeredEnv` 只读取一次调用目录与 harness home 中的 `.env`；它不搜索父目录，也不跟随之后选择的 workspace。`loadEnv` 仍是非产品 bin 使用的单目录 helper。
 - **用户 patch 会替换匹配到的整个配置**——按 id 定位的 patch 不做深度合并，因此 profile 覆盖必须重述需要保留的组合包字段。
+- **远程选择只发生在启动时**——Host 准备期间只获取一次 manifest，不提供认证、更新器、轮询或本地产物缓存；重启是明确的更新边界。
 
 <a id="dev-note"></a>
 ### 开发备注
