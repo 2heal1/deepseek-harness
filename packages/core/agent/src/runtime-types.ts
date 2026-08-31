@@ -61,41 +61,11 @@ export type RequestErrorAction = { kind: 'retry' } | undefined
 /** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
 export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
 
-/**
- * Runtime-owned implementation of the currently Native-only Agent operations.
- * The Router owns the public Agent identity and delegates these operations only
- * after a Provider returns a prepared runtime.
- */
-export interface AgentDriver {
-  /** Provider-owned pending-message projection. */
-  readonly inbox: Inbox
-  /** Current provider scheduling state. */
-  readonly status: AgentStatus
-  /**
-   * Cancel current provider work.
-   * @param cause - stable cancellation intent.
-   * @param options - Native pending-input retention policy.
-   */
-  cancel(cause: AgentCancelCause, options?: CancelOptions): void
-  /**
-   * Wait for provider work to reach quiescence.
-   * @returns fulfillment when no provider work remains.
-   */
-  whenIdle(): Promise<void>
-  /**
-   * Run Native maintenance while no turn is active.
-   * @param task - abort-aware maintenance operation.
-   * @returns the task result.
-   */
-  runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>
-  /**
-   * Route one identified message through the Native inbox.
-   * @param message - identified input.
-   * @param target - target pending list.
-   * @param wakeup - whether to start or wake work.
-   */
-  send(message: UserMessage, target: InboxTarget, wakeup: boolean): void
-}
+/** Runtime-owned subset of Agent operations delegated by the Router. */
+export type AgentDriver = Pick<
+  Agent,
+  'inbox' | 'status' | 'cancel' | 'whenIdle' | 'runMaintenance' | 'send'
+>
 
 declare module '@deepseek-ai/dsh-agent-runtime' {
   interface PreparedAgentRuntime {
