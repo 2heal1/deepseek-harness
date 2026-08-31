@@ -30,6 +30,10 @@ flowchart LR
   cfg --> plugin_dsh_base_user_questions
   plugin_dsh_base_agent["agent<br/>@deepseek-ai/dsh-agent"]
   cfg --> plugin_dsh_base_agent
+  plugin_dsh_base_agent_runtime["agent-runtime<br/>@deepseek-ai/dsh-agent-runtime"]
+  cfg --> plugin_dsh_base_agent_runtime
+  plugin_dsh_base_agent_runtime_router["agent-runtime-router<br/>@deepseek-ai/dsh-agent-runtime-router"]
+  cfg --> plugin_dsh_base_agent_runtime_router
   plugin_dsh_base_agent_default_model["agent-default-model<br/>@deepseek-ai/dsh-agent-default-model"]
   cfg --> plugin_dsh_base_agent_default_model
   plugin_dsh_base_jobs["jobs<br/>@deepseek-ai/dsh-jobs-local"]
@@ -179,6 +183,8 @@ flowchart LR
 | `session-title-llm` | `@deepseek-ai/dsh-session-title-first-prompt-llm` |
 | `user-questions` | `@deepseek-ai/dsh-user-questions` |
 | `agent` | `@deepseek-ai/dsh-agent` |
+| `agent-runtime` | `@deepseek-ai/dsh-agent-runtime` |
+| `agent-runtime-router` | `@deepseek-ai/dsh-agent-runtime-router` |
 | `agent-default-model` | `@deepseek-ai/dsh-agent-default-model` |
 | `jobs` | `@deepseek-ai/dsh-jobs-local` |
 | `llm-retry` | `@deepseek-ai/dsh-llm-retry` |

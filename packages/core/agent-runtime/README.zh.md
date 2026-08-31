@@ -55,6 +55,6 @@ Router Consumer 可以把通过 `assistantMessage()` 报告的内容转换为规
 
 ## 已知限制和延后工作
 
-- **不含 Router 或运行时实现** — 本包不安装 `AgentFactory`、不发布 Agent，也不提供 Native、Codex 或 ACP 执行；F2 和协议 Provider 包会消费此 Service Definition。
+- **不捆绑实现** — 本包不安装 `AgentFactory`、不发布 Agent，也不执行运行时。`dsh-agent-runtime-router` 是 Consumer，`dsh-agent-loop` 是 Native Provider，协议包提供外部运行时。
 - **Profile 编写与校验相互独立** — 快照类型记录已解析字段；Settings schema、默认值、校验、容量准入和凭据解析属于 profile Consumer。
 - **事件是报告，不是持久化权限** — F5 定义持久运行时事件 schema 与 Router 校验；Provider 只接收这里声明的受限报告 sink。

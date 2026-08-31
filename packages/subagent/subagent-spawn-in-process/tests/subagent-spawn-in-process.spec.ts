@@ -58,7 +58,7 @@ function disposeChildLifecycle(parent: Agent): void {
   const lifecycle = [...parent.ctx.fiber._disposables]
     .find((dispose) => {
       const effect = (dispose as typeof dispose & { [symbols.effect]?: EffectMeta })[symbols.effect]
-      return effect?.label.startsWith('agentLoop.lifecycle(') === true
+      return effect?.label.startsWith('agentRuntimeRouter.lifecycle(') === true
     })
   if (lifecycle === undefined) throw new Error('child lifecycle effect not found')
   void lifecycle()

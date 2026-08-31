@@ -36,13 +36,13 @@ Agent 接口、注册表、进程本地发起方作用域，以及 `agent/*` 事
 
 #### 工厂 API（创建）
 
-Agent *创建* 由实现 `AgentFactory` 的插件（`dsh-agent-loop`）提供，并通过 `setFactory` 注册。这样，创建功能留在 `dsh-agent` 接口上，消费方（UI、ACP（Agent Client Protocol）桥接层）可以面向 `ctx.agents` 编程，而不依赖具体循环包。注册表会把已经 traced 的 Service 规范化为具体目标，并通过调用方上下文重新 trace 每次调用；这既避免嵌套 Cordis shadow，也会把显式、绑定调用方的 `ownerCtx` 传给普通工厂。
+Agent 创建由 `dsh-agent-runtime-router` 安装的唯一 `AgentFactory` 提供。这样，创建功能留在 `dsh-agent` 接口上，消费方可以面向 `ctx.agents` 编程，而不依赖具体运行时。注册表会规范化 traced Service，并通过调用方 context 重新 trace 每次调用，把显式、绑定调用方的 `ownerCtx` 传给 Factory。
 
-- `ctx.agents.setFactory(factory: AgentFactory): () => void`：注册创建工厂（循环在构造时调用）。第二个工厂会导致抛出；dispose 时清空槽位。
-- `ctx.agents.create(options: CreateAgentOptions): Promise<AgentHandle>`：创建会话和 agent，在不发布的情况下等待可选 setup，然后通过最终的 `SessionStore.enter()` 与 `AgentRegistry.enter()` 检查发布。不支持并发创建同一 ID：多个操作可以进行准备，但只有一个能进入；每个失败方都会回滚其私有作用域／会话／驱动器。可选且只用于创建的 `signal` 会取消未发布的 setup，并在返回 handle 前分离；之后的取消使用 `handle.dispose()` 或 `agent.cancel()`。发布包含在回滚范围内，回滚期间每条已交付创建边都会成对处理。未注册工厂时拒绝。
-- `ctx.agents.resume(options: ResumeAgentOptions): Promise<AgentHandle>`：加载持久化会话（[会话持久化](../../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md)），创建新的未发布 agent 作用域，等待可选 setup，并使用相同的最终进入发布序列。其可选 `signal` 同样只用于创建。未注册工厂或未配置会话持久化时拒绝。
+- `ctx.agents.setFactory(factory: AgentFactory): () => void`：注册唯一创建 Factory。Router 拥有该槽位；第二个 Factory 会被拒绝，dispose 时清空槽位。
+- `ctx.agents.create(options: CreateAgentOptions): Promise<AgentHandle>`：要求 Router 选择一个 Provider generation、准备私有 Session 与 Agent scope、等待可选 setup，并通过有序注册表进入与同步生命周期通知完成发布。Waking input 在发布完成前保持关闭。并发同 ID 事务可以进行准备，但只有一个能进入；其他事务都会回滚其私有资源。可选 `signal` 只作用到发布完成。
+- `ctx.agents.resume(options: ResumeAgentOptions): Promise<AgentHandle>`：要求 Router 加载持久化会话（[会话持久化](../../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md)），并使用同一 Provider 选择、setup、发布与回滚事务。持久化或 Provider 不可用时会明确失败。
 
-`AgentHandle = { agent: Agent; dispose(): Promise<void> }`。Disposer 是一项 **消费方能力**；仅持有裸注册表条目的观察方不能 teardown agent。调用方 fiber 和已注册工厂提供方是结构化共同拥有者：调用方卸载会强制结构化所有权，而工厂卸载必须停止旧实例，因为它们的作用域依赖范围属于该提供方。任意拥有者调用 `dispose()` 都会到达同一个记忆化完全停稳边界：它停止循环，等待循环退出，注销 agent，从存储中移除其会话，最后撤销其作用域世界。`ctx.agents.get(id)` 仍返回裸 `Agent`；ACP 桥接层与进程内 subagent 后端持有消费方 handle，而配置创建的 agent 已由循环 fiber 拥有。
+`AgentHandle = { agent: Agent; dispose(): Promise<void> }`。Disposer 是一项 **消费方能力**；仅持有注册表条目的观察方不能 teardown Agent。调用方 fiber、Router 与所选 Provider generation 都是结构化 owner。Disposal 会在等待 Provider 完全停稳前关闭 submission admission，再撤销 scope 并 detach Agent 与 Session 条目。
 
 ### 实时事件
 
@@ -70,13 +70,14 @@ inbox 的实时通知刻意采用逐消息的最小载荷：`agent/inbox/inserte
 - `agent.inject(message)`：将不会唤醒的 `next-step` 上下文排队。运行中的驱动器会在最近的后续 pre-step 边界领取它；idle 驱动器则会让它保持待处理，直至 `followup()` 或 `steer()` 唤醒驱动器。若某次请求的 pre-step 已经领取完批次，它可能赶不上该请求。
 - `agent.cancel(cause, options?)`：取消活跃驱动器，并在未设置 `options.keepInbox` 时持久取消全部待处理 inbox 工作。空闲取消是空操作。
 - `agent.whenIdle()`：观察整个 agent 达到完全停稳，包括当前驱动器退役前调度的替代工作。它不结算任何特定消息。
+- `agent.capabilities`：发布前固定的不可变有效运行时 capability。
 - `agent.session`、`agent.status`、`agent.options`、`agent.id`、`agent.ctx`
 
 `running` 描述驱动器范围的 drain 区间，而不是轮次仍打开的证明；它可以覆盖轮次关闭、持久性检查点和连续的排队轮次。只有拥有完整区间的调用方才能将其概括为一次运行的结果（[决策](../../../.agents/notes/implemented/architecture/2026-07-30-followup-enqueue-and-owned-runs.md)）。
 
 ### 扩展点
 
-- Agent 创建：`AgentLoop.create()` 是具体配置路径实现（位于 `dsh-agent-loop`），程序化消费方则通过 `ctx.agents.create()`/`ctx.agents.resume()` 创建或恢复有所有权的 agent。替换循环时，应实现 `Agent` 并通过 `ctx.agents.register()` 注册。
+- Agent 创建：`dsh-agent-runtime-router` 是唯一 Factory；程序化消费方通过 `ctx.agents` 创建或恢复有所有权的 Agent，`dsh-agent-loop` 提供 Native Provider，并为声明式 Native 启动保留兼容 `create()` 入口。
 - 事件监听器：全部 `agent/*` 事件都在此处声明，不需要依赖循环包。
 - subagent 委派不是 `Agent` 方法；提供方通过工厂 API 创建或驱动普通 handle，因此委派传输留在核心 agent 接口之外。
 

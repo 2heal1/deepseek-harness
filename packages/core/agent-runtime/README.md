@@ -55,6 +55,6 @@ The package does not alter request prefixes itself. Provider output appended to 
 
 ## Known Limitations and Deferred Work
 
-- **No Router or runtime implementation** — this package does not install `AgentFactory`, publish Agents, or provide Native, Codex, or ACP execution; F2 and protocol Provider packages consume this Service Definition.
+- **No bundled implementation** — this package does not install `AgentFactory`, publish Agents, or execute a runtime. `dsh-agent-runtime-router` is the Consumer, `dsh-agent-loop` is the Native Provider, and protocol packages provide external runtimes.
 - **Profile authoring and validation are separate** — the snapshot type records resolved fields, while Settings schemas, defaults, validation, capacity admission, and credential resolution belong to the profile Consumer.
 - **Events are reports, not persistence authority** — F5 defines durable runtime event schemas and Router validation; Providers receive only the restricted report sink declared here.

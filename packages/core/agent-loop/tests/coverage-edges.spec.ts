@@ -6,8 +6,11 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { ReactLoopDriver } from '../src/agent.ts'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
 
 function driverDone(agent: Agent): Promise<void> {
@@ -21,6 +24,8 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx
@@ -473,8 +478,9 @@ describe('driver bookkeeping edges', () => {
   it('rejects a direct turn invocation without a driver reservation', async () => {
     const ctx = await harness(new MockAdapter([]))
     const agent = ctx.agentLoop.create(SessionId('turn-without-reservation'), { provider: 'mock', model: 'mock' })
+    const driver = new ReactLoopDriver(ctx, agent)
 
-    await expect((agent as unknown as { turn(): Promise<boolean> }).turn())
+    await expect((driver as unknown as { turn(): Promise<boolean> }).turn())
       .rejects.toThrow('turn without driver reservation')
     expect(agent.status).toBe('idle')
   })

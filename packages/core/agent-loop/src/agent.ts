@@ -7,6 +7,7 @@
 import type {
   Agent,
   AgentCancelCause,
+  AgentDriver,
   AgentEventDispatch,
   AgentOptions,
   AgentStatus,
@@ -25,8 +26,6 @@ import {
   errorChain,
   markAgentLoopRequest,
 } from '@deepseek-ai/dsh-llm'
-import type { Scope } from '@deepseek-ai/dsh-scope'
-import { createScope } from '@deepseek-ai/dsh-scope'
 import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
 import { canonicalHeader, headerEquals } from '@deepseek-ai/dsh-session'
 import { joinContextSections, renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
@@ -60,15 +59,15 @@ function requestProposal(header: EpochHeader): LlmCallConfig {
   return proposal
 }
 
-/** Drives one session through turn and step boundaries. */
-export class ReactLoopAgent implements Agent {
+/** Native Provider driver for one Router-owned Agent. */
+export class ReactLoopDriver implements AgentDriver {
   readonly inbox: Inbox
   private phase: Phase
   private activityDone: Promise<void> = Promise.resolve()
-
-  /** The agent-scoped registration boundary; the lifecycle owner unwinds it after the driver exits. */
-  readonly scope: Scope
-  readonly ctx: Context
+  private readonly id: SessionId
+  private readonly options: AgentOptions
+  private readonly session: Session
+  private readonly ctx: Context
 
   /** Fused dispatcher, built once in the constructor so hot-path dispatches never allocate. */
   private readonly dispatch: AgentEventDispatch
@@ -79,21 +78,21 @@ export class ReactLoopAgent implements Agent {
 
   constructor(
     private loopCtx: Context,
-    public readonly id: SessionId,
-    public readonly options: AgentOptions,
-    public readonly session: Session,
+    private readonly agent: Agent,
   ) {
-    this.dispatch = agentEvents(loopCtx, this)
-    this.inbox = new Inbox(session, {
+    this.id = agent.id
+    this.options = agent.options
+    this.session = agent.session
+    this.ctx = agent.ctx
+    this.dispatch = agentEvents(loopCtx, agent)
+    this.inbox = new Inbox(this.session, {
       inserted: (message) => { this.dispatch.emit('agent/inbox/inserted', { message }) },
       discarded: (message) => { this.dispatch.emit('agent/inbox/discarded', { message }) },
       claimed: (message, turn) => { this.dispatch.emit('agent/inbox/claimed', { message, turn }) },
     })
-    const lastTurn = session.events.findLast(event => event.type === 'turn/start')?.data.turn ?? 0
+    const lastTurn = this.session.events.findLast(event => event.type === 'turn/start')?.data.turn ?? 0
     this.phase = { kind: 'idle', lastTurn }
-    this.scope = createScope(loopCtx, this)
-    this.ctx = this.scope.ctx.extend({ agent: this })
-    this.runtimeContext = new RuntimeContextProjection(this.ctx, session)
+    this.runtimeContext = new RuntimeContextProjection(this.ctx, this.session)
   }
 
   get status(): AgentStatus {
@@ -117,18 +116,6 @@ export class ReactLoopAgent implements Agent {
     const resolvedTarget = wakingAfterAbort ? 'next-turn' : target
     this.inbox.splice(resolvedTarget, Infinity, 0, [message])
     if (wakeup) this.wakeDriver(wakingAfterAbort)
-  }
-
-  followup(input: UserMessage): void {
-    this.send(input, 'next-turn', true)
-  }
-
-  steer(input: UserMessage): void {
-    this.send(input, 'next-step', true)
-  }
-
-  inject(input: UserMessage): void {
-    this.send(input, 'next-step', false)
   }
 
   cancel(cause: AgentCancelCause, options: CancelOptions = {}): void {
@@ -189,7 +176,7 @@ export class ReactLoopAgent implements Agent {
       step: 0,
       wakeRequested: false,
     })
-    this.loopCtx.agents.withInitiator(this, () => this.kick()).then(driver.resolve, driver.reject)
+    this.loopCtx.agents.withInitiator(this.agent, () => this.kick()).then(driver.resolve, driver.reject)
   }
 
   async whenIdle(): Promise<void> {
@@ -227,7 +214,7 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
-    const assembly = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
+    const assembly = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this.agent, signal))
     signal.throwIfAborted()
     const sections = renderContextSections(assembly)
     const context = this.runtimeContext.project(joinContextSections(sections), sections)

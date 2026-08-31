@@ -18,6 +18,12 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../core/agent-runtime"
+    },
+    {
+      "path": "../../core/agent-runtime-router"
+    },
+    {
       "path": "../../llm/llm"
     },
     {

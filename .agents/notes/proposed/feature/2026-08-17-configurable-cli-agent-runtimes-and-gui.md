@@ -95,6 +95,14 @@ F1 adds the runtime Service Definition, identifiers, receipt, capability, snapsh
 
 The package does not install `AgentFactory`, publish a Session or Agent, resolve Runtime Profiles, or append durable events. Those responsibilities remain with the F2 Router, F3 profile Consumer, and F5 event implementation.
 
+#### F2 Router and Native Provider
+
+`@deepseek-ai/dsh-agent-runtime-router` is the sole `AgentFactory`. It captures one exact Provider registration generation for each create or resume transaction and owns the unpublished `RoutedAgent`, its `publishing | open | closed` admission state, Agent scope, Session and Agent registry publication, rollback, caller ownership, and final teardown. Removing a Provider generation aborts persistence loading, preparation, setup, and live Agents from that generation; a same-id replacement serves only later transactions. Publication opens waking admission only after both synchronous creation notifications and `agent/session-start` return. Rollback and normal disposal close admission before awaiting Provider quiescence and remove the Agent and Session even when cleanup reports `DISPOSE_FAILED`.
+
+`@deepseek-ai/dsh-agent-loop` is the `native` Provider. Its prepared handle fixes the Native capability set and owns a `ReactLoopDriver`; the Router-owned Agent delegates the existing inbox, cancellation, maintenance, and waking operations to that driver. Provider unload drains all prepared handles before removing its registration. Existing Native Session events and Host-facing methods remain unchanged in F2, including the synchronous `ctx.agentLoop.create()` compatibility entry used by declarative startup.
+
+F2 intentionally does not implement the F3 profile Consumer or the F5 submission receipts and canonical runtime-event sink. Until F3, the Router builds a Native-only compatibility snapshot from existing Agent options. Until F5, external assistant and activity reports fail at the sink, while the Native driver remains the producer of existing turn, step, request, inbox, and assistant events. This transition keeps Native behavior stable without claiming that external Providers can yet complete a product-facing run.
+
 Web RPC schemas move in lockstep during this pre-release. ACP wire behavior remains protocol version 1; the ACP Host translates receipt settlement to the existing ACP response and flushes its own ordered output queue. JSON-RPC `serverInfo.version` becomes `0.0.2`; `session/prompt` returns both message and submission ids, and submission start and settlement notifications replace inbox-splice inference. Old SDK clients fail version/schema validation instead of receiving compatibility emulation. Headless awaits the receipt settlement and then flushes only its correlated Session interval.
 
 #### Secure launch

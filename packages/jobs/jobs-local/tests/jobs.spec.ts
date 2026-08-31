@@ -33,6 +33,7 @@ function stubAgent(ctx: Context, rawId: string, presetScope?: ScopeKey): Agent {
   const agent = {
     id,
     options: {},
+    capabilities: [],
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle' as const,

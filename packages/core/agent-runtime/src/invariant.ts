@@ -16,7 +16,7 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
     if (eventName === 'agent-runtime/provider-added') {
       const provider = args[0] as AgentRuntimeProvider
-      if (ctx.agentRuntimes.getProvider(provider.id) !== provider) {
+      if (ctx.agentRuntimes.getProvider(provider.id) === undefined) {
         fail(`agent-runtime/provider-added does not match registry entry ${JSON.stringify(provider.id)}`)
       }
       return

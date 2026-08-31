@@ -6,6 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { AgentRuntimeCapabilities } from '@deepseek-ai/dsh-agent-runtime'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type { LlmCallConfig, LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { AgentCancelCause, Session, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
@@ -60,12 +61,60 @@ export type RequestErrorAction = { kind: 'retry' } | undefined
 /** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
 export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
 
+/**
+ * Runtime-owned implementation of the currently Native-only Agent operations.
+ * The Router owns the public Agent identity and delegates these operations only
+ * after a Provider returns a prepared runtime.
+ */
+export interface AgentDriver {
+  /** Provider-owned pending-message projection. */
+  readonly inbox: Inbox
+  /** Current provider scheduling state. */
+  readonly status: AgentStatus
+  /**
+   * Cancel current provider work.
+   * @param cause - stable cancellation intent.
+   * @param options - Native pending-input retention policy.
+   */
+  cancel(cause: AgentCancelCause, options?: CancelOptions): void
+  /**
+   * Wait for provider work to reach quiescence.
+   * @returns fulfillment when no provider work remains.
+   */
+  whenIdle(): Promise<void>
+  /**
+   * Run Native maintenance while no turn is active.
+   * @param task - abort-aware maintenance operation.
+   * @returns the task result.
+   */
+  runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>
+  /**
+   * Route one identified message through the Native inbox.
+   * @param message - identified input.
+   * @param target - target pending list.
+   * @param wakeup - whether to start or wake work.
+   */
+  send(message: UserMessage, target: InboxTarget, wakeup: boolean): void
+}
+
+declare module '@deepseek-ai/dsh-agent-runtime' {
+  interface PreparedAgentRuntime {
+    /**
+     * Native compatibility driver used while callers migrate to the
+     * provider-neutral submission API. External Providers omit this field.
+     */
+    readonly agentDriver?: AgentDriver
+  }
+}
+
 /** Public live-agent handle. */
 export interface Agent {
   /** The single identity shared with {@link session}. */
   readonly id: SessionId
   /** The provider route and model this agent's requests use. */
   readonly options: AgentOptions
+  /** Immutable optional runtime capabilities fixed before publication. */
+  readonly capabilities: AgentRuntimeCapabilities
   /** The live session this agent drives; its log is the durable source of truth. */
   readonly session: Session
   /** The agent-owned projection of durable pending work. */

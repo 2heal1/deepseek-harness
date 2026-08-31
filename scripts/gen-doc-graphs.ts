@@ -337,7 +337,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'agent',
     title: 'Agent service',
     mode: 'core',
-    consumers: ['agent-loop', 'acp', 'subagent-inprocess'],
+    consumers: ['agent-runtime-router', 'acp', 'subagent-inprocess'],
     note: 'Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation.',
   },
   {
@@ -345,7 +345,17 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'agent-runtime',
     title: 'Configurable Agent runtime registry',
     mode: 'seam',
-    note: 'Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary; Router and concrete Provider packages are separate roles.',
+    implementations: ['agent-loop'],
+    consumers: ['agent-runtime-router'],
+    note: 'Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary.',
+  },
+  {
+    key: 'agentRuntimeRouter',
+    pkg: 'agent-runtime-router',
+    title: 'Agent runtime Router',
+    mode: 'core',
+    consumers: ['agent-spine-demo'],
+    note: 'Installs the sole AgentFactory and owns common Provider selection, publication, rollback, and teardown.',
   },
   {
     key: 'agentDefaultModel',
@@ -358,10 +368,10 @@ const SERVICE_ROLES: ServiceRole[] = [
   {
     key: 'agentLoop',
     pkg: 'agent-loop',
-    title: 'Concrete loop driver',
+    title: 'Native Agent runtime Provider',
     mode: 'bundle',
     consumers: ['agent-spine-demo'],
-    note: 'The one concrete loop plugin; extension packages depend on dsh-agent events and services, not on this package.',
+    note: 'Prepares the Native loop driver behind the Router; extension packages depend on dsh-agent events and services.',
   },
   {
     key: 'goals',

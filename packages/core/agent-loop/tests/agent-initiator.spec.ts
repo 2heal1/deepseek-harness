@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, { createUserMessage, CallId, LlmAdapter  } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -24,6 +26,8 @@ async function harness(adapter: LlmAdapter): Promise<Harness> {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   const agentsFiber = await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   const loopFiber = await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return { ctx, agentsFiber, loopFiber }
@@ -124,6 +128,8 @@ describe('AgentLoop initiator scope', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     ctx.llm.registerAdapter(['mock'], adapter)
 
@@ -383,6 +389,8 @@ describe('AgentLoop initiator scope', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     ctx.llm.registerAdapter(['mock'], adapter)
     const service = ctx.agents

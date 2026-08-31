@@ -36,6 +36,12 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../core/agent-runtime"
+    },
+    {
+      "path": "../../core/agent-runtime-router"
+    },
+    {
       "path": "../../core/scope"
     },
     {

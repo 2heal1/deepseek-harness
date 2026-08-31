@@ -14,6 +14,8 @@ import AgentRegistry, {
   type PreStepDecision,
   type SessionStartSource,
 } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
@@ -34,6 +36,8 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx

@@ -6,6 +6,8 @@ import SessionStore, { SessionId, type SessionEvent } from '@deepseek-ai/dsh-ses
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { agentEvents, assembleContextFor } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
@@ -20,6 +22,8 @@ async function harnessWithLoop(adapter: MockAdapter = new MockAdapter([textRespo
   await ctx.plugin(SystemPrompt, { persona: 'You are the deployment.' })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   const loopFiber = await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return { ctx, loopFiber }
@@ -52,7 +56,7 @@ function disposeCurrentLifecycle(ownerCtx: Context): void {
   const lifecycle = [...ownerCtx.fiber._disposables]
     .find((dispose) => {
       const effect = (dispose as typeof dispose & { [symbols.effect]?: EffectMeta })[symbols.effect]
-      return effect?.label.startsWith('agentLoop.lifecycle(') === true
+      return effect?.label.startsWith('agentRuntimeRouter.lifecycle(') === true
     })
   if (lifecycle === undefined) throw new Error('agent lifecycle effect not found')
   void lifecycle()
@@ -439,7 +443,7 @@ describe('agent scope lifecycle', () => {
     await setupStarted.promise
 
     await loopFiber.dispose()
-    await expect(creating).rejects.toThrow(/agent loop is not active/)
+    await expect(creating).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' })
     expect(published).toEqual([])
     expect(ctx.agents.get(SessionId('factory-setup-race-s'))).toBeUndefined()
     expect(ctx.sessions.get(SessionId('factory-setup-race-s'))).toBeUndefined()
@@ -463,9 +467,9 @@ describe('agent scope lifecycle', () => {
       agentOptions: { provider: 'mock', model: 'mock' },
       setup: () => { setupCalls += 1 },
     })
-    await expect(creating).rejects.toThrow(/agent loop is not active/)
+    await expect(creating).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' })
     await loopFiber.dispose()
-    expect(setupCalls).toBe(1)
+    expect(setupCalls).toBe(0)
     expect(ctx.agents.get(SessionId('factory-scope-race-s'))).toBeUndefined()
     expect(ctx.sessions.get(SessionId('factory-scope-race-s'))).toBeUndefined()
 
@@ -525,7 +529,9 @@ describe('agent scope lifecycle', () => {
       unloading = loopFiber.dispose()
     })
 
-    ctx.agentLoop.create(SessionId('config-scope-race'), { provider: 'mock', model: 'mock' })
+    expect(() => {
+      ctx.agentLoop.create(SessionId('config-scope-race'), { provider: 'mock', model: 'mock' })
+    }).toThrow(expect.objectContaining({ code: 'RUNTIME_UNAVAILABLE' }))
     await unloading
     expect(ctx.agents.get(SessionId('config-scope-race')) === undefined).toBe(true)
     expect(ctx.sessions.list().length).toBe(sessionsBefore)
@@ -578,13 +584,13 @@ describe('agent scope lifecycle', () => {
     expect(handle.agent.status).toBe('idle')
     expect(ctx.agents.get(sessionId)).toBeUndefined()
     expect(ctx.sessions.get(sessionId)).toBeUndefined()
-    expect(ctx.fiber.getEffects().filter(effect => effect.label === `agentLoop.lifecycle(${sessionId})`)).toEqual([])
+    expect(ctx.fiber.getEffects().filter(effect => effect.label === `agentRuntimeRouter.lifecycle(${sessionId})`)).toEqual([])
     // The consumer handle shares the provider's completed quiescence boundary.
     await handle.dispose()
 
     await expect(loop.createAgent(ctx, {
       sessionId: SessionId('factory-inactive-s'),
-    })).rejects.toThrow(/agent loop is not active|inactive context/)
+    })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' })
     await ctx.fiber.dispose()
   })
 
@@ -983,9 +989,9 @@ describe('agent scope lifecycle', () => {
       agentOptions: { provider: 'mock', model: 'mock' },
     })
 
-    expect(ctx.fiber.getEffects().map(effect => effect.label)).toContain(`agentLoop.lifecycle(${sessionId})`)
+    expect(ctx.fiber.getEffects().map(effect => effect.label)).toContain(`agentRuntimeRouter.lifecycle(${sessionId})`)
     await handle.dispose()
-    expect(ctx.fiber.getEffects().filter(effect => effect.label === `agentLoop.lifecycle(${sessionId})`)).toEqual([])
+    expect(ctx.fiber.getEffects().filter(effect => effect.label === `agentRuntimeRouter.lifecycle(${sessionId})`)).toEqual([])
     await ctx.fiber.dispose()
   })
 

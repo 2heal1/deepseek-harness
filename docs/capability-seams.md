@@ -104,14 +104,16 @@ flowchart LR
   pkg_skill_badge["skill-badge"]
   pkg_skill_filesystem["skill-filesystem"]
   svc_agents["ctx.agents<br/>Agent service"]
+  pkg_agent_runtime_router["agent-runtime-router"]
   pkg_acp["acp"]
   pkg_agent_runtime["agent-runtime"]
   svc_agentRuntimes["ctx.agentRuntimes<br/>Configurable Agent runtime registry"]
+  svc_agentRuntimeRouter["ctx.agentRuntimeRouter<br/>Agent runtime Router"]
+  pkg_agent_spine_demo["agent-spine-demo"]
   pkg_agent_default_model["agent-default-model"]
   svc_agentDefaultModel["ctx.agentDefaultModel<br/>Default Agent model selection"]
   pkg_headless["headless"]
-  svc_agentLoop["ctx.agentLoop<br/>Concrete loop driver"]
-  pkg_agent_spine_demo["agent-spine-demo"]
+  svc_agentLoop["ctx.agentLoop<br/>Native Agent runtime Provider"]
   pkg_goal["goal"]
   svc_goals["ctx.goals<br/>Same-session goal domain"]
   pkg_e2b["e2b"]
@@ -205,8 +207,10 @@ flowchart LR
   pkg_agent --> svc_agents
   pkg_agent_default_model --> svc_agentDefaultModel
   pkg_agent_loop --> svc_agentLoop
+  pkg_agent_loop --> svc_agentRuntimes
   pkg_agent_presets --> svc_agentPresets
   pkg_agent_runtime --> svc_agentRuntimes
+  pkg_agent_runtime_router --> svc_agentRuntimeRouter
   pkg_agent_team --> svc_agentTeams
   pkg_api_gateway --> svc_typertGateway
   pkg_apiproxy --> svc_apiProxy
@@ -309,9 +313,11 @@ flowchart LR
   svc_agentDefaultModel --> pkg_headless
   svc_agentDefaultModel --> pkg_host_apiproxy
   svc_agentLoop --> pkg_agent_spine_demo
+  svc_agentRuntimeRouter --> pkg_agent_spine_demo
+  svc_agentRuntimes --> pkg_agent_runtime_router
   svc_agentTeams --> pkg_tool_agent_team
   svc_agents --> pkg_acp
-  svc_agents --> pkg_agent_loop
+  svc_agents --> pkg_agent_runtime_router
   svc_agents --> pkg_subagent_inprocess
   svc_apiProxy --> pkg_connection
   svc_approval --> pkg_tool_bash
@@ -453,10 +459,11 @@ flowchart LR
 | `ctx.sessionProjections` | `core` | [`session-projection`](../packages/session/session-projection) | - | [`tool-todo`](../packages/todo/tool-todo), [`session-title`](../packages/session/session-title), [`host-apiproxy`](../packages/host/apiproxy) | - | Domains register state-driven fold units; the eager drive keeps per-session watermark states and api-proxy serves baselines and pushes changed values. |
 | `ctx.sessionProjectionCache` | `core` | [`session-projection-cache`](../packages/session/session-projection-cache) | - | [`host-apiproxy`](../packages/host/apiproxy) | - | Durably checkpoints projection unit states per session (throttled + turn/end/detach mandatory points) and serves the cold-read ladder: cache row + persistence tail replay, so listings never load full logs. |
 | `ctx.skills` | `seam` | [`skill`](../packages/skill/skill) | [`skill-badge`](../packages/skill/skill-badge), [`skill-filesystem`](../packages/skill/skill-filesystem) | [`tool-skill`](../packages/skill/tool-skill) | - | Merges provider skill catalogs; tool-skill renders the session-prefix catalog and loads complete skill bodies. |
-| `ctx.agents` | `core` | [`agent`](../packages/core/agent) | - | [`agent-loop`](../packages/core/agent-loop), [`acp`](../packages/acp/acp), `subagent-inprocess` | - | Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation. |
-| `ctx.agentRuntimes` | `seam` | [`agent-runtime`](../packages/core/agent-runtime) | - | - | - | Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary; Router and concrete Provider packages are separate roles. |
+| `ctx.agents` | `core` | [`agent`](../packages/core/agent) | - | [`agent-runtime-router`](../packages/core/agent-runtime-router), [`acp`](../packages/acp/acp), `subagent-inprocess` | - | Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation. |
+| `ctx.agentRuntimes` | `seam` | [`agent-runtime`](../packages/core/agent-runtime) | [`agent-loop`](../packages/core/agent-loop) | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary. |
+| `ctx.agentRuntimeRouter` | `core` | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | Installs the sole AgentFactory and owns common Provider selection, publication, rollback, and teardown. |
 | `ctx.agentDefaultModel` | `core` | [`agent-default-model`](../packages/core/agent-default-model) | - | [`headless`](../packages/bundle/headless), [`host-apiproxy`](../packages/host/apiproxy) | - | Layers the default ModelSelection through settings so direct and Host-backed Agent entry points share one state owner. |
-| `ctx.agentLoop` | `bundle` | [`agent-loop`](../packages/core/agent-loop) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | The one concrete loop plugin; extension packages depend on dsh-agent events and services, not on this package. |
+| `ctx.agentLoop` | `bundle` | [`agent-loop`](../packages/core/agent-loop) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | Prepares the Native loop driver behind the Router; extension packages depend on dsh-agent events and services. |
 | `ctx.goals` | `core` | [`goal`](../packages/goal/goal) | - | - | - | Folds revisioned objective state from the session log and keeps live continuation activation process-local. |
 | `ctx.e2b` | `core` | [`e2b`](../packages/e2b/e2b) | - | [`fs-e2b`](../packages/e2b/fs-e2b), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | - | Owns one shared E2B SDK handle, remote working directory, and final sandbox disposition so both fundamental E2B providers inhabit the same Linux runtime. |
 | `ctx.subprocess` | `seam` | [`subprocess`](../packages/subprocess/subprocess) | [`subprocess-local`](../packages/subprocess/subprocess-local), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`terminal-bash`](../packages/terminal/terminal-bash), [`lsp-stdio`](../packages/lsp/lsp-stdio), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code) | - | The bash executors, the PTY shell backend, the LSP host, and the out-of-process ACP, Codex, and Claude Code subagent backends spawn through ctx.subprocess; the service owns process coordinates, tree/session lifetime, stdio dispositions, terminal mechanics, and kill escalation. |

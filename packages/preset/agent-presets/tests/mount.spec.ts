@@ -5,12 +5,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import LlmRuntime from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime from '@deepseek-ai/dsh-tools'
-import AgentRegistry, { assembleContextFor, type Agent } from '@deepseek-ai/dsh-agent'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import { assembleContextFor, type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AgentPresets, {
   COMPOSITION_FILE, leakedServices, livePresetMounts, mountPreset, PresetMountError, serviceForAgent,
@@ -43,11 +41,7 @@ async function harness(roster: Config = { default: 'standard', roots: ROOTS, inc
   ctx.baseUrl = pathToFileURL(FIXTURES).href + '/'
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
-  await ctx.plugin(LlmRuntime)
-  await ctx.plugin(SessionStore)
-  await ctx.plugin(SystemPrompt, { persona: '' })
-  await ctx.plugin(ToolRuntime)
-  await ctx.plugin(AgentRegistry)
+  await mountAgentLoopTestDependencies(ctx, { systemPrompt: { persona: '' } })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(AgentPresets, roster)
   return ctx
@@ -412,11 +406,7 @@ describe('the preset file is an input, never a persistence target', () => {
     scoped.baseUrl = pathToFileURL(FIXTURES).href + '/'
     await scoped.plugin(Loader)
     scoped.loader.builtins.include = Include
-    await scoped.plugin(LlmRuntime)
-    await scoped.plugin(SessionStore)
-    await scoped.plugin(SystemPrompt, { persona: '' })
-    await scoped.plugin(ToolRuntime)
-    await scoped.plugin(AgentRegistry)
+    await mountAgentLoopTestDependencies(scoped, { systemPrompt: { persona: '' } })
     await scoped.plugin(AgentLoop, { agents: [] })
     await scoped.plugin(AgentPresets, { default: 'self-disposing', roots: [{ path: root, trust: 'user' as const }], includeUserRoot: false })
 
@@ -577,11 +567,7 @@ describe('replacing a composition', () => {
     scoped.baseUrl = pathToFileURL(FIXTURES).href + '/'
     await scoped.plugin(Loader)
     scoped.loader.builtins.include = Include
-    await scoped.plugin(LlmRuntime)
-    await scoped.plugin(SessionStore)
-    await scoped.plugin(SystemPrompt, { persona: '' })
-    await scoped.plugin(ToolRuntime)
-    await scoped.plugin(AgentRegistry)
+    await mountAgentLoopTestDependencies(scoped, { systemPrompt: { persona: '' } })
     await scoped.plugin(AgentLoop, { agents: [] })
     await scoped.plugin(AgentPresets, { default: 'first', roots: [{ path: root, trust: 'user' as const }], includeUserRoot: false })
     const handle = await scoped.agents.create({

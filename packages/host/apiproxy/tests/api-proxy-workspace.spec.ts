@@ -43,6 +43,7 @@ function stubAgent(session: Session): Agent {
   return {
     id: session.id,
     options: {},
+    capabilities: [],
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',

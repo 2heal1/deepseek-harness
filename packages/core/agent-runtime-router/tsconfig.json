@@ -1,0 +1,42 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/agent-runtime"
+    },
+    {
+      "path": "../../core/scope"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../core/system-prompt"
+    },
+    {
+      "path": "../../core/tools"
+    },
+    {
+      "path": "../../session/session-persistence"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
+    }
+  ]
+}

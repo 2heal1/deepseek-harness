@@ -95,6 +95,14 @@ F1 增加运行时 Service Definition、identifier、receipt、capability、快�
 
 本包不安装 `AgentFactory`，不发布 Session 或 Agent，不解析 Runtime Profile，也不追加持久事件。这些职责仍分别属于 F2 Router、F3 profile Consumer 和 F5 事件实现。
 
+#### F2 Router 与 Native Provider
+
+`@deepseek-ai/dsh-agent-runtime-router` 是唯一 `AgentFactory`。它为每个 create 或 resume 事务捕获一个确切的 Provider 注册 generation，并拥有未发布的 `RoutedAgent`、其 `publishing | open | closed` admission 状态、Agent scope、Session 与 Agent 注册表发布、回滚、调用方所有权和最终 teardown。移除 Provider generation 会中止该 generation 的持久化加载、preparation、setup 与实时 Agent；使用同一 id 的替代项只服务后续事务。只有两项同步创建通知与 `agent/session-start` 都返回后，发布才会打开 waking admission。回滚和正常 disposal 都会在等待 Provider 完全停稳前关闭 admission，并且即使清理报告 `DISPOSE_FAILED`，也会移除 Agent 与 Session。
+
+`@deepseek-ai/dsh-agent-loop` 是 `native` Provider。它的 prepared handle 固定 Native capability 集合并拥有一个 `ReactLoopDriver`；Router-owned Agent 把既有 inbox、取消、maintenance 与 waking 操作委托给该 driver。Provider 卸载会在移除注册前排空所有 prepared handle。F2 保持既有 Native Session 事件与面向 Host 的方法不变，其中包括声明式启动使用的同步 `ctx.agentLoop.create()` 兼容入口。
+
+F2 有意不实现 F3 profile Consumer，也不实现 F5 submission receipt 与规范运行时 event sink。在 F3 之前，Router 根据既有 Agent option 构造仅适用于 Native 的兼容 snapshot。在 F5 之前，外部 assistant 与 activity 报告会在 sink 处失败，而 Native driver 仍是既有 turn、step、request、inbox 与 assistant 事件的生产者。该过渡在不声称外部 Provider 已能完成面向产品运行的前提下保持 Native 行为稳定。
+
 Web RPC schema 在本预发布阶段同步更新。ACP 协议行为保持版本 1；ACP Host 把 receipt settlement 转换为现有 ACP 响应，并自行 flush 有序输出队列。JSON-RPC `serverInfo.version` 更新为 `0.0.2`；`session/prompt` 同时返回 message id 与 submission id，submission start 和 settlement 通知取代 inbox-splice 推断。旧 SDK Client 会因 version／schema 校验失败，而不会获得兼容模拟。Headless 等待 receipt settlement，随后只 flush 与其关联的会话区间。
 
 #### 安全启动

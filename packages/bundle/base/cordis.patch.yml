@@ -58,6 +58,14 @@
     - id: agent
       name: '@deepseek-ai/dsh-agent'
 
+    - id: agent-runtime
+      name: '@deepseek-ai/dsh-agent-runtime'
+
+    - id: agent-runtime-router
+      name: '@deepseek-ai/dsh-agent-runtime-router'
+      config:
+        provider: native
+
     # The transport-independent default for Agents created by entry points.
     # Settings may supply a saved selection; consumers read it at creation time.
     - id: agent-default-model

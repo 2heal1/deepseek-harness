@@ -5,10 +5,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import * as workspaceContext from '@deepseek-ai/dsh-agent-instructions'
-import LlmRuntime, { createUserMessage, CallId, type Message, type StreamChunk } from '@deepseek-ai/dsh-llm'
-import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION, type SessionEvent, type UserMessage } from '@deepseek-ai/dsh-session'
-import AgentRegistry, { agentEvents, Inbox, type Agent } from '@deepseek-ai/dsh-agent'
+import { createUserMessage, CallId, type Message, type StreamChunk } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId, SESSION_FORMAT_VERSION, type SessionEvent, type UserMessage } from '@deepseek-ai/dsh-session'
+import { agentEvents, Inbox, type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { FileSystem, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
 import type {
   FsDirEntry,
@@ -187,6 +188,7 @@ function stubAgent(cwd?: string, seed: SessionEvent[] = []): Agent {
     ctx: new Context(),
     id: SessionId('a1'),
     options: {},
+    capabilities: [],
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',
@@ -2507,11 +2509,7 @@ describe('dynamic nested workspace context injection', () => {
         toolCallResponse('read-after-abort', 'read', { file_path: join('pkg', 'deep', 'file.txt') }),
         textResponse('done'),
       ])
-      await ctx.plugin(LlmRuntime)
-      await ctx.plugin(SessionStore)
-      await ctx.plugin(SystemPrompt)
-      await ctx.plugin(ToolRuntime)
-      await ctx.plugin(AgentRegistry)
+      await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(LocalFileSystem, { cwd: '/' })
       await ctx.plugin(ToolFs)
       await ctx.plugin(workspaceContext, { dshHome: home, maxBytes: 65536 })

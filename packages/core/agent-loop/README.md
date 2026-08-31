@@ -2,32 +2,32 @@
 
 English | [中文](README.zh.md)
 
-THE concrete agent plugin and loop driver. Its package-internal implementation satisfies the `Agent` interface and drives the session/turn/step lifecycle.
+The Native Agent runtime Provider and React loop driver. `dsh-agent-runtime-router` owns the public `Agent` and Session lifecycle; this package prepares the Native driver that runs the turn and step protocol.
 
-This is the only package in the harness that contains concrete loop logic. Everything else is an abstract service or a plugin against extension points — new behavior goes into plugins, not here.
+This is the only package in the harness that contains the concrete Native loop. Runtime-neutral lifecycle behavior belongs to the Router, while additional turn behavior remains a plugin against the Native extension points.
 
 ## Service: `AgentLoop` (ctx key: `agentLoop`)
 
 ### Public API
 
-Creation and resume are one rollback-covered transaction: construct a private session, concrete agent, and scoped context; await optional setup; enter both registries; announce `session/created` then `agent/created`; emit `agent/session-start`; and only then start the driver. Setup receives the full scoped `Context` as trusted same-process composition code and must not drive the unpublished agent. Ordinary typed identity and option inputs are borrowed under their readonly contract, while seed events and session metadata are validated and snapshotted because they cross the durable session boundary. An optional `AbortSignal` cancels only load/setup/publication and is detached before the returned handle becomes visible.
+`AgentLoop` registers Provider id `native` with `ctx.agentRuntimes`. Its prepared handle exposes immutable Native capabilities and facts plus a package-internal `ReactLoopDriver`. The Router supplies the unpublished Agent context, owns setup and publication, and opens waking input only after synchronous lifecycle notifications complete.
 
-The caller fiber and the AgentLoop provider are co-owners. `AgentFactory.createAgent(ownerCtx, options)` and `resume(ownerCtx, options)` receive caller ownership explicitly, while the factory keeps its own dependency context for `sessions`/`llm`/`tools`/`systemPrompt`; this lets a caller inject only `agents` without shrinking the new agent's service set. Caller unload, handle disposal, or provider unload converge on one memoized quiescence boundary. Provider shutdown waits both resource teardown and the public create/resume wrapper that observed deactivation, so no continuation can publish after dependencies disappear.
+The caller fiber, Router, and exact Native Provider registration generation are co-owners. Provider unload first cancels and drains every prepared Native handle, then removes the registration; a replacement registration with the same id serves only later transactions. The Router independently owns scope, registry publication, rollback, and final Session removal.
 
 Each agent and its session share one caller-chosen `SessionId`, assumed globally unique; accidental UUID collisions are outside the supported model. Two concurrent operations with the same id may both prepare, but the final `enter()` calls arbitrate publication and every loser rolls its private resources back. Each detach is bound to the exact entered object, so a stale disposer cannot remove a later same-id replacement. A detach requested during a synchronous creation notification waits for that dispatch to unwind, preserving created/disposed pairing. Teardown runs stop and drain → unwind scope → detach agent → detach session; the id becomes reusable after private scope cleanup. Ordinary non-vetoing `agent/*` notifications go through `agentEvents(ctx, agent)`, and per-step assembly goes through `assembleContextFor(agent)`.
 
 - `ctx.agentLoop.create(id: SessionId, options?: AgentOptions, meta?: { cwd?: string }): Agent` — synchronous no-setup create under the exact shared agent/session id, disposed with the calling fiber. Declarative config treats `agents[].id` as a stable label and normally mints `${label}-session-<uuid>` before calling this boundary. An app may instead supply a stable exact `sessionId`: first use creates it, while a remount with persistence already present resumes its materialized history. `resumeSessionId` requires and loads an existing persisted id and is mutually exclusive with `sessionId`. This keeps default fresh restarts collision-free without retaining a second live routing identity.
 
-`AgentLoop` also implements the `AgentFactory` contract and registers itself via `ctx.agents.setFactory(this)`, so plugins create/resume agents through `ctx.agents`:
+Plugins create and resume Agents through the Router-backed `ctx.agents` factory:
 
 - `ctx.agents.create({ sessionId, meta?, seed?, agentOptions?, setup?, signal? }): Promise<AgentHandle>` — programmatic create under the caller-supplied shared id. It awaits the unpublished setup transaction before returning; `meta` carries cwd/lineage/seed-boundary metadata and `seed` reconstructs a forked child prefix after the session boundary validates and snapshots the durable values. `signal` applies only until this promise settles. The resolved [`AgentHandle`](../agent/README.md) owns exact teardown.
 - `ctx.agents.resume({ resumeSessionId, agentOptions?, setup?, signal? }): Promise<AgentHandle>` — load a persisted session via `ctx.sessionPersistence` ([session persistence](../../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md)), register the agent under that same id, reconstruct its history, then await setup against a fresh unpublished agent scope before rollback-covered publication. Turn numbering and derived history continue from the loaded log. Requires a session-persistence backend (NOT hard-injected — non-persistent demos still work; `resume` rejects with a clear error when persistence is absent). `signal` is creation-only. Returns an `AgentHandle`.
 
-The config-driven `ctx.agentLoop.create()` path keeps its agent owned by the loop fiber (it discards the handle). For a programmatic agent, the handle holder is the only consumer-facing teardown capability; AgentLoop provider unload is the independent structural teardown edge, not another handle exposed to application code.
+The config-driven `ctx.agentLoop.create()` compatibility path enters the same Router transaction and keeps its Agent owned by the loop fiber. Programmatic callers retain the Router-owned `AgentHandle`.
 
 ### Injected services
 
-`agents`, `sessions`, `llm`, `tools`, `systemPrompt` — all five interface services.
+`agents`, `sessions`, `agentRuntimeRouter`, `agentRuntimes`, `llm`, `tools`, `systemPrompt`.
 
 ### Invariant companion
 
@@ -53,7 +53,7 @@ Configured agents start automatically. A model call requires both `provider` and
 
 ### Internal concrete driver
 
-The concrete `ReactLoopAgent`, its inbox, and run controls are package-internal. The package root exports only the plugin/service/config contract, and the package exports map exposes no `./src/*` escape hatch; lifecycle owners create agents through `ctx.agents` rather than naming, constructing, or starting driver internals. One prepared session can be claimed by only one concrete driver, and everything observable happens through session events and the `agent/*` event taxonomy.
+The concrete `ReactLoopDriver`, its inbox, and run controls are package-internal. The Router-owned `RoutedAgent` is the public identity and delegates Native operations to that driver. The package root exports only the Provider/service/config contract, and the package exports map exposes no `./src/*` escape hatch.
 
 The unified `send()` primitive routes content and source by (`target` × `wakeup`); `followup`/`steer`/`inject` are its fixed-preset aliases. `followup()` appends to the `next-turn` FIFO and wakes the driver, `steer()` appends to the `next-step` inbox and wakes it, and `inject()` appends to that same `next-step` inbox without waking it. At a turn boundary the driver opens the durable turn, then atomically claims pending next-step input plus one queued prompt; between steps it claims only next-step input. Claiming removes the batch through pure deletion splices and emits `agent/inbox/claimed { message, turn }` once per message. `agent/pre-step` then returns either rejection or the complete messages entering the proposed step. Rejection leaves the claimed batch removed and closes the turn without a step; input inserted after the claim remains pending, and idle injection waits until follow-up or steering wakes the driver.
 
