@@ -408,7 +408,7 @@ resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:315`](../../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:317`](../../packages/core/agent-loop/src/index.ts)
 
 <a id="ctxagentpresets--agentpresets"></a>
 
