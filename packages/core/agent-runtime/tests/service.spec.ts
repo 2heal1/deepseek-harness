@@ -249,6 +249,28 @@ describe('runtime snapshots and failures', () => {
     expect(Object.isFrozen(error.details)).toBe(true)
   })
 
+  it('enforces the serialized UTF-8 byte boundary for failure details', () => {
+    const base: Omit<AgentRuntimeFailure, 'details'> = {
+      code: 'RUNTIME_FAILED',
+      phase: 'turn',
+      message: 'runtime failed',
+    }
+    const exactAscii = 'x'.repeat(MAX_AGENT_RUNTIME_ERROR_DETAILS_BYTES - 2)
+    const exactMultibyte = `xx${'\u754c'.repeat(
+      (MAX_AGENT_RUNTIME_ERROR_DETAILS_BYTES - 4) / 3,
+    )}`
+    const oversizedMultibyte = `${exactMultibyte}\u754c`
+
+    expect(new TextEncoder().encode(JSON.stringify(exactAscii)))
+      .toHaveLength(MAX_AGENT_RUNTIME_ERROR_DETAILS_BYTES)
+    expect(new TextEncoder().encode(JSON.stringify(exactMultibyte)))
+      .toHaveLength(MAX_AGENT_RUNTIME_ERROR_DETAILS_BYTES)
+    expect(new AgentRuntimeError({ ...base, details: exactAscii }).details).toBe(exactAscii)
+    expect(new AgentRuntimeError({ ...base, details: exactMultibyte }).details).toBe(exactMultibyte)
+    expect(() => new AgentRuntimeError({ ...base, details: oversizedMultibyte }))
+      .toThrow(/exceed/)
+  })
+
   it('rejects non-JSON and oversized failure details', () => {
     const base: Omit<AgentRuntimeFailure, 'details'> = {
       code: 'RUNTIME_FAILED',
