@@ -180,12 +180,12 @@ describe('RuntimeTemporaryMaterialOwner', () => {
     }
   })
 
-  it.skipIf(process.platform === 'win32')('unlinks run-shaped symlinks without following them', async () => {
+  it('unlinks run-shaped symlinks without following them', async () => {
     const root = await temporaryRoot()
     const target = await temporaryRoot()
     await writeFile(join(target, 'keep'), 'present')
     const link = join(root, 'run-linked')
-    await symlink(target, link)
+    await symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir')
 
     const owner = new RuntimeTemporaryMaterialOwner(root)
     await owner.initialize()
@@ -194,7 +194,7 @@ describe('RuntimeTemporaryMaterialOwner', () => {
     await expect(readFile(join(target, 'keep'), 'utf8')).resolves.toBe('present')
   })
 
-  it.skipIf(process.platform === 'win32')('unlinks a launch directory replaced by a symlink during cleanup', async () => {
+  it('unlinks a launch directory replaced by a symlink during cleanup', async () => {
     const root = await temporaryRoot()
     const target = await temporaryRoot()
     await writeFile(join(target, 'keep'), 'present')
@@ -203,7 +203,7 @@ describe('RuntimeTemporaryMaterialOwner', () => {
     const material = await owner.create([{ name: 'auth', content: 'secret' }])
     const directory = dirname(material.paths.auth!)
     await rm(directory, { recursive: true })
-    await symlink(target, directory)
+    await symlink(target, directory, process.platform === 'win32' ? 'junction' : 'dir')
 
     await material.cleanup()
 
