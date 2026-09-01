@@ -42,6 +42,7 @@ function overlayModuleLayers(path: string, patches: readonly PatchOptions[]): Pr
     packages.set(name, dirname(require.resolve(`${name}/package.json`)))
   }
   return [...packages].map(([name, packageDir], index) => ({
+    type: 'package',
     packageName: `test-overlay:${index}:${name}`,
     packageDir,
     patchPath: path,

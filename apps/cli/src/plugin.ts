@@ -1,12 +1,8 @@
 /**
- * `dsh plugin --profile <name> <args...>` — profile plugin management as a
- * thin pnpm forwarder: initialize the profile on first use, run
- * `pnpm <args...>` in the profile directory, then reconcile the
- * `dsh.profile.bundles` layer list against the installed state (a dependency
- * resolving to a package that declares `dsh.bundle` joins the layer stack; a
- * removed or bundle-less dependency leaves it). Reconciling by installed
- * state, not by dependency diff, means `update` activates a package that
- * gained its `dsh.bundle` declaration in a newer version.
+ * `dsh plugin --profile <name> <args...>` — profile Bundle management. Package
+ * arguments pass through pnpm and reconcile against installed `dsh.bundle`
+ * declarations; `name@https://…` arguments add remote Bundle subscriptions to
+ * the same ordered profile layer list.
  * @module @deepseek-ai/dsh/plugin
  */
 
@@ -15,13 +11,17 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import {
   DEFAULT_PROFILE_BUNDLES,
+  fetchRemoteBundleManifest,
   initProfile,
   PROFILE_TEMPLATES,
   readProfileManifest,
   resolveBundleDir,
   resolveProfileDir,
   writeProfileManifest,
+  type ProfileBundleSource,
   type ProfileManifest,
+  type RemoteBundleFetch,
+  type RemoteProfileBundleSource,
 } from '@deepseek-ai/dsh-app-boot'
 import { INSTALL_ANCHOR } from './profile-boot.ts'
 
@@ -61,11 +61,13 @@ function reconcilePlugins(before: ProfileManifest, profileDir: string): void {
   const beforeDeps = new Set(Object.keys(before.dependencies ?? {}))
   const dependencies = Object.keys(after.dependencies ?? {})
   const plugins = after.dsh?.profile?.bundles ?? []
+  const packagePlugins = plugins.filter((source): source is string => typeof source === 'string')
   let changed = false
   for (const packageName of dependencies) {
     const isBundle = exportsPatch(packageName, profileDir)
-    if (isBundle && !plugins.includes(packageName)) {
+    if (isBundle && !packagePlugins.includes(packageName)) {
       plugins.push(packageName)
+      packagePlugins.push(packageName)
       changed = true
     } else if (!isBundle && !beforeDeps.has(packageName)) {
       process.stderr.write(
@@ -75,7 +77,7 @@ function reconcilePlugins(before: ProfileManifest, profileDir: string): void {
     }
   }
   const dependencySet = new Set(dependencies)
-  for (const packageName of [...plugins]) {
+  for (const packageName of [...packagePlugins]) {
     // Only dependency-managed entries are subject to removal; template
     // bundles (dsh-base and friends) are not dependencies.
     const wasDependency = beforeDeps.has(packageName) || dependencySet.has(packageName)
@@ -88,6 +90,86 @@ function reconcilePlugins(before: ProfileManifest, profileDir: string): void {
   if (!changed) return
   after.dsh = { ...after.dsh, profile: { ...after.dsh?.profile, bundles: plugins } }
   writeProfileManifest(profileDir, after)
+}
+
+/** Parsed `name@https://…` remote subscription argument. */
+export interface RemoteBundleArgument {
+  /** Bundle identifier. */
+  name: string
+  /** Subscription URL. */
+  url: string
+}
+
+/**
+ * Parse the explicit remote syntax without mistaking scoped npm names for it.
+ * @param argument - one `dsh plugin add` argument.
+ * @returns the remote name and URL, or undefined for an ordinary pnpm spec.
+ */
+export function parseRemoteBundleArgument(argument: string): RemoteBundleArgument | undefined {
+  const marker = Math.max(argument.lastIndexOf('@https://'), argument.lastIndexOf('@http://'))
+  if (marker <= 0) return undefined
+  const name = argument.slice(0, marker)
+  const url = argument.slice(marker + 1)
+  if (!/^(?:@[^/\s]+\/)?[^/@\s]+$/.test(name)) {
+    throw new Error(`${NAME}: invalid remote Bundle name ${JSON.stringify(name)}`)
+  }
+  return { name, url }
+}
+
+async function resolveRemoteAdds(
+  arguments_: readonly string[],
+  fetchImpl: RemoteBundleFetch,
+): Promise<{ remote: RemoteProfileBundleSource[]; rest: string[] }> {
+  const parsed = arguments_.map(argument => ({ argument, remote: parseRemoteBundleArgument(argument) }))
+  const resolved = await Promise.all(parsed.map(async ({ remote }) => {
+    if (remote === undefined) return undefined
+    const { manifest } = await fetchRemoteBundleManifest(remote.url, fetchImpl)
+    if (manifest.name !== remote.name) {
+      throw new Error(
+        `${NAME}: remote Bundle subscription ${remote.url} identifies ${JSON.stringify(manifest.name)}, `
+        + `expected ${JSON.stringify(remote.name)}`,
+      )
+    }
+    return { type: 'remote' as const, ...remote }
+  }))
+  return {
+    remote: resolved.filter((source): source is RemoteProfileBundleSource => source !== undefined),
+    rest: parsed.filter(item => item.remote === undefined).map(item => item.argument),
+  }
+}
+
+function mergeRemoteSources(
+  current: readonly ProfileBundleSource[],
+  additions: readonly RemoteProfileBundleSource[],
+): ProfileBundleSource[] {
+  const next = [...current]
+  for (const source of additions) {
+    const index = next.findIndex(existing => (
+      typeof existing === 'string' ? existing === source.name : existing.name === source.name
+    ))
+    if (index === -1) next.push(source)
+    else if (typeof next[index] === 'string') {
+      throw new Error(
+        `${NAME}: ${JSON.stringify(source.name)} is already an installed package Bundle; remove it before adding a remote subscription`,
+      )
+    } else {
+      next[index] = source
+    }
+  }
+  return next
+}
+
+function removeRemoteSources(
+  current: readonly ProfileBundleSource[],
+  names: ReadonlySet<string>,
+): { bundles: ProfileBundleSource[]; removed: Set<string> } {
+  const removed = new Set<string>()
+  const bundles = current.filter((source) => {
+    if (typeof source === 'string' || !names.has(source.name)) return true
+    removed.add(source.name)
+    return false
+  })
+  return { bundles, removed }
 }
 
 /**
@@ -117,7 +199,11 @@ function anchorPathSpec(argument: string, cwd: string): string {
  * @param args - pnpm arguments with relative path specs anchored to the invoking directory.
  * @returns the pnpm exit code.
  */
-export function runPlugin(profile: string, args: readonly string[]): number {
+export async function runPlugin(
+  profile: string,
+  args: readonly string[],
+  fetchImpl: RemoteBundleFetch = fetch,
+): Promise<number> {
   const dir = resolveProfileDir(profile)
   if (!existsSync(join(dir, 'package.json'))) {
     const template = PROFILE_TEMPLATES[profile]
@@ -129,9 +215,34 @@ export function runPlugin(profile: string, args: readonly string[]): number {
     process.stderr.write(`${NAME}: initialized profile ${profile} at ${dir}\n`)
   }
   const before = readProfileManifest(NAME, dir)
+  let pnpmArgs = [...args]
+  let remoteAdds: RemoteProfileBundleSource[] = []
+  let remoteRemovals = new Set<string>()
+  if (args[0] === 'add' && args.length > 1) {
+    const resolved = await resolveRemoteAdds(args.slice(1), fetchImpl)
+    remoteAdds = resolved.remote
+    pnpmArgs = resolved.rest.length === 0 ? [] : ['add', ...resolved.rest]
+  } else if (args[0] === 'remove' && args.length > 1) {
+    const sources = before.dsh?.profile?.bundles ?? []
+    const remoteNames = new Set(sources
+      .filter((source): source is RemoteProfileBundleSource => typeof source !== 'string')
+      .map(source => source.name))
+    remoteRemovals = new Set(args.slice(1).filter(name => remoteNames.has(name)))
+    const rest = args.slice(1).filter(name => !remoteRemovals.has(name))
+    pnpmArgs = rest.length === 0 ? [] : ['remove', ...rest]
+  }
+  if (pnpmArgs.length === 0) {
+    const latest = readProfileManifest(NAME, dir)
+    const current = latest.dsh?.profile?.bundles ?? []
+    const removed = removeRemoteSources(current, remoteRemovals)
+    const bundles = mergeRemoteSources(removed.bundles, remoteAdds)
+    latest.dsh = { ...latest.dsh, profile: { ...latest.dsh?.profile, bundles } }
+    writeProfileManifest(dir, latest)
+    return 0
+  }
   // Windows resolves pnpm through its .cmd shim, which spawn() refuses
   // without a shell since the CVE-2024-27980 hardening.
-  const result = spawnSync('pnpm', args.map(argument => anchorPathSpec(argument, process.cwd())), {
+  const result = spawnSync('pnpm', pnpmArgs.map(argument => anchorPathSpec(argument, process.cwd())), {
     cwd: dir,
     stdio: 'inherit',
     shell: process.platform === 'win32',
@@ -147,12 +258,20 @@ export function runPlugin(profile: string, args: readonly string[]): number {
   const exitCode = result.status ?? 1
   if (exitCode === 0) {
     reconcilePlugins(before, dir)
+    if (remoteAdds.length > 0 || remoteRemovals.size > 0) {
+      const latest = readProfileManifest(NAME, dir)
+      const current = latest.dsh?.profile?.bundles ?? []
+      const removed = removeRemoteSources(current, remoteRemovals)
+      const bundles = mergeRemoteSources(removed.bundles, remoteAdds)
+      latest.dsh = { ...latest.dsh, profile: { ...latest.dsh?.profile, bundles } }
+      writeProfileManifest(dir, latest)
+    }
   } else {
     // pnpm's own diagnostics name pnpm-workspace.yaml without saying WHICH
     // one; the profile owns it, and the commonest failure here is pnpm ≥10
     // blocking a git dependency's prepare (build) script until allowlisted.
     process.stderr.write(`${NAME}: pnpm failed in profile directory ${dir}\n`)
-    if (args.some(argument => /^git\+|^github:|\.git(?:#|$)/.test(argument))) {
+    if (pnpmArgs.some(argument => /^git\+|^github:|\.git(?:#|$)/.test(argument))) {
       process.stderr.write(
         `${NAME}: git-hosted plugins build on install via their prepare script, which pnpm blocks until allowed — `
         + `add the exact key pnpm printed above under allowBuilds in ${join(dir, 'pnpm-workspace.yaml')}, then re-run\n`,

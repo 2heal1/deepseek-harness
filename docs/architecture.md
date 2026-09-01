@@ -20,7 +20,7 @@ A **profile** is a named composition stored in the Harness home. It lists the bu
 
 A **bundle** is a distribution format for Cordis config rows and the code they mount, so whatever it inserts stays patchable by the layers above it.
 
-Each declares itself in its own `package.json` under a `dsh` field: `dsh.profile` lists a profile's bundles, and `dsh.bundle` points at a bundle's patch file.
+Package delivery declares itself in `package.json` under a `dsh` field: `dsh.profile` lists a Profile's ordered Bundle sources, and `dsh.bundle` points at a package Bundle's patch file. A source is either an installed package name or a remote `{ type: "remote", name, url }` subscription. Remote resolution fetches the stable manifest once at process start, loads its immutable Node build with Host-provided Cordis and peers, and gives the Web application an optional immutable browser entry to load directly from the publisher.
 
 [`dsh-base`](../packages/bundle/base/README.md) is the shared first layer of the `web`, `headless`, `sdk`, and `acp` profiles: model adapters, tools, persistence, sandbox and approval policy, settings, credentials, telemetry. [`dsh-web-app`](../packages/bundle/web-app/README.md) adds the browser application, [`dsh-headless`](../packages/bundle/headless/README.md) adds a one-shot runner with no server, [`dsh-sdk-app`](../packages/bundle/sdk-app/README.md) adds the SDK JSON-RPC server, and [`dsh-acp-app`](../packages/bundle/acp-app/README.md) adds the automation-only ACP server. [`dsh-sdk-minimal`](../packages/bundle/sdk-minimal/README.md) is the deliberate exception: one bundle owns its complete explicit SDK tree and does not apply `dsh-base`.
 

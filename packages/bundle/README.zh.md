@@ -29,7 +29,7 @@ kind: "package-group"
 | [`sdk-app`](sdk-app/README.zh.md) | 基于 base 的 SDK JSON-RPC stdio 应用 | 挂载 SDK server |
 | [`sdk-minimal`](sdk-minimal/README.zh.md) | 不使用 base 或 Web 的独立极简 SDK 应用 | —（完整 patch 树） |
 
-内置组合包从 dsh 安装目录解析；树外（out-of-tree）组合包通过 `dsh plugin --profile <name> add <package>` 安装进 profile。
+内置组合包从 dsh 安装目录解析。树外（out-of-tree）组合包可以通过 `dsh plugin --profile <name> add <package>` 以包的形式进入 profile，也可以通过 `dsh plugin --profile <name> add name@https://…/dsh-bundle.json` 加入远程订阅。
 
 <a id="related-documentation"></a>
 ## 相关文档

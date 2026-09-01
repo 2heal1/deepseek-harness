@@ -29,7 +29,7 @@ This group maps the installable patch layers used by `dsh --profile`. Each packa
 | [`sdk-app`](sdk-app/README.md) | SDK JSON-RPC stdio application over base | mounts the SDK server |
 | [`sdk-minimal`](sdk-minimal/README.md) | Standalone minimal SDK application without base or Web | — (complete patch tree) |
 
-In-box bundles resolve from the dsh installation; out-of-tree bundles install into a profile through `dsh plugin --profile <name> add <package>`.
+In-box bundles resolve from the dsh installation. Out-of-tree Bundles enter a Profile either as a package through `dsh plugin --profile <name> add <package>` or as a remote subscription through `dsh plugin --profile <name> add name@https://…/dsh-bundle.json`.
 
 <a id="related-documentation"></a>
 ## Related documentation

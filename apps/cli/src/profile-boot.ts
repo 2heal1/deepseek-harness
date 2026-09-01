@@ -24,8 +24,9 @@ import {
   installFailLoud,
   loadOptionalPatches,
   loadOverlayPatches,
-  loadProfile,
+  loadProfileWithRemotes,
   PROFILE_PATCH_FILENAME,
+  RemoteBundleRegistry,
   watchUserPatches,
   type Profile,
 } from '@deepseek-ai/dsh-app-boot'
@@ -115,8 +116,8 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
  * @param userLayer - `false` skips parsing `cordis.patch.yml` (the default dump).
  * @returns the loaded profile.
  */
-export function prepareProfile(name: string, userLayer = true): Profile {
-  const profile = loadProfile(NAME, name, INSTALL_ANCHOR, undefined, { userLayer })
+export async function prepareProfile(name: string, userLayer = true): Promise<Profile> {
+  const profile = await loadProfileWithRemotes(NAME, name, INSTALL_ANCHOR, undefined, { userLayer })
   writeFileSync(join(profile.dir, PROFILE_ROOT_FILENAME), PROFILE_ROOT_CONFIG)
   return profile
 }
@@ -124,6 +125,8 @@ export function prepareProfile(name: string, userLayer = true): Profile {
 /** One profile's patch layers, in application order. */
 interface ComposedProfile {
   profile: Profile
+  /** Remote build registry installed before the root Include mounts. */
+  remoteBundles: RemoteBundleRegistry
   /** Bundle layers concatenated — the part below the user layers on a live reload. */
   bundlePatches: PatchOptions[]
   /** The home-level user layer (`$DSH_HOME/cordis.patch.yml`), applied after the profile's own. */
@@ -157,7 +160,7 @@ async function composeProfile(
   name: string,
   patchFiles: readonly string[],
 ): Promise<ComposedProfile> {
-  const profile = prepareProfile(name)
+  const profile = await prepareProfile(name)
   await healProfilesModuleFallback({ installAnchor: INSTALL_ANCHOR, profile })
   const homePatches = loadOptionalPatches(NAME, homePatchPath()) ?? []
   const overlays = patchFiles.flatMap(file => loadOverlayPatches(NAME, resolve(file)))
@@ -169,7 +172,10 @@ async function composeProfile(
   const composedOverlays = [...overlays]
   const telemetryPatch = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID))
   if (telemetryPatch !== undefined) composedOverlays.push(telemetryPatch)
-  return { profile, bundlePatches, homePatches, overlays: composedOverlays }
+  const remoteBundles = new RemoteBundleRegistry(profile.layers.flatMap(
+    layer => layer.type === 'remote' ? [layer.remote] : [],
+  ))
+  return { profile, remoteBundles, bundlePatches, homePatches, overlays: composedOverlays }
 }
 
 /** Options for {@link runProfile}. */
@@ -250,6 +256,8 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // application must not mutate the objects later reloads recompose from.
   const ctx = await boot(NAME, rootConfig, structuredClone(allPatches(composed)), (hostCtx) => {
     app.current = hostCtx
+    hostCtx.provide('remoteBundles', composed.remoteBundles)
+    composed.remoteBundles.install(hostCtx)
     // Before any config-tree entry mounts, so plugins resolve all launch-time
     // environment values from the same immutable provenance snapshot.
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, options.environment)

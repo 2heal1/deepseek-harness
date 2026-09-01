@@ -3,14 +3,13 @@
  * `dsh --profile` launcher family.
  *
  * A profile is a directory under `$DSH_HOME/profiles/<name>` holding a
- * `package.json` (out-of-tree plugin dependencies plus the profile manifest
+ * `package.json` (out-of-tree package dependencies plus the profile manifest
  * `dsh.profile` with its ordered `bundles` list) and a `cordis.patch.yml`
- * (the user's own patch layer, applied after every bundle layer). Bundles are
- * npm packages whose manifest declares
- * `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`; the tree is
- * composed by applying each bundle's patch list in `dsh.profile.bundles` order over
- * an empty entry list, then the profile's own patches, then any launcher
- * layers (`--patch` files and flag-derived patches).
+ * (the user's own patch layer, applied after every Bundle layer). A Bundle
+ * source is either an installed package declaring `dsh.bundle.patch` or a
+ * remote HTTP(S) subscription; the tree applies each source's patch in list
+ * order over an empty entry list, then the profile's own patches, then any
+ * launcher layers (`--patch` files and flag-derived patches).
  *
  * Module resolution is two-anchor by construction: a bundle name resolves
  * first from the dsh installation (the launcher's own package), then from the
@@ -36,6 +35,12 @@ import { applyEntryPatches, type PatchOptions } from '@deepseek-ai/cordis-plugin
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { resolve as resolvePackage, type Package as ResolvePackageManifest } from 'resolve.exports'
 import { loadOverlayPatches } from './index.ts'
+import {
+  loadRemoteBundle,
+  type RemoteBundleFetch,
+  type RemoteProfileBundleSource,
+  type ResolvedRemoteBundle,
+} from './remote-bundle.ts'
 
 /** Directory under the Harness home holding every profile. */
 export const PROFILES_DIR = 'profiles'
@@ -52,10 +57,13 @@ export interface DshBundleManifest {
   patch: string
 }
 
+/** One ordered Bundle source: an installed package name or remote subscription. */
+export type ProfileBundleSource = string | RemoteProfileBundleSource
+
 /** The profile half of the `dsh` manifest section: what a profile directory composes. */
 export interface DshProfileManifest {
-  /** Ordered bundle layer list (package names). */
-  bundles?: string[]
+  /** Ordered package and remote Bundle sources. */
+  bundles?: ProfileBundleSource[]
   /** Whether user patch files reload while this profile remains active. */
   patchReload?: ProfilePatchReload
 }
@@ -66,7 +74,7 @@ export type ProfilePatchReload = 'live' | 'startup'
 /** Installation-owned defaults used when a shipped profile is first opened. */
 export interface ProfileTemplate {
   /** Ordered bundle layer list. */
-  bundles: readonly string[]
+  bundles: readonly ProfileBundleSource[]
   /** User patch-file lifecycle for the generated profile. */
   patchReload: ProfilePatchReload
 }
@@ -91,8 +99,10 @@ export interface ProfileManifest {
 }
 
 /** One resolved bundle layer of a profile. */
-export interface ProfileLayer {
-  /** The bundle's package name, as listed in `dsh.profile.bundles`. */
+export interface PackageProfileLayer {
+  /** Layer discriminant. */
+  type: 'package'
+  /** The bundle's package name. */
   packageName: string
   /** Absolute directory of the resolved bundle package. */
   packageDir: string
@@ -101,6 +111,23 @@ export interface ProfileLayer {
   /** The parsed patch list. */
   patches: PatchOptions[]
 }
+
+/** One remote Bundle patch layer and its loaded runtime build. */
+export interface RemoteProfileLayer {
+  /** Layer discriminant. */
+  type: 'remote'
+  /** Remote Bundle name. */
+  packageName: string
+  /** Subscription URL, used as the patch-location diagnostic. */
+  patchPath: string
+  /** Parsed patch list. */
+  patches: PatchOptions[]
+  /** Loaded remote build and its Loader builtins. */
+  remote: ResolvedRemoteBundle
+}
+
+/** One resolved package or remote layer. */
+export type ProfileLayer = PackageProfileLayer | RemoteProfileLayer
 
 /** A loaded profile: resolved bundle layers plus the user's own patch layer. */
 export interface Profile {
@@ -158,12 +185,16 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
 }
 
 /** Installation-owned bundle tuples normalized to the shipped template. */
-const INSTALLATION_OWNED_PROFILE_TUPLES: Record<string, readonly string[]> = {
-  headless: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless'],
+const INSTALLATION_OWNED_PROFILE_TUPLES: Record<string, readonly ProfileBundleSource[]> = {
+  headless: [
+    '@deepseek-ai/dsh-base',
+    '@deepseek-ai/dsh-web-app',
+    '@deepseek-ai/dsh-headless',
+  ],
 }
 
 /** The bundle list a `dsh plugin` init uses for a name with no shipped template. */
-export const DEFAULT_PROFILE_BUNDLES: readonly string[] = ['@deepseek-ai/dsh-base']
+export const DEFAULT_PROFILE_BUNDLES: readonly ProfileBundleSource[] = ['@deepseek-ai/dsh-base']
 
 /** Custom profiles retain the historical live patch-file behavior. */
 export const DEFAULT_PROFILE_PATCH_RELOAD: ProfilePatchReload = 'live'
@@ -196,7 +227,7 @@ autoInstallPeers: false
  */
 export function initProfile(
   dir: string,
-  bundles: readonly string[],
+  bundles: readonly ProfileBundleSource[],
   patchReload: ProfilePatchReload = DEFAULT_PROFILE_PATCH_RELOAD,
 ): void {
   mkdirSync(dir, { recursive: true })
@@ -206,7 +237,7 @@ export function initProfile(
       name: `dsh-profile-${basename(dir)}`,
       private: true,
       dependencies: {},
-      dsh: { profile: { bundles: [...bundles], patchReload } },
+      dsh: { profile: { bundles: structuredClone([...bundles]), patchReload } },
     }
     writeFileSync(manifestPath, JSON.stringify(manifest, undefined, 2) + '\n')
   }
@@ -646,7 +677,9 @@ function healProfileModuleFallback(profile: Profile, installationPackageNames: R
   mkdirSync(profileModulesDir, { recursive: true })
   mkdirSync(ownedModulesDir, { recursive: true })
   const bundleAnchors = profile.layers
-    .filter(layer => !installationPackageNames.has(layer.packageName))
+    .filter((layer): layer is PackageProfileLayer => (
+      layer.type === 'package' && !installationPackageNames.has(layer.packageName)
+    ))
     .map(layer => join(layer.packageDir, 'package.json'))
   const bundleLinks = dependencyClosure(bundleAnchors, installationPackageNames, (candidate, packageName) => {
     const profileLink = join(profileModulesDir, packageName)
@@ -662,7 +695,9 @@ function healProfileModuleFallback(profile: Profile, installationPackageNames: R
       throw error
     }
   })
-  for (const layer of profile.layers) bundleLinks.delete(layer.packageName)
+  for (const layer of profile.layers) {
+    if (layer.type === 'package') bundleLinks.delete(layer.packageName)
+  }
   for (const packageName of ownedPackageNames(ownedModulesDir)) {
     if (!bundleLinks.has(packageName)) removeProfileSymlink(profileModulesDir, ownedModulesDir, packageName)
   }
@@ -707,8 +742,10 @@ export function writeProfileManifest(dir: string, manifest: ProfileManifest): vo
   writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest, undefined, 2) + '\n')
 }
 
-/** Return whether two bundle lists have the same values in the same order. */
-function sameBundles(left: readonly string[], right: readonly string[]): boolean {
+/** Return whether two Bundle source lists have the same values in the same order. */
+function sameBundles(left: readonly ProfileBundleSource[], right: readonly ProfileBundleSource[]): boolean {
+  /* v8 ignore next -- remote sources are user-owned; shipped normalization compares package-only templates. */
+  if (left.some(value => typeof value !== 'string') || right.some(value => typeof value !== 'string')) return false
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
@@ -733,13 +770,47 @@ function normalizeShippedProfile(name: string, dir: string, manifest: ProfileMan
       ...manifest.dsh,
       profile: {
         ...manifest.dsh?.profile,
-        bundles: [...template.bundles],
+        bundles: structuredClone([...template.bundles]),
         patchReload: manifest.dsh?.profile?.patchReload ?? template.patchReload,
       },
     },
   }
   writeProfileManifest(dir, normalized)
   return normalized
+}
+
+function parseBundleSources(binName: string, path: string, value: unknown): ProfileBundleSource[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) throw new Error(`${binName}: profile manifest ${path} dsh.profile.bundles must be an array`)
+  const names = new Set<string>()
+  return value.map((item, index) => {
+    if (typeof item === 'string') {
+      if (item === '') throw new Error(`${binName}: profile manifest ${path} dsh.profile.bundles[${String(index)}] must not be empty`)
+      if (names.has(item)) throw new Error(`${binName}: profile manifest ${path} contains duplicate Bundle name ${JSON.stringify(item)}`)
+      names.add(item)
+      return item
+    }
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      throw new Error(`${binName}: profile manifest ${path} dsh.profile.bundles[${String(index)}] must be a package name or remote object`)
+    }
+    const record = item as Record<string, unknown>
+    if (record.type !== 'remote') {
+      throw new Error(
+        `${binName}: profile manifest ${path} dsh.profile.bundles[${String(index)}].type must be "remote"`,
+      )
+    }
+    if (typeof record.name !== 'string' || record.name === '') {
+      throw new Error(`${binName}: profile manifest ${path} dsh.profile.bundles[${String(index)}].name must be a non-empty string`)
+    }
+    if (names.has(record.name)) {
+      throw new Error(`${binName}: profile manifest ${path} contains duplicate Bundle name ${JSON.stringify(record.name)}`)
+    }
+    names.add(record.name)
+    if (typeof record.url !== 'string' || record.url === '') {
+      throw new Error(`${binName}: profile manifest ${path} dsh.profile.bundles[${String(index)}].url must be a non-empty string`)
+    }
+    return { type: 'remote', name: record.name, url: record.url }
+  })
 }
 
 /**
@@ -788,24 +859,18 @@ export function resolveBundleDir(
   )
 }
 
-/**
- * Load a profile: resolve every `dsh.profile.bundles` entry to its patch
- * layer and parse the profile's own patch file. A listed bundle without a
- * `dsh.bundle` manifest fails loud — naming a bundle-less package as a layer
- * is a misconfiguration, not "no patches".
- * @param binName - the diagnostic prefix on thrown errors.
- * @param name - the profile name.
- * @param installAnchor - absolute path of the dsh app's package.json (first resolution anchor).
- * @param home - the Harness home; defaults to {@link resolveDshHome}.
- * @param options - `userLayer: false` skips reading `cordis.patch.yml`, so a
- * bundles-only consumer (`--dump-default-config`, a recovery diagnostic)
- * cannot fail on a broken user layer.
- * @returns the loaded profile (empty `patches` when the user layer is skipped).
- */
-export function loadProfile(
-  binName: string, name: string, installAnchor: string, home: string = resolveDshHome(),
+interface ProfileLoadState {
+  dir: string
+  bundles: ProfileBundleSource[]
+  patchPath: string
+  patches: PatchOptions[]
+  patchReload: ProfilePatchReload
+}
+
+function prepareProfileLoad(
+  binName: string, name: string, home: string = resolveDshHome(),
   options: { userLayer?: boolean } = {},
-): Profile {
+): ProfileLoadState {
   const dir = resolveProfileDir(name, home)
   if (!existsSync(join(dir, 'package.json'))) {
     const template = PROFILE_TEMPLATES[name]
@@ -818,7 +883,8 @@ export function loadProfile(
   }
   const manifest = normalizeShippedProfile(name, dir, readProfileManifest(binName, dir))
   // A hand-written profile manifest may omit the dsh section entirely.
-  const bundles = manifest.dsh?.profile?.bundles ?? []
+  const manifestPath = join(dir, 'package.json')
+  const bundles = parseBundleSources(binName, manifestPath, manifest.dsh?.profile?.bundles)
   const rawPatchReload: unknown = manifest.dsh?.profile?.patchReload
   if (rawPatchReload !== undefined && rawPatchReload !== 'live' && rawPatchReload !== 'startup') {
     throw new Error(
@@ -826,21 +892,95 @@ export function loadProfile(
     )
   }
   const patchReload = rawPatchReload ?? DEFAULT_PROFILE_PATCH_RELOAD
-  const layers = bundles.map((packageName): ProfileLayer => {
-    const packageDir = resolveBundleDir(binName, packageName, installAnchor, dir)
-    const bundleManifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as ProfileManifest
-    const declared = bundleManifest.dsh?.bundle?.patch
-    if (declared === undefined) {
-      throw new Error(`${binName}: profile bundle ${JSON.stringify(packageName)} declares no dsh.bundle in its package.json`)
-    }
-    const patchPath = join(packageDir, declared)
-    return { packageName, packageDir, patchPath, patches: loadOverlayPatches(binName, patchPath) }
-  })
   const patchPath = join(dir, PROFILE_PATCH_FILENAME)
   const patches = options.userLayer !== false && existsSync(patchPath)
     ? loadOverlayPatches(binName, patchPath)
     : []
-  return { name, dir, layers, patchPath, patches, patchReload }
+  return { dir, bundles, patchPath, patches, patchReload }
+}
+
+function loadPackageLayer(binName: string, packageName: string, installAnchor: string, dir: string): PackageProfileLayer {
+  const packageDir = resolveBundleDir(binName, packageName, installAnchor, dir)
+  const bundleManifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as ProfileManifest
+  const declared = bundleManifest.dsh?.bundle?.patch
+  if (declared === undefined) {
+    throw new Error(`${binName}: profile bundle ${JSON.stringify(packageName)} declares no dsh.bundle in its package.json`)
+  }
+  const patchPath = join(packageDir, declared)
+  return {
+    type: 'package',
+    packageName,
+    packageDir,
+    patchPath,
+    patches: loadOverlayPatches(binName, patchPath),
+  }
+}
+
+/**
+ * Load a package-only profile synchronously. Remote sources fail with an
+ * instruction to use {@link loadProfileWithRemotes}; the product launcher uses
+ * that asynchronous entry while package-only diagnostics retain their direct API.
+ * @param binName - diagnostic prefix.
+ * @param name - profile name.
+ * @param installAnchor - DSH installation package.json path.
+ * @param home - Harness home.
+ * @param options - optional user-layer switch.
+ * @returns the loaded package-only profile.
+ */
+export function loadProfile(
+  binName: string, name: string, installAnchor: string, home: string = resolveDshHome(),
+  options: { userLayer?: boolean } = {},
+): Profile {
+  const state = prepareProfileLoad(binName, name, home, options)
+  const layers = state.bundles.map((source): ProfileLayer => {
+    if (typeof source !== 'string') {
+      throw new Error(`${binName}: profile ${JSON.stringify(name)} contains remote Bundles; use asynchronous profile loading`)
+    }
+    return loadPackageLayer(binName, source, installAnchor, state.dir)
+  })
+  return {
+    name,
+    dir: state.dir,
+    layers,
+    patchPath: state.patchPath,
+    patches: state.patches,
+    patchReload: state.patchReload,
+  }
+}
+
+/**
+ * Load package and remote Bundle layers in profile order.
+ * @param binName - diagnostic prefix.
+ * @param name - profile name.
+ * @param installAnchor - DSH installation package.json path.
+ * @param home - Harness home.
+ * @param options - user-layer and fetch controls.
+ * @returns the loaded profile after all remote builds resolve.
+ */
+export async function loadProfileWithRemotes(
+  binName: string, name: string, installAnchor: string, home: string = resolveDshHome(),
+  options: { userLayer?: boolean; fetch?: RemoteBundleFetch } = {},
+): Promise<Profile> {
+  const state = prepareProfileLoad(binName, name, home, options)
+  const layers = await Promise.all(state.bundles.map(async (source): Promise<ProfileLayer> => {
+    if (typeof source === 'string') return loadPackageLayer(binName, source, installAnchor, state.dir)
+    const remote = await loadRemoteBundle(binName, source, installAnchor, state.dir, options.fetch ?? fetch)
+    return {
+      type: 'remote',
+      packageName: source.name,
+      patchPath: source.url,
+      patches: remote.patches,
+      remote,
+    }
+  }))
+  return {
+    name,
+    dir: state.dir,
+    layers,
+    patchPath: state.patchPath,
+    patches: state.patches,
+    patchReload: state.patchReload,
+  }
 }
 
 /**

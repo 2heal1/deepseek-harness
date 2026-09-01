@@ -31,6 +31,7 @@ The kernel packages boot and serve the page; the UI feature packages present it.
 | [`connection/`](connection/README.md) | Maintains browser-host RPC communication and event delivery | `ctx.connection` |
 | [`store/`](store/README.md) | Provides React-free observable and snapshot-store primitives | — |
 | [`hmr/`](hmr/README.md) | Refreshes client plugins during development | — |
+| [`remote-bundles/`](remote-bundles/README.md) | Loads selected remote Bundle browser plugins directly from publishers | — |
 | [`locale/`](locale/README.md) | Provides localization preferences and message dictionaries | `ctx.locale` |
 | [`test-runtime/`](../test-support/client-runtime/README.md) | Shared repository test support for client feature packages | — |
 | [`ui-renderer/`](ui-renderer/README.md) | Binds slot data to React and mounts the assembled application | `ctx.uiRenderer` |
@@ -80,6 +81,7 @@ The kernel packages boot and serve the page; the UI feature packages present it.
 Start with the subsystem reference and the two notes that own the cross-package composition decisions, then the host half that serves this page.
 
 - [Client modules subsystem](../../docs/subsystems/client-modules.md) — the web plugin table: `dsh.client` declarations, the boot graph wire, and the bundle route.
+- [Remote Bundle delivery](../../.agents/notes/implemented/architecture/2026-08-28-remote-dsh-bundles.md) — remote browser loading and Host module identity.
 - [Slot system standard](../../.agents/notes/implemented/architecture/2026-07-22-slot-type-chain-implementation.md) — the definitive slot model: registration, props shares, and stores.
 - [Web client architecture note](../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md) — the loading chain, object layer, and client services.
 - [Host group map](../host/README.md) — the host half that serves this browser half.

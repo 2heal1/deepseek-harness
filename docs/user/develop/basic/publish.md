@@ -63,6 +63,18 @@ Create `hello-plugin/cordis.patch.yml`. The patch is a YAML array like the `--pa
 
 A package without the `dsh.bundle` declaration still installs, but only as a plain dependency: `dsh plugin` prints a warning and activates no layer. Use that package format for a library that plugin packages import rather than a plugin users enable.
 
+### Build package and remote forms from one source
+
+The manual JavaScript package above is enough for local and registry delivery. For a TypeScript Bundle or remote delivery, the independent [dsh-bundle-builder](https://github.com/2heal1/dsh-bundle-builder) project can produce both forms from the same source. Its standard layout uses `package.json`, `cordis.patch.yml`, `src/index.ts`, and optional `src/client/index.ts`; `@deepseek-ai/cordis` must be a peer dependency so every runtime supplies its own singleton.
+
+```sh
+pnpm add -D dsh-bundle-builder typescript
+pnpm exec dsh-bundle lint
+pnpm exec dsh-bundle build
+```
+
+The default `dual` target writes the ordinary installable Bundle and its declarations directly to `dist/`, with `dist/remote/dsh-bundle.json` and immutable `dist/remote/builds/<buildId>/` runtime assets below it. Use `--target package` or `--target remote` when only one form is needed. Standard paths require no Builder configuration; use `package.json#dsh.bundleBuilder` only to change paths, provide explicit patch-module mappings, or choose the target. The independent project's README documents its configuration and browser build limit.
+
 ### The profile manifest
 
 A profile directory holds two files:
@@ -108,6 +120,25 @@ dsh --profile demo
 ```
 
 `dsh plugin --profile demo remove dsh-hello-plugin` removes both the dependency and the layer.
+
+## Subscribe to a remote Bundle
+
+Publish the complete contents of `dist/remote/` at ordinary HTTP(S) URLs, keeping `dsh-bundle.json` stable and every `builds/<buildId>/` path immutable. Then add the manifest URL under the name it declares:
+
+```sh
+dsh plugin --profile demo add private-map-tools@https://plugins.example.test/maps/dsh-bundle.json
+dsh --profile demo
+```
+
+`dsh plugin add` adds a Bundle source even though the command retains its historical `plugin` name. The add validates the manifest once and writes `{ type: "remote", name, url }` into the same ordered Profile list as package Bundles. Each later process start fetches the stable manifest once and selects its current immutable build; no background updater or live replacement runs. Repoint the stable manifest when publishing a new build, then let the user or supervisor restart DSH when the update should take effect.
+
+The Node process downloads and evaluates the immutable Node entry, while the Web page loads an optional browser entry and chunks from the published origin. Runtime URLs do not carry TypeScript declarations: publish or otherwise distribute `dist/` as a development dependency to consumers that compile against the Bundle's service types.
+
+Remove the subscription by its name:
+
+```sh
+dsh plugin --profile demo remove private-map-tools
+```
 
 ## The loading order
 

@@ -584,6 +584,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       }
       const packageDir = dirname(anchor)
       return {
+        type: 'package' as const,
         packageName: manifest.name,
         packageDir,
         patchPath: join(packageDir, 'cordis.patch.yml'),

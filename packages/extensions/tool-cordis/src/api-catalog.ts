@@ -1288,6 +1288,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'remoteBundles',
+    summary: 'Profile-scoped registry consumed by boot and the optional Web bridge.',
+    description: 'Profile-scoped registry consumed by boot and the optional Web bridge.',
+    methods: [
+      {
+        signature: 'install(ctx: Context): void',
+        description: 'Install every remote module namespace into the active Loader.',
+        parameters: [{ name: 'ctx', description: 'root context after Loader creation and before entries mount.' }],
+      },
+      {
+        signature: 'web(): ResolvedRemoteWebBundle[]',
+        description: 'Return browser builds selected by this profile.',
+        parameters: [],
+        returns: 'browser descriptors in profile order.',
+      },
+    ],
+  },
+  {
     key: 'sandbox',
     summary: 'Abstract process-sandbox service.',
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
@@ -4706,6 +4724,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResolvedNormalRetryPolicy',
     declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n}',
+  },
+  {
+    name: 'ResolvedRemoteWebBundle',
+    declaration: 'export interface ResolvedRemoteWebBundle {\n    name: string;\n    buildId: string;\n    container: string;\n    entry: string;\n    shared: string[];\n}',
   },
   {
     name: 'ResolvedRetryBackoff',

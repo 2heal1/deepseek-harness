@@ -11,7 +11,7 @@
  * and `dsh --profile web -h` prints the web app's help, not this one's.
  *
  * `web` is a hardcoded alias for `--profile web`; `plugin` manages a profile's
- * plugin dependencies by forwarding to pnpm.
+ * package and remote Bundle sources.
  * @module @deepseek-ai/dsh/args
  */
 
@@ -36,11 +36,11 @@ interface DumpConfigInvocation {
   patches: string[]
 }
 
-/** Manage a profile's plugins: forward `args` to pnpm inside the profile directory. */
+/** Manage a profile's package or remote Bundle sources. */
 interface PluginInvocation {
   mode: 'plugin'
   profile: string
-  /** Raw pnpm arguments, verbatim. */
+  /** Bundle-management arguments; non-remote operations pass through to pnpm. */
   args: string[]
 }
 
@@ -68,7 +68,9 @@ Examples:
   dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
   dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
   dsh --profile web --help                   the web app's own flags and help
-  dsh plugin --profile tui add <package>     install a plugin into the tui profile
+  dsh plugin --profile tui add <package>     install a package Bundle into the tui profile
+  dsh plugin --profile web add name@https://example.test/dsh-bundle.json
+                                               subscribe the profile to a remote Bundle
 `
 
 /**
@@ -168,15 +170,15 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       resolved = resolveBoot(web, 'web', options, args)
     })
 
-  const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
+  const plugin = program.command('plugin').description('manage a profile\'s package and remote Bundle sources')
   plugin
     .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)')
     .allowUnknownOption()
-    .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
+    .argument('[args...]', 'add/remove package Bundles through pnpm, or add name@https://.../dsh-bundle.json')
     .action((args: string[], options: { profile: string }) => {
       rejectParentOptions('plugin')
       if (options.profile === '') program.error('error: --profile needs a name')
-      if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
+      if (args.length === 0) program.error('error: plugin needs Bundle arguments (e.g. add <package>)')
       resolved = { mode: 'plugin', profile: options.profile, args }
     })
 

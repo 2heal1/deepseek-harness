@@ -20,7 +20,7 @@
 
 **组合包**是 Cordis 配置项及其挂载代码的分发格式，因此它插入的内容始终可被其上各层 patch。
 
-两者都在各自的 `package.json` 中通过 `dsh` 字段声明自己：`dsh.profile` 列出一个 profile 的组合包，`dsh.bundle` 指向一个组合包的 patch 文件。
+package 交付通过 `package.json` 中的 `dsh` 字段声明自己：`dsh.profile` 列出 profile 的有序组合包来源，`dsh.bundle` 指向 package 组合包的 patch 文件。来源可以是已安装包名，也可以是远程 `{ type: "remote", name, url }` 订阅。远程解析在进程启动时获取一次稳定 manifest，使用 Host 提供的 Cordis 与 peer 加载不可变 Node 构建，并把可选的不可变浏览器入口交给 Web 应用，由浏览器直接从发布方加载。
 
 [`dsh-base`](../packages/bundle/base/README.zh.md) 是 `web`、`headless`、`sdk` 与 `acp` profile 的共享第一层：模型适配器、工具、持久化、沙箱与审批策略、设置、凭据、遥测。[`dsh-web-app`](../packages/bundle/web-app/README.zh.md) 增加浏览器应用，[`dsh-headless`](../packages/bundle/headless/README.zh.md) 增加不带服务器的一次性运行器，[`dsh-sdk-app`](../packages/bundle/sdk-app/README.zh.md) 增加 SDK JSON-RPC 服务器，[`dsh-acp-app`](../packages/bundle/acp-app/README.zh.md) 增加仅用于自动化的 ACP 服务器。[`dsh-sdk-minimal`](../packages/bundle/sdk-minimal/README.zh.md) 是刻意保留的例外：一个组合包拥有完整的显式 SDK 配置树，不应用 `dsh-base`。
 
