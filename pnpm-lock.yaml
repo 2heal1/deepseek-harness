@@ -5691,6 +5691,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-profile
       '@deepseek-ai/dsh-agent-runtime-router':
         specifier: workspace:^
         version: link:../../core/agent-runtime-router
