@@ -172,6 +172,11 @@
     { "path": "./packages/core/agent-runtime" },
     { "path": "./packages/core/agent-default-model" },
     { "path": "./packages/interaction/commands" },
+    {
+      "path": "./packages/core/agent-runtime-router"
+    },
+    { "path": "./packages/core/agent-default-model" },
+    { "path": "./packages/interaction/commands" },
     { "path": "./packages/goal/goal" },
     { "path": "./packages/goal/tool-goal" },
     { "path": "./packages/goal/goal-round-driver" },

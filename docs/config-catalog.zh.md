@@ -138,25 +138,22 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-agent-loop`
 
-需要：`agents` · `sessions` · `llm` · `tools` · `systemPrompt`
+需要：`agents` · `sessions` · `agentRuntimeRouter` · `agentRuntimes` · `llm` · `tools` · `systemPrompt`
 
 ```ts config-catalog
-/** Agent-loop plugin configuration. */
+/** Native Provider plugin configuration. */
 export interface Config {
-  /**
-   * Maximum parallel-safe calls in flight per agent step. `1` is serial;
-   * omission defaults to {@link DEFAULT_MAX_PARALLEL_TOOL_CALLS}.
-   */
+  /** Maximum parallel-safe calls in flight per Agent step. */
   maxParallelToolCalls?: number
-  /** Agents created or resumed at plugin startup. */
+  /** Native Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
-    /** Stable config label used in logs and as the fresh combined-id prefix. */
+    /** Stable config label used when a fresh identity must be minted. */
     id: string
-    /** Optional stable identity; remounts resume its materialized history, while first use creates it fresh. */
+    /** Optional stable fresh-or-resume identity. */
     sessionId?: SessionId
-    /** Optional workspace for a fresh session. */
+    /** Optional workspace for a fresh Session. */
     cwd?: string
-    /** Persisted session to resume instead of creating a fresh session. */
+    /** Existing persisted Session to resume. */
     resumeSessionId?: SessionId
   })[]
 }
@@ -164,7 +161,7 @@ export interface Config {
 
 依赖：[`AgentOptions`](subsystems/core.md) · [`SessionId`](subsystems/core.md)
 
-来源：[`packages/core/agent-loop/src/index.ts:255`](../packages/core/agent-loop/src/index.ts)
+来源：[`packages/core/agent-loop/src/index.ts:162`](../packages/core/agent-loop/src/index.ts)
 
 <a id="deepseek-aidsh-agent-presets"></a>
 
@@ -203,6 +200,22 @@ export type PresetTrust = 'system' | 'user'
 ```
 
 来源：[`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/agent-presets/src/preset.ts)
+
+<a id="deepseek-aidsh-agent-runtime-router"></a>
+
+## `@deepseek-ai/dsh-agent-runtime-router`
+
+需要：`agents` · `sessions` · `agentRuntimes` · `llm` · `tools` · `systemPrompt`
+
+```ts config-catalog
+/** Router configuration before Runtime Profile resolution moves to F3. */
+export interface Config {
+  /** Provider selected for AgentFactory create and resume operations. */
+  provider: string
+}
+```
+
+来源：[`packages/core/agent-runtime-router/src/index.ts:61`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 

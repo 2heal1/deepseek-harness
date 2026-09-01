@@ -23,6 +23,7 @@ try {
     ctx: new Context(),
     id: agentId,
     options: {},
+    capabilities: [],
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',

@@ -32,6 +32,7 @@ function agent(ctx: Context, cwd: string): Agent {
   const value: Agent = {
     id,
     options: {},
+    capabilities: [],
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',

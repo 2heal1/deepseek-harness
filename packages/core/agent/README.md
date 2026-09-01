@@ -36,13 +36,13 @@ The scope carries the `Agent` itself and is process-local. Ambient presence is n
 
 #### Factory API (creation)
 
-Agent *creation* is provided by the plugin implementing `AgentFactory` (`dsh-agent-loop`), registered via `setFactory`. This keeps creation on the `dsh-agent` interface so consumers (UI, the ACP bridge) program against `ctx.agents` without depending on the concrete loop package. The registry canonicalizes an already traced Service to its concrete target and re-traces each call through the caller's context; this avoids nested Cordis shadows while passing an explicit caller-bound `ownerCtx` to plain factories.
+Agent creation is provided by the single `AgentFactory` installed by `dsh-agent-runtime-router`. This keeps creation on the `dsh-agent` interface so consumers program against `ctx.agents` without depending on a concrete runtime. The registry canonicalizes a traced Service and re-traces each call through the caller context, passing an explicit caller-bound `ownerCtx` to the factory.
 
-- `ctx.agents.setFactory(factory: AgentFactory): () => void` — register the creation factory (the loop calls this on construction). Throws on a second factory; the slot clears on dispose.
-- `ctx.agents.create(options: CreateAgentOptions): Promise<AgentHandle>` — create a session and agent, await optional setup while unpublished, then publish through final `SessionStore.enter()` and `AgentRegistry.enter()` checks. Concurrent same-ID creation is unsupported: more than one operation may prepare, but only one can enter; every loser rolls its private scope/session/driver back. An optional creation-only `signal` cancels unpublished setup and is detached before the handle is returned; later cancellation uses `handle.dispose()` or `agent.cancel()`. Publication is rollback-covered and every delivered creation edge is paired during rollback. Rejects if no factory is registered.
-- `ctx.agents.resume(options: ResumeAgentOptions): Promise<AgentHandle>` — load a persisted session ([session persistence](../../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md)), mint a fresh unpublished agent scope, await optional setup, and use the same final-entry publication sequence. Its optional `signal` is likewise creation-only. Rejects if no factory is registered or session persistence is unconfigured.
+- `ctx.agents.setFactory(factory: AgentFactory): () => void` — register the sole creation factory. The Router owns this slot; a second factory is rejected and disposal clears it.
+- `ctx.agents.create(options: CreateAgentOptions): Promise<AgentHandle>` — ask the Router to select one Provider generation, prepare a private Session and Agent scope, await optional setup, and publish through ordered registry entry and synchronous lifecycle notifications. Waking input remains closed until publication completes. Concurrent same-ID transactions may prepare, but only one can enter; every loser rolls back its private resources. The optional `signal` applies only through publication.
+- `ctx.agents.resume(options: ResumeAgentOptions): Promise<AgentHandle>` — ask the Router to load a persisted session ([session persistence](../../../.agents/notes/implemented/architecture/2026-06-14-session-persistence.md)) and use the same Provider selection, setup, publication, and rollback transaction. Missing persistence or Provider availability fails explicitly.
 
-`AgentHandle = { agent: Agent; dispose(): Promise<void> }`. The disposer is a **consumer capability** — no observer holding the bare registry entry can tear the agent down. The caller fiber and the registered factory provider are structural co-owners: caller unload enforces structured ownership, while factory unload must stop old instances because their scoped dependency surface belongs to that provider. `dispose()` from any owner reaches one memoized quiescence boundary: it stops the loop, awaits its exit, unregisters the agent, removes its session from the store, and finally unwinds its scoped world. `ctx.agents.get(id)` still returns a bare `Agent`; the ACP bridge and in-process subagent backends hold consumer handles, while config-created agents are already owned by the loop fiber.
+`AgentHandle = { agent: Agent; dispose(): Promise<void> }`. The disposer is a **consumer capability**; an observer holding a registry entry cannot tear the Agent down. The caller fiber, Router, and selected Provider generation are structural owners. Disposal closes submission admission before awaiting provider quiescence, then unwinds scope and detaches Agent and Session entries.
 
 ### Live events
 
@@ -70,13 +70,14 @@ The handle every plugin programs against:
 - `agent.inject(message)` — queue non-waking `next-step` context. A running driver claims it at the nearest later pre-step boundary; an idle driver leaves it pending until `followup()` or `steer()` wakes the driver. It may miss a request whose pre-step already claimed its batch.
 - `agent.cancel(cause, options?)` — cancel the active driver and, unless `options.keepInbox`, durably cancel all pending inbox work. Idle cancellation is a no-op.
 - `agent.whenIdle()` — observe whole-agent quiescence, including replacement work scheduled before the current driver retires. It does not settle any particular message.
+- `agent.capabilities` — immutable effective runtime capabilities fixed before publication.
 - `agent.session`, `agent.status`, `agent.options`, `agent.id`, `agent.ctx`
 
 `running` describes a driver-wide drain interval, not proof that a turn is still open; it can cover turn close, the durability checkpoint, and consecutive queued turns. Only a caller that owns a complete interval may summarize it as a run result ([decision](../../../.agents/notes/implemented/architecture/2026-07-30-followup-enqueue-and-owned-runs.md)).
 
 ### Extension points
 
-- Agent creation: `AgentLoop.create()` is the concrete config-path implementation (in `dsh-agent-loop`), while programmatic consumers create/resume owned agents through `ctx.agents.create()` / `ctx.agents.resume()`. Replace the loop by implementing `Agent` and registering via `ctx.agents.register()`.
+- Agent creation: `dsh-agent-runtime-router` is the sole factory; programmatic consumers create or resume owned Agents through `ctx.agents`, while `dsh-agent-loop` supplies the Native Provider and retains a compatibility `create()` entry for declarative Native startup.
 - Event listeners: all `agent/*` events are declared here — no dependency on the loop package needed.
 - Subagent delegation is not an `Agent` method; providers create or drive ordinary handles through the factory API, so delegation transports stay outside the core agent interface.
 

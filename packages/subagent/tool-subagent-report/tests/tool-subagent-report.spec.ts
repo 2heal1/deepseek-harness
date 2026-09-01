@@ -534,19 +534,17 @@ describe('dsh-tool-subagent-report', () => {
     expect(ctx.sessions.list()).toEqual([parent.session])
   })
 
-  it('accepts a report into a host-disposing but still-registered parent', async () => {
+  it('rejects a report once parent disposal closes submission admission', async () => {
     const { ctx } = await setup()
     const parentHandle = await ctx.agents.create({
       sessionId: SessionId('disposing-parent'),
       agentOptions: { provider: 'mock', model: 'mock' },
     })
     const { child } = await startChild(ctx, parentHandle.agent)
-    // Host-owned disposal starts asynchronously; the parent stays registered
-    // until quiescence, and registry presence — not disposal state — is the
-    // acceptance gate (pins the README contract).
+    // Registry removal follows runtime quiescence, but disposal closes waking
+    // submission admission before that drain begins.
     const disposing = parentHandle.dispose()
-    const accepted = await callReport(ctx, child, 'during-close')
-    expect(accepted.isError).toBe(false)
+    expect((await callReport(ctx, child, 'during-close')).isError).toBe(true)
     await disposing
     expect((await callReport(ctx, child, 'after-close')).isError).toBe(true)
   })

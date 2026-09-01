@@ -5,8 +5,9 @@ import SessionStore, { Session, SessionEvent, SessionId, TurnEndReason, type Use
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type PostToolDecision } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import { ReactLoopAgent } from '../src/agent.ts'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
 import * as AgentInvariant from '@deepseek-ai/dsh-agent/invariant'
@@ -33,6 +34,8 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx
@@ -528,13 +531,16 @@ describe('turn numbering continues across seeded sessions', () => {
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
+    await ctx2.plugin(AgentRuntimeRegistry)
+    await ctx2.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx2.plugin(AgentLoop, { agents: [] })
     ctx2.llm.registerAdapter(['mock'], second)
 
-    const seeded = ctx2.sessions.create(SessionId('forked'), { seed: [...agent.session.events] })
-    const forked = new ReactLoopAgent(
-      ctx2, SessionId('forked-agent'), { provider: 'mock', model: 'mock' }, seeded,
-    )
+    const forked = (await ctx2.agents.create({
+      sessionId: SessionId('forked-agent'),
+      seed: [...agent.session.events],
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })).agent
 
     const turns: number[] = []
     ctx2.on('session/event', (_s, event) => { if (event.type === 'turn/start') turns.push(event.data.turn) })
@@ -679,6 +685,8 @@ describe('turn and step boundary recovery', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1111,6 +1119,8 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1161,6 +1171,8 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1211,6 +1223,8 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1257,6 +1271,8 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1305,6 +1321,8 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)

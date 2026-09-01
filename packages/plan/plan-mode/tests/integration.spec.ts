@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { createUserMessage, type StreamChunk  } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
-import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import { createUserMessage, type StreamChunk  } from '@deepseek-ai/dsh-llm'
+import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import PlanModeController, { foldPlanMode } from '@deepseek-ai/dsh-plan-mode'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
@@ -21,11 +21,7 @@ const PLAN_CONFIG = { section: 'Test plan mode instructions.' }
  */
 async function harness(adapter: MockAdapter): Promise<Context> {
   const ctx = new Context()
-  await ctx.plugin(LlmRuntime)
-  await ctx.plugin(SessionStore)
-  await ctx.plugin(SystemPrompt)
-  await ctx.plugin(ToolRuntime)
-  await ctx.plugin(AgentRegistry)
+  await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(PlanModeController, PLAN_CONFIG)
   ctx.llm.registerAdapter(['mock'], adapter)

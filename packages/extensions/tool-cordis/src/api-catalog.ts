@@ -102,31 +102,49 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   },
   {
     key: 'agentLoop',
-    summary: 'Concrete agent factory and driver service.',
-    description: 'Concrete agent factory and driver service.',
+    summary: 'Native Provider and loop configuration service.',
+    description: 'Native Provider and loop configuration service.',
     methods: [
       {
         signature: 'readonly config: ResolvedConfig',
-        description: 'Validated configuration owned by the agent-loop service.',
+        description: 'Resolved Native Provider configuration, including the live settings source.',
         parameters: [],
       },
       {
-        signature: 'create(id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader, \'cwd\'> = {}): Agent',
-        description: 'Create an agent and session under one caller-supplied identity, owned by the accessing fiber. Constructor-driven config calls mint a fresh combined id before entering this boundary.',
-        parameters: [{ name: 'id', description: 'shared agent/session identity.' }, { name: 'options', description: 'concrete loop options.' }, { name: 'meta', description: 'optional fresh-session workspace metadata.' }],
-        returns: 'the published running agent.',
+        signature: 'probe(_request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult>',
+        description: 'Report the capabilities and protocol metadata of the Native runtime.',
+        parameters: [{ name: '_request', description: 'probe context supplied by the Router.' }],
+        returns: 'the current Native runtime metadata.',
       },
       {
-        signature: 'async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>',
-        description: 'Create an owned agent on a caller-supplied session id.',
-        parameters: [{ name: 'ownerCtx', description: 'caller context that structurally owns the lifecycle.' }, { name: 'options', description: 'identities, session seed/metadata, loop options, setup, and cancellation.' }],
-        returns: 'the published handle.',
+        signature: 'prepare(request: AgentRuntimePrepareRequest): Promise<PreparedAgentRuntime>',
+        description: 'Prepare a Native runtime for an unpublished Router-owned Agent.',
+        parameters: [{ name: 'request', description: 'resolved runtime request and unpublished Agent context.' }],
+        returns: 'the prepared Native runtime.',
       },
       {
-        signature: 'async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>',
-        description: 'Resume an owned agent from the configured persistence service.',
-        parameters: [{ name: 'ownerCtx', description: 'caller context that owns load, setup, and the live lifecycle.' }, { name: 'options', description: 'persisted identity, loop options, setup, and cancellation.' }],
-        returns: 'the published handle.',
+        signature: 'prepareSync(request: AgentRuntimePrepareRequest): PreparedAgentRuntime',
+        description: 'Prepare the in-process Native driver without an asynchronous handshake.',
+        parameters: [{ name: 'request', description: 'Router-owned unpublished Agent and runtime identity.' }],
+        returns: 'the prepared Native runtime.',
+      },
+      {
+        signature: 'create( id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader, \'cwd\'> = {}, ): Agent',
+        description: 'Compatibility helper for callers that still name the Native service.',
+        parameters: [{ name: 'id', description: 'exact Session identity.' }, { name: 'options', description: 'Native model route.' }, { name: 'meta', description: 'fresh Session workspace metadata.' }],
+        returns: 'the published Router-owned Agent.',
+      },
+      {
+        signature: 'createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>',
+        description: 'Compatibility forwarding entry for existing package consumers.',
+        parameters: [{ name: 'ownerCtx', description: 'lifecycle owner.' }, { name: 'options', description: 'Agent creation options.' }],
+        returns: 'the Router-owned handle.',
+      },
+      {
+        signature: 'resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>',
+        description: 'Compatibility forwarding entry for existing package consumers.',
+        parameters: [{ name: 'ownerCtx', description: 'lifecycle owner.' }, { name: 'options', description: 'Agent resume options.' }],
+        returns: 'the Router-owned handle.',
       },
     ],
   },
@@ -210,6 +228,46 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'agentRuntimeRouter',
+    summary: 'Configurable runtime Router and the sole AgentFactory implementation.',
+    description: 'Configurable runtime Router and the sole AgentFactory implementation.',
+    methods: [
+      {
+        signature: 'readonly ownership: RouterOwnership',
+        description: 'Router-owned lifecycle set used by Provider generations and Agent handles.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly config: Readonly<Config>',
+        description: 'Immutable default Provider selection used before F3 profile resolution.',
+        parameters: [],
+      },
+      {
+        signature: 'assertActive(): void',
+        description: 'Assert that the Router can accept another Agent lifecycle.',
+        parameters: [],
+      },
+      {
+        signature: 'async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>',
+        description: 'Create and publish an Agent through the configured Provider.',
+        parameters: [{ name: 'ownerCtx', description: 'caller context that owns the returned lifecycle.' }, { name: 'options', description: 'fresh Session, Agent, setup, and cancellation options.' }],
+        returns: 'the published Agent handle.',
+      },
+      {
+        signature: 'createNative( ownerCtx: Context, id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader, \'cwd\'> = {}, ): Agent',
+        description: 'Preserve the Native service\'s synchronous create helper through the same Router-owned publication and teardown transaction.',
+        parameters: [{ name: 'ownerCtx', description: 'caller context that owns the lifecycle.' }, { name: 'id', description: 'exact Session identity.' }, { name: 'options', description: 'Native model-route options.' }, { name: 'meta', description: 'fresh Session metadata.' }],
+        returns: 'the published Agent.',
+      },
+      {
+        signature: 'async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>',
+        description: 'Load and publish an Agent through the configured Provider.',
+        parameters: [{ name: 'ownerCtx', description: 'caller context that owns the returned lifecycle.' }, { name: 'options', description: 'persisted Session identity, Agent options, setup, and cancellation.' }],
+        returns: 'the published Agent handle.',
+      },
+    ],
+  },
+  {
     key: 'agentRuntimes',
     summary: 'Effect-scoped named registry for agent runtime providers.',
     description: 'Effect-scoped named registry for agent runtime providers.',
@@ -238,7 +296,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'agents',
     summary: 'Agent service (`ctx.agents`): tracks live agents and carries the initiating Agent through one process-local asynchronous driver chain.',
-    description: 'Agent service (`ctx.agents`): tracks live agents and carries the initiating Agent through one process-local asynchronous driver chain. Agent *creation* is provided by whichever plugin implements the AgentFactory (`@deepseek-ai/dsh-agent-loop`), registered via setFactory.\n\nInitiator methods provide same-process causal attribution only. Ambient presence is neither liveness proof nor authorization; subjects and owners remain explicit, as does identity at worker, process, persistence, and wire boundaries. Returned Promise boundaries drain during teardown, except a nested lineage that starts an owning-fiber unload is excluded from its own drain.',
+    description: 'Agent service (`ctx.agents`): tracks live agents and carries the initiating Agent through one process-local asynchronous driver chain. The runtime Router provides Agent creation through the AgentFactory registered via setFactory.\n\nInitiator methods provide same-process causal attribution only. Ambient presence is neither liveness proof nor authorization; subjects and owners remain explicit, as does identity at worker, process, persistence, and wire boundaries. Returned Promise boundaries drain during teardown, except a nested lineage that starts an owning-fiber unload is excluded from its own drain.',
     methods: [
       {
         signature: 'currentInitiator(): Agent | undefined',
@@ -2299,8 +2357,8 @@ export const EVENT_API: readonly EventApiEntry[] = [
     mode: 'emit',
     signature: '\'agent-loop/config-start-failed\'(payload: { sessionId: SessionId; error: unknown }): void',
     summary: 'A declarative agent entry failed before it could publish a live agent.',
-    description: 'A declarative agent entry failed before it could publish a live agent. Consumers that buffer work for the configured identity use this transient signal to reject that work instead of waiting forever. Normal factory teardown suppresses failures from the cancelled startup attempt.',
-    parameters: [{ name: 'payload', description: '.error - persistence, setup, or publication failure.' }],
+    description: 'A declarative agent entry failed before it could publish a live agent.',
+    parameters: [{ name: 'payload', description: '.error - preparation, setup, or publication failure.' }],
   },
   {
     name: 'agent-preset/selected',
@@ -2768,7 +2826,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Agent',
-    declaration: 'export interface Agent {\n    readonly id: SessionId;\n    readonly options: AgentOptions;\n    readonly session: Session;\n    readonly inbox: Inbox;\n    readonly status: AgentStatus;\n    readonly ctx: Context;\n    cancel(cause: AgentCancelCause, options?: CancelOptions): void;\n    whenIdle(): Promise<void>;\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void;\n    followup(message: UserMessage): void;\n    steer(message: UserMessage): void;\n    inject(message: UserMessage): void;\n}',
+    declaration: 'export interface Agent {\n    readonly id: SessionId;\n    readonly options: AgentOptions;\n    readonly capabilities: AgentRuntimeCapabilities;\n    readonly session: Session;\n    readonly inbox: Inbox;\n    readonly status: AgentStatus;\n    readonly ctx: Context;\n    cancel(cause: AgentCancelCause, options?: CancelOptions): void;\n    whenIdle(): Promise<void>;\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void;\n    followup(message: UserMessage): void;\n    steer(message: UserMessage): void;\n    inject(message: UserMessage): void;\n}',
   },
   {
     name: 'AgentCancelCause',

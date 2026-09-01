@@ -28,6 +28,7 @@ function stubAgent(ctx: Context, id: string): Agent {
   return {
     id: session.id,
     options: {},
+    capabilities: [],
     session,
     inbox,
     status: 'idle',

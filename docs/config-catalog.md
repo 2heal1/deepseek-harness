@@ -136,25 +136,22 @@ Source: [`packages/context/agent-instructions/src/config.ts:18`](../packages/con
 
 ## `@deepseek-ai/dsh-agent-loop`
 
-Requires: `agents` · `sessions` · `llm` · `tools` · `systemPrompt`
+Requires: `agents` · `sessions` · `agentRuntimeRouter` · `agentRuntimes` · `llm` · `tools` · `systemPrompt`
 
 ```ts config-catalog
-/** Agent-loop plugin configuration. */
+/** Native Provider plugin configuration. */
 export interface Config {
-  /**
-   * Maximum parallel-safe calls in flight per agent step. `1` is serial;
-   * omission defaults to {@link DEFAULT_MAX_PARALLEL_TOOL_CALLS}.
-   */
+  /** Maximum parallel-safe calls in flight per Agent step. */
   maxParallelToolCalls?: number
-  /** Agents created or resumed at plugin startup. */
+  /** Native Agents created or resumed at plugin startup. */
   agents: (AgentOptions & {
-    /** Stable config label used in logs and as the fresh combined-id prefix. */
+    /** Stable config label used when a fresh identity must be minted. */
     id: string
-    /** Optional stable identity; remounts resume its materialized history, while first use creates it fresh. */
+    /** Optional stable fresh-or-resume identity. */
     sessionId?: SessionId
-    /** Optional workspace for a fresh session. */
+    /** Optional workspace for a fresh Session. */
     cwd?: string
-    /** Persisted session to resume instead of creating a fresh session. */
+    /** Existing persisted Session to resume. */
     resumeSessionId?: SessionId
   })[]
 }
@@ -162,7 +159,7 @@ export interface Config {
 
 Depends on: [`AgentOptions`](subsystems/core.md) · [`SessionId`](subsystems/core.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:255`](../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:162`](../packages/core/agent-loop/src/index.ts)
 
 <a id="deepseek-aidsh-agent-presets"></a>
 
@@ -201,6 +198,22 @@ export type PresetTrust = 'system' | 'user'
 ```
 
 Source: [`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/agent-presets/src/preset.ts)
+
+<a id="deepseek-aidsh-agent-runtime-router"></a>
+
+## `@deepseek-ai/dsh-agent-runtime-router`
+
+Requires: `agents` · `sessions` · `agentRuntimes` · `llm` · `tools` · `systemPrompt`
+
+```ts config-catalog
+/** Router configuration before Runtime Profile resolution moves to F3. */
+export interface Config {
+  /** Provider selected for AgentFactory create and resume operations. */
+  provider: string
+}
+```
+
+Source: [`packages/core/agent-runtime-router/src/index.ts:61`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 
@@ -292,7 +305,7 @@ export interface GoalConfig {
 
 Depends on: [`AgentLoopConfig`](#deepseek-aidsh-agent-loop) · [`GoalDomainConfig`](#deepseek-aidsh-goal) · [`InvariantConfig`](#deepseek-aidsh-invariants) · [`JobsConfig`](#deepseek-aidsh-jobs-local) · [`SessionTitleConfig`](#deepseek-aidsh-session-title) · [`SkillFileSystem`](../packages/skill/skill-filesystem/src/index.ts) · [`SkillRegistryConfig`](#deepseek-aidsh-skill) · [`SystemPromptConfig`](#deepseek-aidsh-system-prompt) · [`toolBash`](../packages/shell/tool-bash/src/index.ts) · [`toolGoal`](../packages/goal/tool-goal/src/index.ts) · [`toolJobs`](../packages/jobs/tool-jobs/src/index.ts) · [`ToolsConfig`](#deepseek-aidsh-tools) · [`toolSkill`](../packages/skill/tool-skill/src/index.ts) · [`workspaceContext`](../packages/context/agent-instructions/src/index.ts)
 
-Source: [`packages/examples/agent-spine-demo/src/index.ts:92`](../packages/examples/agent-spine-demo/src/index.ts)
+Source: [`packages/examples/agent-spine-demo/src/index.ts:96`](../packages/examples/agent-spine-demo/src/index.ts)
 
 <a id="deepseek-aidsh-agent-tool-presentation"></a>
 

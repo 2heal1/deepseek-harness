@@ -10,6 +10,8 @@ import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -31,6 +33,8 @@ async function mountPersistentHarness(root: string, adapter: MockAdapter): Promi
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(JsonlSessionPersistence, { root })
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -247,6 +251,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
+    await ctx2.plugin(AgentRuntimeRegistry)
+    await ctx2.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx2.plugin(AgentLoop, { agents: [] })
     await ctx2.plugin(JsonlSessionPersistence, { root })
     ctx2.llm.registerAdapter(['mock'], adapter2)
@@ -275,6 +281,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
+    await ctx2.plugin(AgentRuntimeRegistry)
+    await ctx2.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx2.plugin(AgentLoop, { agents: [] })
     await ctx2.plugin(JsonlSessionPersistence, { root })
     ctx2.llm.registerAdapter(['mock'], adapter2)
@@ -359,7 +367,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
       resumeSessionId: sessionId,
       agentOptions: { provider: 'mock', model: 'mock' },
     })
-    const transactionLabels = [`agentLoop.lifecycle(${sessionId})`]
+    const transactionLabels = [`agentRuntimeRouter.lifecycle(${sessionId})`]
 
     expect(ctx.fiber.getEffects().map(effect => effect.label)).toEqual(expect.arrayContaining(transactionLabels))
     await handle.dispose()
@@ -525,6 +533,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     const loopFiber = await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(JsonlSessionPersistence, { root })
     ctx.llm.registerAdapter(['mock'], new MockAdapter([textResponse('next')]))
@@ -544,7 +554,9 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
 
     const resuming = ctx.agents.resume({ resumeSessionId: sessionId, agentOptions: { provider: 'mock', model: 'mock' } })
     await preparationStarted.promise
-    const rejection = expect(promptly(resuming)).rejects.toThrow(/agent loop is not active/)
+    const rejection = expect(promptly(resuming)).rejects.toMatchObject({
+      code: 'RUNTIME_UNAVAILABLE',
+    })
     await promptly(loopFiber.dispose())
     await rejection
 
@@ -588,6 +600,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
+    await ctx2.plugin(AgentRuntimeRegistry)
+    await ctx2.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx2.plugin(AgentLoop, { agents: [] })
     await ctx2.plugin(JsonlSessionPersistence, { root })
     ctx2.llm.registerAdapter(['mock'], adapter2)
@@ -620,6 +634,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
+    await ctx2.plugin(AgentRuntimeRegistry)
+    await ctx2.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx2.plugin(AgentLoop, { agents: [] })
     await ctx2.plugin(JsonlSessionPersistence, { root })
     ctx2.llm.registerAdapter(['mock'], adapter2)
@@ -656,6 +672,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx2.plugin(SystemPrompt)
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
+    await ctx2.plugin(AgentRuntimeRegistry)
+    await ctx2.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx2.plugin(AgentLoop, { agents: [] })
     await ctx2.plugin(JsonlSessionPersistence, { root })
     ctx2.llm.registerAdapter(['mock'], adapter2)
@@ -689,6 +707,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     ctx.llm.registerAdapter(['mock'], adapter)
     await expect(ctx.agents.resume({ resumeSessionId: SessionId('nope') }))
@@ -802,7 +822,7 @@ describe('creation and resume cancellation edges', () => {
     await expect(ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: { provider: 'mock', model: 'mock' },
-    })).rejects.toThrow('agent loop is not active')
+    })).rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' })
     expect(ctx.agents.get(sessionId)).toBeUndefined()
     await ctx.fiber.dispose()
   })
@@ -878,6 +898,8 @@ describe('configured-start failure edges', () => {
     await configured.plugin(SystemPrompt)
     await configured.plugin(ToolRuntime)
     await configured.plugin(AgentRegistry)
+    await configured.plugin(AgentRuntimeRegistry)
+    await configured.plugin(AgentRuntimeRouter, { provider: 'native' })
     await configured.plugin(JsonlSessionPersistence, { root })
     configured.llm.registerAdapter(['mock'], new MockAdapter([]))
     configured.sessionPersistence.prepare = (id, signal) => ctx.sessionPersistence.prepare(id, signal)
@@ -923,6 +945,8 @@ describe('configured-start failure edges', () => {
     await configured.plugin(SystemPrompt)
     await configured.plugin(ToolRuntime)
     await configured.plugin(AgentRegistry)
+    await configured.plugin(AgentRuntimeRegistry)
+    await configured.plugin(AgentRuntimeRouter, { provider: 'native' })
     await configured.plugin(JsonlSessionPersistence, { root })
     configured.llm.registerAdapter(['mock'], new MockAdapter([]))
     configured.sessionPersistence.prepare = (id, signal) => ctx.sessionPersistence.prepare(id, signal)

@@ -14,6 +14,8 @@ import SessionStore, { SessionId, TurnEndReason } from '@deepseek-ai/dsh-session
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, TOOL_ABORTED_BEFORE_DISPATCH } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
 
@@ -28,6 +30,8 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx
@@ -234,8 +238,18 @@ describe('Agent.cancel()', () => {
     // abort-to-idle window must not latch, so `whenIdle()` does not wait on
     // a model turn over the session being torn down.
     const disposal = handle.dispose()
-    setTimeout(() => { send(agent, 'late wake') }, 10)
+    const lateWake = new Promise<unknown>((resolve) => {
+      setTimeout(() => {
+        try {
+          send(agent, 'late wake')
+          resolve(undefined)
+        } catch (error: unknown) {
+          resolve(error)
+        }
+      }, 10)
+    })
     await disposal
+    await expect(lateWake).resolves.toMatchObject({ code: 'SUBMISSION_REJECTED' })
 
     expect(adapter.requests).toHaveLength(1)
     expect(userTexts(agent)).toEqual(['active'])
@@ -672,6 +686,8 @@ describe('Agent.cancel()', () => {
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     ctx.llm.registerAdapter(['mock'], adapter)
 

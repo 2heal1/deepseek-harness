@@ -34,6 +34,7 @@ function agent(ctx: Context): Agent {
   const value: Agent = {
     id,
     options: {},
+    capabilities: [],
     session,
     inbox,
     ctx: scope.ctx,

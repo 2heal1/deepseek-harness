@@ -14,10 +14,12 @@ A turn flows through the six packages in one loop: the driver in [`agent-loop`](
 | `system-prompt/` | Prompt-section and tool-schema assembly (`ctx.systemPrompt`) | [system-prompt.md](system-prompt.md) |
 | `tools/` | The scoped tool registry and guarded execution pipeline (`ctx.tools`) | [tools.md](tools.md) |
 | `agent/` | The `Agent` interface, live registry, initiator scope, and `agent/*` event vocabulary (`ctx.agents`) | this page |
-| `agent-loop/` | The concrete driver implementing the public `Agent` contract (`ctx.agentLoop`) | this page |
+| `agent-runtime/` | Provider discovery and provider-neutral runtime types (`ctx.agentRuntimes`) | this page |
+| `agent-runtime-router/` | The sole Agent factory and common lifecycle owner (`ctx.agentRuntimeRouter`) | this page |
+| `agent-loop/` | The Native runtime Provider and React loop driver (`ctx.agentLoop`) | this page |
 | `scope/` | The scoped-registration primitive the registries and loop build per-agent scoping on | [scope.md](scope.md) |
 
-`scope/` is the one non-service package: a dependency-free library (`createScope`/`scopeOf`/`scopeTarget`) that sits below `session/` and `system-prompt/` in the module graph precisely so they can consume it without a cycle. `agent-loop` is the one concrete implementation of the public `Agent` contract and lives here because it is the harness's default product loop; it runs each driver inside `ctx.agents.withInitiator()`. Extension plugins depend on `agent` — including when they need the initiating Agent — and never on `agent-loop` directly, so the loop stays swappable. The default composition that wires this spine into a runnable agent is [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md).
+`scope/` is the one non-service package: a dependency-free library (`createScope`/`scopeOf`/`scopeTarget`) that sits below `session/` and `system-prompt/` in the module graph precisely so they can consume it without a cycle. The Router owns public Agent identity, publication, admission, rollback, and teardown; `agent-loop` supplies the default Native driver and runs it inside `ctx.agents.withInitiator()`. Extension plugins depend on `agent`, while runtime implementations register through `agent-runtime`. The default composition that wires this spine into a runnable agent is [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md).
 
 ## Creation and ownership
 
@@ -48,11 +50,11 @@ interface AgentHandle {
 
 `CreateAgentOptions` carries the shared identity and everything a fresh agent needs before publication: session metadata (`meta` — validated `cwd`, fork lineage, seed boundary, origin classification, delegation depth), an optional `seed` replay prefix for forks, per-agent `AgentOptions`, a creation-only cancellation `signal`, and `setup`. `ResumeAgentOptions` is the persisted-identity counterpart: `resumeSessionId`, `agentOptions`, `signal`, and `setup`. The `setup` callback (`AgentSetup`) composes the agent's scoped world while both ids are still unpublished — everything registered through `agentCtx` exists before `agent/created` and the first prompt assembly — and may return a synchronous commit invoked immediately before publication; a setup rejection, commit throw, or owner disposal rolls the transaction back without publishing either id.
 
-`AgentFactory` is the creation interface behind the registry: the loop registers its factory via `ctx.agents.setFactory()`, so consumers use `ctx.agents` without depending on the concrete loop package. The exact `create`/`resume` signatures and rollback contracts are in the [generated section](#ctxagents--agentregistry) below.
+`AgentFactory` is the creation interface behind the registry: the runtime Router registers the sole factory via `ctx.agents.setFactory()`, so consumers use `ctx.agents` without depending on the Router or a concrete Provider. The exact `create`/`resume` signatures and rollback contracts are in the [generated section](#ctxagents--agentregistry) below.
 
 ## The agent handle
 
-`Agent` is the surface every plugin (UI, hooks, orchestrators) programs against; `ctx.agents.get(id)` returns it, and the [initiator scope](#initiating-agent) carries it. The concrete implementation is package-internal to dsh-agent-loop; nothing outside the loop depends on it. The unified `send` method exposes target and wakeup routing directly; `followup`, `steer`, and `inject` are fixed-preset aliases.
+`Agent` is the surface every plugin (UI, hooks, orchestrators) programs against; `ctx.agents.get(id)` returns it, and the [initiator scope](#initiating-agent) carries it. The Router-owned implementation delegates execution to the selected Provider driver. The unified `send` method exposes target and wakeup routing directly; `followup`, `steer`, and `inject` are fixed-preset aliases.
 
 Source: [`packages/core/agent/src/types.ts`](../../packages/core/agent/src/types.ts)
 
@@ -63,6 +65,8 @@ interface Agent {
   readonly id: SessionId
   /** The provider route and model this agent's requests use. */
   readonly options: AgentOptions
+  /** Immutable optional runtime capabilities fixed before publication. */
+  readonly capabilities: AgentRuntimeCapabilities
   /** The live session this agent drives; its log is the durable source of truth. */
   readonly session: Session
   /** The agent-owned projection of durable pending work. */
@@ -344,40 +348,59 @@ Source: [`packages/core/agent-default-model/src/index.ts:64`](../../packages/cor
 
 ### `ctx.agentLoop` — `AgentLoop`
 
-Concrete agent factory and driver service.
+Native Provider and loop configuration service.
 
 ```ts cordis-catalog
 /**
- * Create an agent and session under one caller-supplied identity, owned by
- * the accessing fiber. Constructor-driven config calls mint a fresh combined
- * id before entering this boundary.
- * @param id - shared agent/session identity.
- * @param options - concrete loop options.
- * @param meta - optional fresh-session workspace metadata.
- * @returns the published running agent.
+ * Report the capabilities and protocol metadata of the Native runtime.
+ * @param _request - probe context supplied by the Router.
+ * @returns the current Native runtime metadata.
  */
-create(id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader, 'cwd'> = {}): Agent
+probe(_request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult>
 
 /**
- * Create an owned agent on a caller-supplied session id.
- * @param ownerCtx - caller context that structurally owns the lifecycle.
- * @param options - identities, session seed/metadata, loop options, setup, and cancellation.
- * @returns the published handle.
+ * Prepare a Native runtime for an unpublished Router-owned Agent.
+ * @param request - resolved runtime request and unpublished Agent context.
+ * @returns the prepared Native runtime.
  */
-async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>
+prepare(request: AgentRuntimePrepareRequest): Promise<PreparedAgentRuntime>
 
 /**
- * Resume an owned agent from the configured persistence service.
- * @param ownerCtx - caller context that owns load, setup, and the live lifecycle.
- * @param options - persisted identity, loop options, setup, and cancellation.
- * @returns the published handle.
+ * Prepare the in-process Native driver without an asynchronous handshake.
+ * @param request - Router-owned unpublished Agent and runtime identity.
+ * @returns the prepared Native runtime.
  */
-async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>
+prepareSync(request: AgentRuntimePrepareRequest): PreparedAgentRuntime
+
+/**
+ * Compatibility helper for callers that still name the Native service.
+ * @param id - exact Session identity.
+ * @param options - Native model route.
+ * @param meta - fresh Session workspace metadata.
+ * @returns the published Router-owned Agent.
+ */
+create( id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader, 'cwd'> = {}, ): Agent
+
+/**
+ * Compatibility forwarding entry for existing package consumers.
+ * @param ownerCtx - lifecycle owner.
+ * @param options - Agent creation options.
+ * @returns the Router-owned handle.
+ */
+createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>
+
+/**
+ * Compatibility forwarding entry for existing package consumers.
+ * @param ownerCtx - lifecycle owner.
+ * @param options - Agent resume options.
+ * @returns the Router-owned handle.
+ */
+resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>
 ```
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-loop/src/index.ts:296`](../../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:317`](../../packages/core/agent-loop/src/index.ts)
 
 <a id="ctxagentpresets--agentpresets"></a>
 
@@ -550,6 +573,48 @@ Types: [ScopeKey](scope.md)
 
 Source: [`packages/preset/agent-presets/src/index.ts:82`](../../packages/preset/agent-presets/src/index.ts)
 
+<a id="ctxagentruntimerouter--agentruntimerouter"></a>
+
+### `ctx.agentRuntimeRouter` — `AgentRuntimeRouter`
+
+Configurable runtime Router and the sole AgentFactory implementation.
+
+```ts cordis-catalog
+/** Assert that the Router can accept another Agent lifecycle. */
+assertActive(): void
+
+/**
+ * Create and publish an Agent through the configured Provider.
+ * @param ownerCtx - caller context that owns the returned lifecycle.
+ * @param options - fresh Session, Agent, setup, and cancellation options.
+ * @returns the published Agent handle.
+ */
+async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>
+
+/**
+ * Preserve the Native service's synchronous create helper through the same
+ * Router-owned publication and teardown transaction.
+ * @param ownerCtx - caller context that owns the lifecycle.
+ * @param id - exact Session identity.
+ * @param options - Native model-route options.
+ * @param meta - fresh Session metadata.
+ * @returns the published Agent.
+ */
+createNative( ownerCtx: Context, id: SessionId, options: AgentOptions = {}, meta: Pick<SessionHeader, 'cwd'> = {}, ): Agent
+
+/**
+ * Load and publish an Agent through the configured Provider.
+ * @param ownerCtx - caller context that owns the returned lifecycle.
+ * @param options - persisted Session identity, Agent options, setup, and cancellation.
+ * @returns the published Agent handle.
+ */
+async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandle>
+```
+
+Types: [SessionHeader](persistence.md)
+
+Source: [`packages/core/agent-runtime-router/src/index.ts:517`](../../packages/core/agent-runtime-router/src/index.ts)
+
 <a id="ctxagentruntimes--agentruntimeregistry"></a>
 
 ### `ctx.agentRuntimes` — `AgentRuntimeRegistry`
@@ -588,7 +653,7 @@ Source: [`packages/core/agent-runtime/src/index.ts:184`](../../packages/core/age
 
 ### `ctx.agents` — `AgentRegistry`
 
-Agent service (`ctx.agents`): tracks live agents and carries the initiating Agent through one process-local asynchronous driver chain. Agent *creation* is provided by whichever plugin implements the AgentFactory (`@deepseek-ai/dsh-agent-loop`), registered via setFactory.
+Agent service (`ctx.agents`): tracks live agents and carries the initiating Agent through one process-local asynchronous driver chain. The runtime Router provides Agent creation through the AgentFactory registered via setFactory.
 
 Initiator methods provide same-process causal attribution only. Ambient presence is neither liveness proof nor authorization; subjects and owners remain explicit, as does identity at worker, process, persistence, and wire boundaries. Returned Promise boundaries drain during teardown, except a nested lineage that starts an owning-fiber unload is excluded from its own drain.
 
@@ -782,7 +847,7 @@ A fully configured agent and live session were published. Setup is composition-o
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:159`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:178`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentdisposed--emit"></a>
 
@@ -804,7 +869,7 @@ An agent left the registry; AgentLoop emits this after driver quiescence and sco
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:168`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:187`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agenterror--emit"></a>
 
@@ -828,7 +893,7 @@ A step or turn errored. The machine reports a failure here even when the error h
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:290`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:309`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxclaimed--emit"></a>
 
@@ -852,7 +917,7 @@ One message left the inbox inside its open turn. If the proposed step is rejecte
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:197`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:216`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxdiscarded--emit"></a>
 
@@ -873,7 +938,7 @@ One message was discarded from the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:205`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:224`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxinserted--emit"></a>
 
@@ -894,7 +959,7 @@ One message entered the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:186`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:205`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentpre-step--waterfall"></a>
 
@@ -919,7 +984,7 @@ Reject a proposed step or replace the messages that enter it. Calling `next()` p
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:231`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:250`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest--waterfall"></a>
 
@@ -945,7 +1010,7 @@ Replace the frozen call configuration. `await next()` yields the config the mach
 
 Types: [LlmCallConfig](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:244`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:263`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest-error--waterfall"></a>
 
@@ -974,7 +1039,7 @@ Handle one failed model-request attempt before the loop retries or closes its st
 
 Types: [LlmFailure](llm-streaming.md) · [ResolvedRetryPolicy](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:260`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:279`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentsession-start--emit"></a>
 
@@ -998,7 +1063,7 @@ The session lifecycle began, once before the first turn. Use `agent.inject()` to
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:217`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:236`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentstatus--emit"></a>
 
@@ -1021,7 +1086,7 @@ Agent status changed (`idle` ⇄ `running`). A waking delivery enters `running` 
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:178`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:197`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentturn-stopping--serial"></a>
 
@@ -1052,7 +1117,7 @@ The turn is about to close: the model owes no response (no live tool calls, no f
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:278`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:297`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agent-loop-events"></a>
 
@@ -1062,22 +1127,19 @@ Source: [`packages/core/agent/src/runtime-types.ts:278`](../../packages/core/age
 
 #### `agent-loop/config-start-failed` — emit
 
-A declarative agent entry failed before it could publish a live agent. Consumers that buffer work for the configured identity use this transient signal to reject that work instead of waiting forever. Normal factory teardown suppresses failures from the cancelled startup attempt.
+A declarative agent entry failed before it could publish a live agent.
 
 ```ts cordis-catalog
 /**
  * A declarative agent entry failed before it could publish a live agent.
- * Consumers that buffer work for the configured identity use this
- * transient signal to reject that work instead of waiting forever. Normal
- * factory teardown suppresses failures from the cancelled startup attempt.
- * @param payload.sessionId - exact shared agent/session identity that failed startup.
- * @param payload.error - persistence, setup, or publication failure.
+ * @param payload.sessionId - exact shared Agent and Session identity.
+ * @param payload.error - preparation, setup, or publication failure.
  * @mode emit
  */
 'agent-loop/config-start-failed'(payload: { sessionId: SessionId; error: unknown }): void
 ```
 
-Source: [`packages/core/agent-loop/src/index.ts:183`](../../packages/core/agent-loop/src/index.ts)
+Source: [`packages/core/agent-loop/src/index.ts:127`](../../packages/core/agent-loop/src/index.ts)
 
 <a id="agent-preset-events"></a>
 

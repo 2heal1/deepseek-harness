@@ -43,6 +43,7 @@ function agentForCwd(cwd: string): Agent {
     ctx: new Context(),
     id,
     options: {},
+    capabilities: [],
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',
@@ -60,6 +61,7 @@ function sessionAgent(session: Session, id = 'tool-skill-agent'): Agent {
   return {
     id: SessionId(id),
     options: {},
+    capabilities: [],
     session,
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'running',

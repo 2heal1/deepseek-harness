@@ -13,6 +13,8 @@ import SessionStore, { Session, SessionId, foldRequestHeader } from '@deepseek-a
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
@@ -31,6 +33,8 @@ async function harnessRoutes(
   await ctx.plugin(SystemPrompt, { persona })
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   await ctx.plugin(AgentLoop, { agents: [] })
   for (const [provider, adapter] of adapters) ctx.llm.registerAdapter([provider], adapter)
   return ctx
@@ -258,6 +262,8 @@ describe('request stability across the loop', () => {
     await ctx.plugin(SystemPrompt, { persona: 'stable base' })
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     const started = Promise.withResolvers<undefined>()
     const reasoning = Promise.withResolvers<LlmModelReasoningInfo>()
@@ -376,6 +382,8 @@ describe('request stability across the loop', () => {
     await ctx.plugin(SystemPrompt, { persona: 'stable base' })
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
+    await ctx.plugin(AgentRuntimeRegistry)
+    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
     await ctx.plugin(AgentLoop, { agents: [] })
     let observed: GenerateOptions | undefined
     ctx.on('llm/stream', (options) => {

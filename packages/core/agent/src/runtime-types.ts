@@ -6,6 +6,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { AgentRuntimeCapabilities } from '@deepseek-ai/dsh-agent-runtime'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type { LlmCallConfig, LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { AgentCancelCause, Session, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
@@ -60,12 +61,30 @@ export type RequestErrorAction = { kind: 'retry' } | undefined
 /** Why a session lifecycle began; seeded creates are `startup`, while persisted loads are `resume`. */
 export type SessionStartSource = 'startup' | 'resume' | 'clear' | 'compact'
 
+/** Runtime-owned subset of Agent operations delegated by the Router. */
+export type AgentDriver = Pick<
+  Agent,
+  'inbox' | 'status' | 'cancel' | 'whenIdle' | 'runMaintenance' | 'send'
+>
+
+declare module '@deepseek-ai/dsh-agent-runtime' {
+  interface PreparedAgentRuntime {
+    /**
+     * Native compatibility driver used while callers migrate to the
+     * provider-neutral submission API. External Providers omit this field.
+     */
+    readonly agentDriver?: AgentDriver
+  }
+}
+
 /** Public live-agent handle. */
 export interface Agent {
   /** The single identity shared with {@link session}. */
   readonly id: SessionId
   /** The provider route and model this agent's requests use. */
   readonly options: AgentOptions
+  /** Immutable optional runtime capabilities fixed before publication. */
+  readonly capabilities: AgentRuntimeCapabilities
   /** The live session this agent drives; its log is the durable source of truth. */
   readonly session: Session
   /** The agent-owned projection of durable pending work. */

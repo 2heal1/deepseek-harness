@@ -19,6 +19,10 @@ import ToolRuntime, { type Config as ToolsConfig } from '@deepseek-ai/dsh-tools'
 import SkillRegistry, { type Config as SkillRegistryConfig } from '@deepseek-ai/dsh-skill'
 import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import * as agentRuntimeInvariant from '@deepseek-ai/dsh-agent-runtime/invariant'
+import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
+import * as agentRuntimeRouterInvariant from '@deepseek-ai/dsh-agent-runtime-router/invariant'
 import GoalService, { type Config as GoalDomainConfig } from '@deepseek-ai/dsh-goal'
 import * as goalSession from '@deepseek-ai/dsh-goal-round-driver'
 import * as toolGoal from '@deepseek-ai/dsh-tool-goal'
@@ -235,6 +239,8 @@ export function apply(ctx: Context, config: Config): void {
     ctx.plugin(SkillFileSystem, Object.assign({}, config.skills?.filesystem, { dshHome }))
   }
   ctx.plugin(AgentRegistry)
+  ctx.plugin(AgentRuntimeRegistry)
+  ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
   ctx.plugin(llmRetry)
   if (config.goals !== undefined && config.goals !== false) {
     ctx.plugin(GoalService, config.goals.domain ?? {})
@@ -245,6 +251,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.plugin(InvariantRegistry, config.invariants ?? {})
   ctx.plugin(sessionInvariant)
   ctx.plugin(agentInvariant)
+  ctx.plugin(agentRuntimeInvariant)
+  ctx.plugin(agentRuntimeRouterInvariant)
   ctx.plugin(scopeInvariant)
   ctx.plugin(agentLoopInvariant)
   if (config.toolBash !== false) {

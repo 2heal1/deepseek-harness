@@ -35,6 +35,7 @@ function liveAgent(ctx: Context, session: Session): Agent {
   const agent: Agent = {
     id: session.id,
     options: {},
+    capabilities: [],
     session,
     inbox,
     ctx,

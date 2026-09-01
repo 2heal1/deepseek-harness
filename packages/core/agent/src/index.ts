@@ -175,10 +175,10 @@ export interface AgentHandle {
 }
 
 /**
- * The agent-creation factory the loop implementation provides to the registry
- * via {@link AgentRegistry.setFactory}. Kept on the `dsh-agent` interface so
- * consumers (e.g. the ACP bridge) program against `ctx.agents` without
- * depending on the concrete `dsh-agent-loop` package.
+ * The agent-creation factory installed by the runtime Router through
+ * {@link AgentRegistry.setFactory}. Kept on the `dsh-agent` interface so
+ * consumers program against `ctx.agents` without depending on the Router or a
+ * concrete runtime Provider.
  */
 export interface AgentFactory {
   /**
@@ -243,9 +243,9 @@ interface FactorySlot {
 
 /**
  * Agent service (`ctx.agents`): tracks live agents and carries the initiating
- * Agent through one process-local asynchronous driver chain. Agent *creation*
- * is provided by whichever plugin implements the {@link AgentFactory}
- * (`@deepseek-ai/dsh-agent-loop`), registered via {@link setFactory}.
+ * Agent through one process-local asynchronous driver chain. The runtime Router
+ * provides Agent creation through the {@link AgentFactory} registered via
+ * {@link setFactory}.
  *
  * Initiator methods provide same-process causal attribution only. Ambient
  * presence is neither liveness proof nor authorization; subjects and owners

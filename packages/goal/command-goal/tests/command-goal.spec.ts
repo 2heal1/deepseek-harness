@@ -25,6 +25,7 @@ function stubAgent(ctx: Context, id: string): { agent: Agent; session: Session }
   const agent: Agent = {
     id: session.id,
     options: {},
+    capabilities: [],
     session,
     inbox,
     ctx: new Context(),

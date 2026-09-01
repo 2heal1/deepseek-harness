@@ -34,6 +34,7 @@ function stubAgentForSession(session: Session): StubAgent {
   const agent: Agent = {
     id,
     options: {},
+    capabilities: [],
     session,
     inbox,
     ctx: new Context(),
