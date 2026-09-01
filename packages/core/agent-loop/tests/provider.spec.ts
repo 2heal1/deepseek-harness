@@ -94,6 +94,24 @@ describe('Native Agent runtime Provider', () => {
     await ctx.fiber.dispose()
   })
 
+  it('rejects invalid output-token caps at the Provider boundary', async () => {
+    const { ctx } = await harness()
+    const agentOptions = { provider: 'mock', model: 'mock', maxTokens: 1 }
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('provider-invalid-max-tokens'),
+      agentOptions,
+    })
+
+    for (const maxTokens of [0, Number.NaN]) {
+      agentOptions.maxTokens = maxTokens
+      expect(() => ctx.agentLoop.prepareSync(request(handle.agent.ctx, handle.agent.id)))
+        .toThrow('agent maxTokens must be a positive safe integer')
+    }
+
+    await handle.dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('runs provider-neutral submissions and memoizes disposal', async () => {
     const { ctx } = await harness(new MockAdapter([textResponse('done')]))
     const handle = await ctx.agents.create({
