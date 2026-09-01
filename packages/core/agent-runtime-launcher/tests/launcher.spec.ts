@@ -262,6 +262,7 @@ describe('secure runtime launch', () => {
     const config = settings('runtime-cli')
     config.profiles.main!.launch.resolution = { searchPath: ['/trusted/bin', '/fallback/bin'] }
     const { ctx, launcher, subprocess, profile, root } = await harness(config)
+    launcher.internals.platform = 'linux'
     subprocess.resolution = '/trusted/bin/runtime-cli'
     const handle = await launcher.launch({
       profile,
@@ -389,6 +390,7 @@ describe('secure runtime launch', () => {
 
   it('rejects a Windows command script on a non-Windows platform', async () => {
     const { ctx, launcher, subprocess, profile, root } = await harness(settings('/runtime/agent.bat'))
+    launcher.internals.platform = 'linux'
 
     await expect(launcher.launch(request(profile, driver({ allowWindowsCommandScript: true }))))
       .rejects.toThrow('Windows command scripts cannot run on this platform')

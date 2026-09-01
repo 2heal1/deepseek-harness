@@ -1,6 +1,6 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { RuntimeTemporaryMaterialOwner } from '@deepseek-ai/dsh-agent-runtime-launcher'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,7 +11,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   return {
     ...actual,
     open: async (...args: Parameters<typeof actual.open>) => {
-      if (failSecondOpen.value && String(args[0]).endsWith('/second')) {
+      if (failSecondOpen.value && basename(String(args[0])) === 'second') {
         throw Object.assign(new Error('simulated file creation failure'), { code: 'EIO' })
       }
       return await actual.open(...args)
