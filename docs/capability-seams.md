@@ -110,7 +110,9 @@ flowchart LR
   svc_agentRuntimes["ctx.agentRuntimes<br/>Configurable Agent runtime registry"]
   pkg_agent_runtime_profile["agent-runtime-profile"]
   svc_agentRuntimeProfiles["ctx.agentRuntimeProfiles<br/>Runtime Profile resolver"]
+  pkg_agent_runtime_launcher["agent-runtime-launcher"]
   pkg_subagent_runtime_route["subagent-runtime-route"]
+  svc_agentRuntimeLauncher["ctx.agentRuntimeLauncher<br/>Secure external runtime launcher"]
   svc_agentRuntimeRouter["ctx.agentRuntimeRouter<br/>Agent runtime Router"]
   pkg_agent_spine_demo["agent-spine-demo"]
   svc_agentRuntimeSubagentRoutes["ctx.agentRuntimeSubagentRoutes<br/>Runtime-backed subagent routes"]
@@ -214,6 +216,7 @@ flowchart LR
   pkg_agent_loop --> svc_agentRuntimes
   pkg_agent_presets --> svc_agentPresets
   pkg_agent_runtime --> svc_agentRuntimes
+  pkg_agent_runtime_launcher --> svc_agentRuntimeLauncher
   pkg_agent_runtime_profile --> svc_agentRuntimeProfiles
   pkg_agent_runtime_router --> svc_agentRuntimeRouter
   pkg_agent_team --> svc_agentTeams
@@ -319,6 +322,7 @@ flowchart LR
   svc_agentDefaultModel --> pkg_headless
   svc_agentDefaultModel --> pkg_host_apiproxy
   svc_agentLoop --> pkg_agent_spine_demo
+  svc_agentRuntimeProfiles --> pkg_agent_runtime_launcher
   svc_agentRuntimeProfiles --> pkg_agent_runtime_router
   svc_agentRuntimeProfiles --> pkg_subagent_runtime_route
   svc_agentRuntimeRouter --> pkg_agent_spine_demo
@@ -399,6 +403,7 @@ flowchart LR
   svc_subagents --> pkg_tool_ralph
   svc_subagents --> pkg_tool_subagent
   svc_subagents --> pkg_tool_subagent_control
+  svc_subprocess --> pkg_agent_runtime_launcher
   svc_subprocess --> pkg_bash_local
   svc_subprocess --> pkg_bash_sandbox
   svc_subprocess --> pkg_lsp_stdio
@@ -470,14 +475,15 @@ flowchart LR
 | `ctx.skills` | `seam` | [`skill`](../packages/skill/skill) | [`skill-badge`](../packages/skill/skill-badge), [`skill-filesystem`](../packages/skill/skill-filesystem) | [`tool-skill`](../packages/skill/tool-skill) | - | Merges provider skill catalogs; tool-skill renders the session-prefix catalog and loads complete skill bodies. |
 | `ctx.agents` | `core` | [`agent`](../packages/core/agent) | - | [`agent-runtime-router`](../packages/core/agent-runtime-router), [`acp`](../packages/acp/acp), `subagent-inprocess` | - | Owns live Agent handles, the create/resume factory seam, and process-local initiator propagation. |
 | `ctx.agentRuntimes` | `seam` | [`agent-runtime`](../packages/core/agent-runtime) | [`agent-loop`](../packages/core/agent-loop) | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary. |
-| `ctx.agentRuntimeProfiles` | `core` | [`agent-runtime-profile`](../packages/core/agent-runtime-profile) | - | [`agent-runtime-router`](../packages/core/agent-runtime-router), [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | Resolves validated Settings into immutable non-secret snapshots, resolves credentials per process start, and owns shared profile capacity. |
+| `ctx.agentRuntimeProfiles` | `core` | [`agent-runtime-profile`](../packages/core/agent-runtime-profile) | - | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher), [`agent-runtime-router`](../packages/core/agent-runtime-router), [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | Resolves validated Settings into immutable non-secret snapshots, resolves credentials per process start, and owns shared profile capacity. |
+| `ctx.agentRuntimeLauncher` | `core` | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher) | - | - | - | Builds exact environments, protects Driver-owned controls, and owns bounded process-tree and temporary-material cleanup. |
 | `ctx.agentRuntimeRouter` | `core` | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | Installs the sole AgentFactory and owns profile-based Provider selection, publication, rollback, capacity lifetime, and teardown. |
 | `ctx.agentRuntimeSubagentRoutes` | `core` | [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | - | - | Maintains one wrapper Provider and delegation tool per Settings-backed one-shot route while ctx.subagents remains the dispatch authority. |
 | `ctx.agentDefaultModel` | `core` | [`agent-default-model`](../packages/core/agent-default-model) | - | [`headless`](../packages/bundle/headless), [`host-apiproxy`](../packages/host/apiproxy) | - | Layers the default ModelSelection through settings so direct and Host-backed Agent entry points share one state owner. |
 | `ctx.agentLoop` | `bundle` | [`agent-loop`](../packages/core/agent-loop) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | Prepares the Native loop driver behind the Router; extension packages depend on dsh-agent events and services. |
 | `ctx.goals` | `core` | [`goal`](../packages/goal/goal) | - | - | - | Folds revisioned objective state from the session log and keeps live continuation activation process-local. |
 | `ctx.e2b` | `core` | [`e2b`](../packages/e2b/e2b) | - | [`fs-e2b`](../packages/e2b/fs-e2b), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | - | Owns one shared E2B SDK handle, remote working directory, and final sandbox disposition so both fundamental E2B providers inhabit the same Linux runtime. |
-| `ctx.subprocess` | `seam` | [`subprocess`](../packages/subprocess/subprocess) | [`subprocess-local`](../packages/subprocess/subprocess-local), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`terminal-bash`](../packages/terminal/terminal-bash), [`lsp-stdio`](../packages/lsp/lsp-stdio), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code) | - | The bash executors, the PTY shell backend, the LSP host, and the out-of-process ACP, Codex, and Claude Code subagent backends spawn through ctx.subprocess; the service owns process coordinates, tree/session lifetime, stdio dispositions, terminal mechanics, and kill escalation. |
+| `ctx.subprocess` | `seam` | [`subprocess`](../packages/subprocess/subprocess) | [`subprocess-local`](../packages/subprocess/subprocess-local), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher), [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`terminal-bash`](../packages/terminal/terminal-bash), [`lsp-stdio`](../packages/lsp/lsp-stdio), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code) | - | The secure Agent Runtime launcher, bash executors, PTY shell backend, LSP host, and out-of-process subagent backends spawn through ctx.subprocess; the service owns process coordinates, tree/session lifetime, stdio dispositions, terminal mechanics, and kill escalation. |
 | `ctx.shell` | `seam` | [`shell`](../packages/shell/shell) | [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`pwsh-local`](../packages/shell/pwsh-local) | [`tool-bash`](../packages/shell/tool-bash), [`tool-pwsh`](../packages/shell/tool-pwsh), [`hooks-claude-code`](../packages/hooks/hooks-claude-code), [`hooks-codex`](../packages/hooks/hooks-codex) | - | The model-facing shell tools and hook bridges consume this seam; sandboxed, remote, or PowerShell executors replace bash-local without touching them. |
 | `ctx.shellEnv` | `core` | [`shell-env`](../packages/shell/shell-env) | - | [`tool-bash`](../packages/shell/tool-bash), [`tool-pwsh`](../packages/shell/tool-pwsh) | - | Plugins declare effect-scoped DSH_* facts; each shell tool collects one trusted snapshot per execution and its executor rebuilds the namespace. |
 | `ctx.terminals` | `seam` | [`terminal`](../packages/terminal/terminal) | [`terminal-bash`](../packages/terminal/terminal-bash) | [`tool-terminal`](../packages/terminal/tool-terminal) | - | The registry owns exact-Agent session identity and cleanup; backends own terminal mechanics, while tool-terminal exposes the owner-scoped model tools. |

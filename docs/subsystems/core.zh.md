@@ -16,11 +16,12 @@
 | `agent/` | `Agent` 接口、实时注册表、发起者作用域与 `agent/*` 事件词汇（`ctx.agents`） | 本页 |
 | `agent-runtime/` | Provider 发现与提供方无关的运行时类型（`ctx.agentRuntimes`） | 本页 |
 | `agent-runtime-profile/` | 由 Settings 支持的 profile 快照、凭据引用与共享容量（`ctx.agentRuntimeProfiles`） | 本页 |
+| `agent-runtime-launcher/` | 使用精确环境的外部进程启动、脱敏与完全停稳 teardown（`ctx.agentRuntimeLauncher`） | 本页 |
 | `agent-runtime-router/` | 唯一的 Agent Factory 与公共生命周期 owner（`ctx.agentRuntimeRouter`） | 本页 |
 | `agent-loop/` | Native 运行时 Provider 与 React 循环 driver（`ctx.agentLoop`） | 本页 |
 | `scope/` | 注册表与循环用于构建按 agent 作用域的注册原语 | [scope.md](scope.md) |
 
-`scope/` 是这里唯一的非服务包：一个零依赖库（`createScope`/`scopeOf`/`scopeTarget`），在模块图中位于 `session/` 与 `system-prompt/` 之下，正是为了让它们消费它而不形成环。`agent-runtime-profile` 校验 Settings，并为每次新运行解析一份完整、不可变的非秘密快照；profile 编辑只影响后续解析，而凭据值会在每次进程启动时单独解析。Router 选择该快照指定的 Provider，并持有共享 profile 容量直到运行时完全 teardown。它还拥有公开 Agent identity、发布、准入与回滚；`agent-loop` 提供默认 Native driver，并在 `ctx.agents.withInitiator()` 内运行它。扩展插件依赖 `agent`，运行时实现则通过 `agent-runtime` 注册。把这条主干接成可运行 Agent 的默认组合是 [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md)。
+`scope/` 是这里唯一的非服务包：一个零依赖库（`createScope`/`scopeOf`/`scopeTarget`），在模块图中位于 `session/` 与 `system-prompt/` 之下，正是为了让它们消费它而不形成环。`agent-runtime-profile` 校验 Settings，并为每次新运行解析一份完整、不可变的非秘密快照；profile 编辑只影响后续解析，而凭据值会在每次进程启动时单独解析。外部 Provider 使用 `agent-runtime-launcher` 获得精确环境、reserved control、私有临时材料、known-value 脱敏、有界进程树终止与完全停稳清理。Router 选择快照指定的 Provider，并持有共享 profile 容量直到运行时完全 teardown。它还拥有公开 Agent identity、发布、准入与回滚；`agent-loop` 提供默认 Native driver，并在 `ctx.agents.withInitiator()` 内运行它。扩展插件依赖 `agent`，运行时实现则通过 `agent-runtime` 注册。把这条主干接成可运行 Agent 的默认组合是 [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md)。
 
 <a id="creation-and-ownership"></a>
 
@@ -583,6 +584,23 @@ async standingKeyFor(id?: string): Promise<ScopeKey>
 Types: [ScopeKey](scope.md)
 
 Source: [`packages/preset/agent-presets/src/index.ts:82`](../../packages/preset/agent-presets/src/index.ts)
+
+<a id="ctxagentruntimelauncher--agentruntimelauncher"></a>
+
+### `ctx.agentRuntimeLauncher` — `AgentRuntimeLauncher`
+
+Shared secure launcher for all external Agent Runtime Providers.
+
+```ts cordis-catalog
+/**
+ * Resolve credentials, validate launch controls, create temporary material, and spawn one managed process.
+ * @param request - complete profile, Driver controls, protocol stdio, and caller cancellation.
+ * @returns the launch-scoped process, redactor, deadlines, and teardown owner.
+ */
+async launch(request: AgentRuntimeLaunchRequest): Promise<AgentRuntimeLaunchHandle>
+```
+
+Source: [`packages/core/agent-runtime-launcher/src/index.ts:441`](../../packages/core/agent-runtime-launcher/src/index.ts)
 
 <a id="ctxagentruntimeprofiles--agentruntimeprofiles"></a>
 

@@ -45,6 +45,7 @@
     "@deepseek-ai/dsh-agent-default-model": "workspace:^",
     "@deepseek-ai/dsh-agent-loop": "workspace:^",
     "@deepseek-ai/dsh-agent-runtime": "workspace:^",
+    "@deepseek-ai/dsh-agent-runtime-launcher": "workspace:^",
     "@deepseek-ai/dsh-agent-runtime-profile": "workspace:^",
     "@deepseek-ai/dsh-agent-runtime-router": "workspace:^",
     "@deepseek-ai/dsh-attachment-local": "workspace:^",

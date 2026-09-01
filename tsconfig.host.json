@@ -171,6 +171,7 @@
     { "path": "./packages/core/agent" },
     { "path": "./packages/core/agent-runtime" },
     { "path": "./packages/core/agent-runtime-profile" },
+    { "path": "./packages/core/agent-runtime-launcher" },
     { "path": "./packages/core/agent-default-model" },
     { "path": "./packages/interaction/commands" },
     {

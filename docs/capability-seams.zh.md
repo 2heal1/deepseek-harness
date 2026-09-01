@@ -112,7 +112,9 @@ flowchart LR
   svc_agentRuntimes["ctx.agentRuntimes<br/>Configurable Agent runtime registry"]
   pkg_agent_runtime_profile["agent-runtime-profile"]
   svc_agentRuntimeProfiles["ctx.agentRuntimeProfiles<br/>Runtime Profile resolver"]
+  pkg_agent_runtime_launcher["agent-runtime-launcher"]
   pkg_subagent_runtime_route["subagent-runtime-route"]
+  svc_agentRuntimeLauncher["ctx.agentRuntimeLauncher<br/>Secure external runtime launcher"]
   svc_agentRuntimeRouter["ctx.agentRuntimeRouter<br/>Agent runtime Router"]
   pkg_agent_spine_demo["agent-spine-demo"]
   svc_agentRuntimeSubagentRoutes["ctx.agentRuntimeSubagentRoutes<br/>Runtime-backed subagent routes"]
@@ -216,6 +218,7 @@ flowchart LR
   pkg_agent_loop --> svc_agentRuntimes
   pkg_agent_presets --> svc_agentPresets
   pkg_agent_runtime --> svc_agentRuntimes
+  pkg_agent_runtime_launcher --> svc_agentRuntimeLauncher
   pkg_agent_runtime_profile --> svc_agentRuntimeProfiles
   pkg_agent_runtime_router --> svc_agentRuntimeRouter
   pkg_agent_team --> svc_agentTeams
@@ -321,6 +324,7 @@ flowchart LR
   svc_agentDefaultModel --> pkg_headless
   svc_agentDefaultModel --> pkg_host_apiproxy
   svc_agentLoop --> pkg_agent_spine_demo
+  svc_agentRuntimeProfiles --> pkg_agent_runtime_launcher
   svc_agentRuntimeProfiles --> pkg_agent_runtime_router
   svc_agentRuntimeProfiles --> pkg_subagent_runtime_route
   svc_agentRuntimeRouter --> pkg_agent_spine_demo
@@ -401,6 +405,7 @@ flowchart LR
   svc_subagents --> pkg_tool_ralph
   svc_subagents --> pkg_tool_subagent
   svc_subagents --> pkg_tool_subagent_control
+  svc_subprocess --> pkg_agent_runtime_launcher
   svc_subprocess --> pkg_bash_local
   svc_subprocess --> pkg_bash_sandbox
   svc_subprocess --> pkg_lsp_stdio
@@ -472,14 +477,15 @@ flowchart LR
 | `ctx.skills` | `seam` | [`skill`](../packages/skill/skill) | [`skill-badge`](../packages/skill/skill-badge), [`skill-filesystem`](../packages/skill/skill-filesystem) | [`tool-skill`](../packages/skill/tool-skill) | - | 合并提供方的 skill（技能）目录；tool-skill 渲染会话前缀目录，并加载完整的 skill 正文。 |
 | `ctx.agents` | `core` | [`agent`](../packages/core/agent) | - | [`agent-runtime-router`](../packages/core/agent-runtime-router), [`acp`](../packages/acp/acp), `subagent-inprocess` | - | 拥有实时 Agent 句柄、创建／恢复工厂 seam，以及进程本地的发起方传播。 |
 | `ctx.agentRuntimes` | `seam` | [`agent-runtime`](../packages/core/agent-runtime) | [`agent-loop`](../packages/core/agent-loop) | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | 定义由 effect 管理生命周期的 Provider 发现与提供方无关运行时词汇。 |
-| `ctx.agentRuntimeProfiles` | `core` | [`agent-runtime-profile`](../packages/core/agent-runtime-profile) | - | [`agent-runtime-router`](../packages/core/agent-runtime-router), [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | 把已校验 Settings 解析为不可变的非秘密快照，在每次进程启动时解析凭据，并负责共享 profile 容量。 |
+| `ctx.agentRuntimeProfiles` | `core` | [`agent-runtime-profile`](../packages/core/agent-runtime-profile) | - | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher), [`agent-runtime-router`](../packages/core/agent-runtime-router), [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | 把已校验 Settings 解析为不可变的非秘密快照，在每次进程启动时解析凭据，并负责共享 profile 容量。 |
+| `ctx.agentRuntimeLauncher` | `core` | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher) | - | - | - | 构造精确环境、保护 Driver 自有 control，并负责有界进程树与临时材料清理。 |
 | `ctx.agentRuntimeRouter` | `core` | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | 安装唯一的 AgentFactory，并负责基于 profile 的 Provider 选择、发布、回滚、容量生命周期与 teardown。 |
 | `ctx.agentRuntimeSubagentRoutes` | `core` | [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | - | - | 为每条由 Settings 支持的一次性 route 维护一个包装 Provider 与委派工具，同时让 ctx.subagents 保持 dispatch 权威。 |
 | `ctx.agentDefaultModel` | `core` | [`agent-default-model`](../packages/core/agent-default-model) | - | [`headless`](../packages/bundle/headless), [`host-apiproxy`](../packages/host/apiproxy) | - | 通过 settings 分层默认 `ModelSelection`，让直接入口与 Host 支撑的 Agent 入口共享同一个状态所有者。 |
 | `ctx.agentLoop` | `bundle` | [`agent-loop`](../packages/core/agent-loop) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | 在 Router 后方准备 Native 循环 driver；扩展包依赖 dsh-agent 的事件与服务。 |
 | `ctx.goals` | `core` | [`goal`](../packages/goal/goal) | - | - | - | 从会话日志折叠带修订版本的目标状态，并将实时延续激活保留在进程本地。 |
 | `ctx.e2b` | `core` | [`e2b`](../packages/e2b/e2b) | - | [`fs-e2b`](../packages/e2b/fs-e2b), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | - | 拥有一个共享的 E2B SDK 句柄、远程工作目录和最终沙箱处置，使两个基础 E2B 提供方处于同一个 Linux 运行时中。 |
-| `ctx.subprocess` | `seam` | [`subprocess`](../packages/subprocess/subprocess) | [`subprocess-local`](../packages/subprocess/subprocess-local), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`terminal-bash`](../packages/terminal/terminal-bash), [`lsp-stdio`](../packages/lsp/lsp-stdio), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code) | - | Bash 执行器、PTY shell 后端、LSP Host，以及进程外 ACP、Codex 和 Claude Code subagent 后端都通过 ctx.subprocess 执行 spawn；该服务负责进程坐标、进程树／会话生命周期、stdio 处置、终端机制和 kill 升级。 |
+| `ctx.subprocess` | `seam` | [`subprocess`](../packages/subprocess/subprocess) | [`subprocess-local`](../packages/subprocess/subprocess-local), [`subprocess-e2b`](../packages/e2b/subprocess-e2b) | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher), [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`terminal-bash`](../packages/terminal/terminal-bash), [`lsp-stdio`](../packages/lsp/lsp-stdio), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code) | - | 安全 Agent Runtime Launcher、Bash 执行器、PTY shell 后端、LSP Host 和进程外 subagent 后端都通过 ctx.subprocess 执行 spawn；该服务负责进程坐标、进程树／会话生命周期、stdio 处置、终端机制和 kill 升级。 |
 | `ctx.shell` | `seam` | [`shell`](../packages/shell/shell) | [`bash-local`](../packages/shell/bash-local), [`bash-sandbox`](../packages/shell/bash-sandbox), [`pwsh-local`](../packages/shell/pwsh-local) | [`tool-bash`](../packages/shell/tool-bash), [`tool-pwsh`](../packages/shell/tool-pwsh), [`hooks-claude-code`](../packages/hooks/hooks-claude-code), [`hooks-codex`](../packages/hooks/hooks-codex) | - | 面向模型的 shell 工具和钩子桥接消费此 seam；沙箱、远程或 PowerShell 执行器可以替换 bash-local，而无需改动这些消费方。 |
 | `ctx.shellEnv` | `core` | [`shell-env`](../packages/shell/shell-env) | - | [`tool-bash`](../packages/shell/tool-bash), [`tool-pwsh`](../packages/shell/tool-pwsh) | - | 插件声明限定于 effect 作用域的 DSH_* 事实；每个 shell 工具在每次执行时收集一份可信快照，其执行器据此重建命名空间。 |
 | `ctx.terminals` | `seam` | [`terminal`](../packages/terminal/terminal) | [`terminal-bash`](../packages/terminal/terminal-bash) | [`tool-terminal`](../packages/terminal/tool-terminal) | - | 注册表负责精确到 Agent 的会话身份和清理；后端负责终端机制，tool-terminal 则提供限定于所有者作用域的模型接口。 |

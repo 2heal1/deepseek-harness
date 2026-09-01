@@ -201,6 +201,22 @@ export type PresetTrust = 'system' | 'user'
 
 来源：[`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/agent-presets/src/preset.ts)
 
+<a id="deepseek-aidsh-agent-runtime-launcher"></a>
+
+## `@deepseek-ai/dsh-agent-runtime-launcher`
+
+依赖：`subprocess` · `agentRuntimeProfiles`
+
+```ts config-catalog
+/** Launcher-owned configuration. */
+export interface Config {
+  /** Installation-owned root for crash-recoverable temporary launch material. */
+  temporaryRoot?: string
+}
+```
+
+来源：[`packages/core/agent-runtime-launcher/src/index.ts:60`](../packages/core/agent-runtime-launcher/src/index.ts)
+
 <a id="deepseek-aidsh-agent-runtime-profile"></a>
 
 ## `@deepseek-ai/dsh-agent-runtime-profile`

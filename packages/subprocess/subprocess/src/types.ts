@@ -66,6 +66,9 @@ export interface SubprocessStdio {
   stderr: SubprocessOutputMode
 }
 
+/** How a subprocess provider constructs the child environment around {@link SubprocessSpawnSpec.env}. */
+export type SubprocessEnvironmentMode = 'scrubbed-parent' | 'exact'
+
 /**
  * A fully-specified spawn request. This seam applies no defaults: every
  * disposition, limit, and directory is explicit, so the caller's own config —
@@ -94,11 +97,15 @@ export interface SubprocessSpawnSpec {
    */
   signal?: AbortSignal | undefined
   /**
-   * Explicit environment entries merged onto the implementation's scrubbed
-   * parent base (see `scrubbedParentEnv`), with no namespace validation. A
-   * string is a deliberate caller opt-in, so a forwarded credential-shaped
-   * entry or current `DSH_*` fact survives the scrub; `undefined` is a
-   * tombstone that removes an ordinary ambient entry from the child.
+   * Environment construction policy. Omission preserves the general-purpose
+   * scrubbed-parent behavior; security-sensitive launchers use `exact`.
+   */
+  envMode?: SubprocessEnvironmentMode | undefined
+  /**
+   * Child environment entries. Under `scrubbed-parent`, these merge onto the
+   * implementation's scrubbed ambient base and `undefined` removes one
+   * inherited entry. Under `exact`, this mapping is the complete environment
+   * and every value must be a string.
    */
   env?: NodeJS.ProcessEnv | undefined
 }

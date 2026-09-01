@@ -16,11 +16,12 @@ A turn flows through the six packages in one loop: the driver in [`agent-loop`](
 | `agent/` | The `Agent` interface, live registry, initiator scope, and `agent/*` event vocabulary (`ctx.agents`) | this page |
 | `agent-runtime/` | Provider discovery and provider-neutral runtime types (`ctx.agentRuntimes`) | this page |
 | `agent-runtime-profile/` | Settings-backed profile snapshots, credential references, and shared capacity (`ctx.agentRuntimeProfiles`) | this page |
+| `agent-runtime-launcher/` | Exact-environment external process launch, redaction, and quiescent teardown (`ctx.agentRuntimeLauncher`) | this page |
 | `agent-runtime-router/` | The sole Agent factory and common lifecycle owner (`ctx.agentRuntimeRouter`) | this page |
 | `agent-loop/` | The Native runtime Provider and React loop driver (`ctx.agentLoop`) | this page |
 | `scope/` | The scoped-registration primitive the registries and loop build per-agent scoping on | [scope.md](scope.md) |
 
-`scope/` is the one non-service package: a dependency-free library (`createScope`/`scopeOf`/`scopeTarget`) that sits below `session/` and `system-prompt/` in the module graph precisely so they can consume it without a cycle. `agent-runtime-profile` validates Settings and resolves a complete immutable non-secret snapshot for each new run; profile edits affect later resolutions, while credential values are resolved separately for each process start. The Router selects the Provider named by that snapshot and holds shared profile capacity through complete runtime teardown. It also owns public Agent identity, publication, admission, and rollback; `agent-loop` supplies the default Native driver and runs it inside `ctx.agents.withInitiator()`. Extension plugins depend on `agent`, while runtime implementations register through `agent-runtime`. The default composition that wires this spine into a runnable agent is [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md).
+`scope/` is the one non-service package: a dependency-free library (`createScope`/`scopeOf`/`scopeTarget`) that sits below `session/` and `system-prompt/` in the module graph precisely so they can consume it without a cycle. `agent-runtime-profile` validates Settings and resolves a complete immutable non-secret snapshot for each new run; profile edits affect later resolutions, while credential values are resolved separately for each process start. External Providers use `agent-runtime-launcher` for exact environments, reserved controls, private temporary material, known-value redaction, bounded process-tree termination, and quiescent cleanup. The Router selects the Provider named by the snapshot and holds shared profile capacity through complete runtime teardown. It also owns public Agent identity, publication, admission, and rollback; `agent-loop` supplies the default Native driver and runs it inside `ctx.agents.withInitiator()`. Extension plugins depend on `agent`, while runtime implementations register through `agent-runtime`. The default composition that wires this spine into a runnable agent is [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md).
 
 ## Creation and ownership
 
@@ -575,6 +576,23 @@ async standingKeyFor(id?: string): Promise<ScopeKey>
 Types: [ScopeKey](scope.md)
 
 Source: [`packages/preset/agent-presets/src/index.ts:82`](../../packages/preset/agent-presets/src/index.ts)
+
+<a id="ctxagentruntimelauncher--agentruntimelauncher"></a>
+
+### `ctx.agentRuntimeLauncher` — `AgentRuntimeLauncher`
+
+Shared secure launcher for all external Agent Runtime Providers.
+
+```ts cordis-catalog
+/**
+ * Resolve credentials, validate launch controls, create temporary material, and spawn one managed process.
+ * @param request - complete profile, Driver controls, protocol stdio, and caller cancellation.
+ * @returns the launch-scoped process, redactor, deadlines, and teardown owner.
+ */
+async launch(request: AgentRuntimeLaunchRequest): Promise<AgentRuntimeLaunchHandle>
+```
+
+Source: [`packages/core/agent-runtime-launcher/src/index.ts:441`](../../packages/core/agent-runtime-launcher/src/index.ts)
 
 <a id="ctxagentruntimeprofiles--agentruntimeprofiles"></a>
 

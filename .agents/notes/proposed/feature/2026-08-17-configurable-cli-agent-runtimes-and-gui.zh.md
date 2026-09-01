@@ -128,6 +128,8 @@ F4 按以下规则实现供所有外部运行时使用的唯一 Launcher：
 7. 执行快照中为正数的 startup、turn、graceful-shutdown 和 final-termination deadline。Timeout 会停止接纳，在可用时请求 protocol cancellation，关闭 protocol input，通过 subprocess process-tree terminator 逐级升级，等待 `waitForExit`，然后才完成 rollback 或 dispose。
 8. Capacity 会一直占用到进程树完全停稳且临时材料清理完成。Cancellation 或 cleanup failure 会保留原 terminal reason，并独立报告 `DISPOSE_FAILED`；任何 success result 都不能隐藏未完成清理。
 
+`@deepseek-ai/dsh-agent-runtime-launcher` 在 `ctx.agentRuntimeLauncher` 实现这条共享启动路径。外部 Provider 提供协议 shutdown hook，以及可信的 reserved-control 与 permission-enforcement 声明；Launcher 负责可执行文件策略、`envMode: exact`、每次启动的凭据解析、私有启动材料、字面 known-value 脱敏、deadline，以及与 `ctx.subprocess` 的有序 join。Router 或 runtime-route Consumer 持有 F3 capacity lease，直到 Provider 完成该句柄的 disposal。F4 不增加 Session event 或持久 runtime identity；这些仍属于 F5。
+
 ### 术语与所有权
 
 | 术语 | 含义 | 所有者 |

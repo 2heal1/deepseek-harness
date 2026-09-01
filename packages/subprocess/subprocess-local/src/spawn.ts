@@ -19,6 +19,7 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import type {
   CollectedOutput,
   SubprocessCollect,
+  SubprocessEnvironmentMode,
   SubprocessHandle,
   SubprocessOutcome,
   SubprocessOutputMode,
@@ -27,14 +28,21 @@ import type {
 import { linuxProcessGroupHasLiveMembers } from './process-inspector.ts'
 
 /**
- * Build a child environment: explicit caller entries override the scrubbed
- * parent base using the target platform's environment-key semantics. A string
- * deliberately restores or overrides an entry; an explicit `undefined`
- * tombstone removes an ordinary ambient entry.
+ * Build a child environment under the requested construction policy.
  * @param extra - explicit caller entries and tombstones, merged after the scrub.
+ * @param mode - scrubbed ambient merge or exact replacement.
  * @returns the environment to hand to `spawn` for the child process.
  */
-export function childEnv(extra?: Readonly<NodeJS.ProcessEnv>): NodeJS.ProcessEnv {
+export function childEnv(
+  extra?: Readonly<NodeJS.ProcessEnv>,
+  mode: SubprocessEnvironmentMode = 'scrubbed-parent',
+): NodeJS.ProcessEnv {
+  if (mode === 'exact') {
+    for (const [name, value] of Object.entries(extra ?? {})) {
+      if (value === undefined) throw new Error(`subprocess exact environment entry "${name}" is undefined`)
+    }
+    return { ...extra }
+  }
   const env = scrubbedParentEnv()
   if (process.platform !== 'win32') return { ...env, ...extra }
   let entries: [string, string | undefined][] = Object.entries(env)
@@ -346,7 +354,7 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
   const errMode = spec.stdio.stderr
   const stdinMode = spec.stdio.stdin
 
-  const env = childEnv(spec.env)
+  const env = childEnv(spec.env, spec.envMode)
   const child = spawn(program, args, {
     cwd: spec.cwd,
     env,
@@ -441,8 +449,6 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
     // Observe from the first termination tier onward, even when inherited
     // pipes delay `done` and no consumer has begun its own teardown wait.
     void observeTreeExit()
-    // oxlint-disable-next-line typescript/no-unnecessary-condition -- observer can record absence before its first await.
-    if (treeExitObserved) return
     kill('SIGTERM')
     // The escalation must survive direct-child settlement — the leader dying
     // does not mean the tree died — so settle does not clear this timer, and

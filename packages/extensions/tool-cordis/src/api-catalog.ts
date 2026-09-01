@@ -228,6 +228,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'agentRuntimeLauncher',
+    summary: 'Shared secure launcher for all external Agent Runtime Providers.',
+    description: 'Shared secure launcher for all external Agent Runtime Providers.',
+    methods: [
+      {
+        signature: 'internals: LauncherInternals = {}',
+        description: 'Test-only platform override.',
+        parameters: [],
+      },
+      {
+        signature: 'async launch(request: AgentRuntimeLaunchRequest): Promise<AgentRuntimeLaunchHandle>',
+        description: 'Resolve credentials, validate launch controls, create temporary material, and spawn one managed process.',
+        parameters: [{ name: 'request', description: 'complete profile, Driver controls, protocol stdio, and caller cancellation.' }],
+        returns: 'the launch-scoped process, redactor, deadlines, and teardown owner.',
+      },
+    ],
+  },
+  {
     key: 'agentRuntimeProfiles',
     summary: 'Settings-backed profile resolver shared by the Agent Router and subagent routes.',
     description: 'Settings-backed profile resolver shared by the Agent Router and subagent routes.',
@@ -2941,6 +2959,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AgentRuntimeFactSource = \'profile\' | \'protocol\';',
   },
   {
+    name: 'AgentRuntimeLaunchHandle',
+    declaration: 'export interface AgentRuntimeLaunchHandle {\n    readonly process: SubprocessHandle;\n    readonly temporaryPaths: Readonly<Record<string, string>>;\n    redact<T>(value: T): T;\n    waitUntilReady(readiness: Promise<void>, shutdown?: RuntimeProtocolShutdown): Promise<void>;\n    runTurn<T>(operation: RuntimeTurnOperation<T>, shutdown?: RuntimeProtocolShutdown): Promise<T>;\n    dispose(shutdown?: RuntimeProtocolShutdown): Promise<void>;\n}',
+  },
+  {
+    name: 'AgentRuntimeLaunchRequest',
+    declaration: 'export interface AgentRuntimeLaunchRequest {\n    readonly profile: RuntimeProfileSnapshot;\n    readonly cwd: string;\n    readonly driver: RuntimeDriverLaunch;\n    readonly stdio: RuntimeLaunchStdio;\n    readonly signal: AbortSignal;\n    readonly temporaryFiles?: readonly RuntimeTemporaryFile[];\n}',
+  },
+  {
     name: 'AgentRuntimePhase',
     declaration: 'export type AgentRuntimePhase = \'starting\' | \'ready\' | \'running\' | \'stopping\' | \'stopped\' | \'failed\';',
   },
@@ -4033,6 +4059,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RuntimeCredentialMapping {\n    readonly target: string;\n    readonly credentialRef: CredentialRef;\n}',
   },
   {
+    name: 'RuntimeDriverLaunch',
+    declaration: 'export interface RuntimeDriverLaunch {\n    readonly arguments: readonly RuntimeReservedArgument[];\n    readonly environment: Readonly<Record<string, string>>;\n    readonly reservedEnvironment: readonly string[];\n    readonly credentialEnvironment: readonly string[];\n    readonly allowWindowsCommandScript: boolean;\n    readonly permissionEnforcement: \'full\' | \'partial\' | \'none\';\n}',
+  },
+  {
     name: 'RuntimeExecutableResolution',
     declaration: 'export type RuntimeExecutableResolution = {\n    readonly kind: \'absolute\';\n} | {\n    readonly kind: \'search-path\';\n    readonly paths: readonly string[];\n};',
   },
@@ -4043,6 +4073,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RuntimeLaunchSnapshot',
     declaration: 'export interface RuntimeLaunchSnapshot {\n    readonly executable: string;\n    readonly resolution: RuntimeExecutableResolution;\n    readonly args: readonly string[];\n    readonly cwd: RuntimeWorkingDirectoryPolicy;\n    readonly ambientEnv: readonly string[];\n    readonly env: Readonly<Record<string, string>>;\n}',
+  },
+  {
+    name: 'RuntimeLaunchStdio',
+    declaration: 'export interface RuntimeLaunchStdio {\n    readonly stdin: SubprocessStdinMode;\n    readonly stdout: SubprocessOutputMode;\n    readonly stderr: SubprocessOutputMode;\n}',
   },
   {
     name: 'RuntimeModelSnapshot',
@@ -4067,6 +4101,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RuntimeProfileSnapshot',
     declaration: 'export interface RuntimeProfileSnapshot {\n    readonly schemaVersion: number;\n    readonly profileId: RuntimeProfileId;\n    readonly settingsRevision: number;\n    readonly provider: {\n        readonly id: AgentRuntimeProviderId;\n        readonly optionsVersion: number;\n        readonly options: JsonValue;\n    };\n    readonly launch: RuntimeLaunchSnapshot;\n    readonly model: RuntimeModelSnapshot;\n    readonly product: JsonValue;\n    readonly permissions: RuntimePermissionSnapshot;\n    readonly nativeTools: RuntimeNativeToolSnapshot;\n    readonly harnessTools: RuntimeHarnessToolSnapshot;\n    readonly credentials: readonly RuntimeCredentialMapping[];\n    readonly deadlines: RuntimeProcessDeadlines;\n    readonly capacity: RuntimeCapacitySnapshot;\n}',
+  },
+  {
+    name: 'RuntimeProtocolShutdown',
+    declaration: 'export interface RuntimeProtocolShutdown {\n    readonly cancel?: (reason: Error) => void | Promise<void>;\n    readonly closeInput?: () => void | Promise<void>;\n}',
+  },
+  {
+    name: 'RuntimeReservedArgument',
+    declaration: 'export interface RuntimeReservedArgument {\n    readonly name: string;\n    readonly forms: readonly string[];\n    readonly argv: readonly string[];\n}',
+  },
+  {
+    name: 'RuntimeTemporaryFile',
+    declaration: 'export interface RuntimeTemporaryFile {\n    readonly name: string;\n    readonly content: string | Uint8Array;\n}',
+  },
+  {
+    name: 'RuntimeTurnOperation',
+    declaration: 'export type RuntimeTurnOperation<T> = (signal: AbortSignal) => Promise<T>;',
   },
   {
     name: 'RuntimeWorkingDirectoryPolicy',
@@ -4613,6 +4663,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SubprocessCollectedOutputs {\n    readonly stdout?: SubprocessOutputReader;\n    readonly stderr?: SubprocessOutputReader;\n}',
   },
   {
+    name: 'SubprocessEnvironmentMode',
+    declaration: 'export type SubprocessEnvironmentMode = \'scrubbed-parent\' | \'exact\';',
+  },
+  {
     name: 'SubprocessHandle',
     declaration: 'export interface SubprocessHandle {\n    readonly pid: number;\n    readonly stdin: Writable | undefined;\n    readonly stdout: Readable | undefined;\n    readonly stderr: Readable | undefined;\n    readonly collected: SubprocessCollectedOutputs;\n    readonly done: Promise<SubprocessOutcome>;\n    terminate(): void;\n    waitForExit(signal?: AbortSignal): Promise<boolean>;\n}',
   },
@@ -4634,7 +4688,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubprocessSpawnSpec',
-    declaration: 'export interface SubprocessSpawnSpec {\n    argv: readonly string[];\n    cwd: string;\n    stdio: SubprocessStdio;\n    graceMs: number;\n    signal?: AbortSignal | undefined;\n    env?: NodeJS.ProcessEnv | undefined;\n}',
+    declaration: 'export interface SubprocessSpawnSpec {\n    argv: readonly string[];\n    cwd: string;\n    stdio: SubprocessStdio;\n    graceMs: number;\n    signal?: AbortSignal | undefined;\n    envMode?: SubprocessEnvironmentMode | undefined;\n    env?: NodeJS.ProcessEnv | undefined;\n}',
   },
   {
     name: 'SubprocessStdinMode',

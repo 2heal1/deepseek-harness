@@ -48,6 +48,7 @@ dsh --profile web --dump-config
 | [`core/agent`](subsystems/core.md) | `Agent` 接口、活跃 agent 注册表和 `agent/*` 事件 | `ctx.agents` |
 | [`core/agent-runtime`](../packages/core/agent-runtime/README.md) | 可配置运行时 Provider 注册表和提供方无关词汇 | `ctx.agentRuntimes` |
 | [`core/agent-runtime-profile`](../packages/core/agent-runtime-profile/README.md) | 由 Settings 支持的 Runtime Profile 快照、凭据与共享容量 | `ctx.agentRuntimeProfiles` |
+| [`core/agent-runtime-launcher`](../packages/core/agent-runtime-launcher/README.md) | 外部运行时进程的安全启动与 teardown | `ctx.agentRuntimeLauncher` |
 | [`core/agent-runtime-router`](../packages/core/agent-runtime-router/README.md) | 唯一 Agent Factory 与运行时生命周期 Consumer | `ctx.agentRuntimeRouter` |
 | [`subagent/subagent-runtime-route`](../packages/subagent/subagent-runtime-route/README.md) | 由 Runtime Profile 支持的一次性子 route 与委派工具 | `ctx.agentRuntimeSubagentRoutes` |
 | [`core/agent-loop`](subsystems/core.md) | Native 运行时 Provider 与具体循环驱动器 | `ctx.agentLoop` |

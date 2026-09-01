@@ -483,6 +483,31 @@ describe('E2BSubprocessHandle', () => {
     }
   })
 
+  it('serializes only explicit entries for an exact environment', async () => {
+    const fake = new FakeSandbox()
+    const handle = testHandle(runtime(fake), spec({
+      envMode: 'exact',
+      env: { ONLY: 'explicit' },
+    }), '/runtime/exact-environment')
+    await flush()
+
+    expect(fake.writtenFileData.get('/runtime/exact-environment/environment'))
+      .toBe('ONLY=explicit\0')
+    fake.finish()
+    await expect(handle.done).resolves.toEqual({ exitCode: 0, signal: null })
+  })
+
+  it('rejects exact-environment tombstones before command start', async () => {
+    const fake = new FakeSandbox()
+    const handle = testHandle(runtime(fake), spec({
+      envMode: 'exact',
+      env: { MISSING: undefined },
+    }), '/runtime/exact-environment-tombstone')
+
+    await expect(handle.done).rejects.toThrow('exact environment entry "MISSING" is undefined')
+    expect(fake.startOptions).toBeUndefined()
+  })
+
   it('preserves UTF-8 bytes when the ASCII transport is split across callbacks', async () => {
     const fake = new FakeSandbox()
     const handle = testHandle(runtime(fake), spec({

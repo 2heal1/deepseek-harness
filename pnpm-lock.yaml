@@ -1018,6 +1018,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-launcher':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-launcher
       '@deepseek-ai/dsh-agent-runtime-profile':
         specifier: workspace:^
         version: link:../../core/agent-runtime-profile
@@ -3732,6 +3735,43 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../session
+
+  packages/core/agent-runtime-launcher:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent-runtime':
+        specifier: workspace:^
+        version: link:../agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../agent-runtime-profile
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-home-paths':
+        specifier: workspace:^
+        version: link:../../util/home-paths
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:^
+        version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess-local
+      '@deepseek-ai/dsh-timeout':
+        specifier: workspace:^
+        version: link:../../util/timeout
 
   packages/core/agent-runtime-profile:
     dependencies:

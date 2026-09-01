@@ -20,6 +20,7 @@ export type {
   DshEnvironmentKey,
   SubprocessCollect,
   SubprocessCollectedOutputs,
+  SubprocessEnvironmentMode,
   SubprocessHandle,
   SubprocessOutcome,
   SubprocessOutputMode,
