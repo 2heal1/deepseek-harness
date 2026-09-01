@@ -2,13 +2,14 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry, {
   AgentRuntimeId,
+  AgentRuntimeProviderId,
   SubmissionId,
   type AgentRuntimeEventSink,
   type AgentRuntimePrepareRequest,
   type AgentRuntimeProvider,
   type RuntimeProfileSnapshot,
 } from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
+import { mountNativeTestRuntimeRouter } from './runtime-router.ts'
 import AgentLoop, { type Config as AgentLoopConfig } from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
@@ -37,7 +38,7 @@ async function harness(adapter = new MockAdapter([])): Promise<{
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  await mountNativeTestRuntimeRouter(ctx)
   const loopFiber = ctx.plugin(AgentLoop, { agents: [] })
   await loopFiber
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -221,9 +222,9 @@ describe('Native Agent runtime Provider', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     const oldProvider: AgentRuntimeProvider = {
-      id: ctx.agentRuntimeRouter.config.provider as AgentRuntimeProvider['id'],
+      id: AgentRuntimeProviderId('native'),
       profileSnapshotVersions: [0],
       probe: () => Promise.reject(new Error('unused')),
       prepare: () => Promise.reject(new Error('unused')),
@@ -260,7 +261,7 @@ describe('Native Agent runtime Provider', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     const oldProvider: AgentRuntimeProvider = {
       id: 'native' as AgentRuntimeProvider['id'],
       profileSnapshotVersions: [0],
@@ -307,7 +308,7 @@ describe('Native Agent runtime Provider', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     ctx.sessions.create(SessionId('occupied'))
     const failures: unknown[] = []
     ctx.on('agent-loop/config-start-failed', payload => failures.push(payload.error))

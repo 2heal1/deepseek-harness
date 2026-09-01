@@ -22,7 +22,7 @@ DeepSeek Harness 存在两种执行模型。主 agent（智能体）通过 `dsh-
 
 ### P1 冻结约定
 
-以下约定是 F1、F2、F4 和 F5 的实现输入。这些工作包可以增加私有辅助机制和提供方专用数据，但改变这些公共标识、所有权规则、事件生产者、持久化规则或安全保证时，必须再次更新决策。
+以下约定是 F1 至 F5 的实现输入。这些工作包可以增加私有辅助机制和提供方专用数据，但改变这些公共标识、所有权规则、事件生产者、持久化规则或安全保证时，必须再次更新决策。
 
 #### Agent、submission 与能力
 
@@ -101,7 +101,17 @@ F1 增加运行时 Service Definition、identifier、receipt、capability、快�
 
 `@deepseek-ai/dsh-agent-loop` 是 `native` Provider。它的 prepared handle 固定 Native capability 集合并拥有一个 `ReactLoopDriver`；Router-owned Agent 把既有 inbox、取消、maintenance 与 waking 操作委托给该 driver。Provider 卸载会在移除注册前排空所有 prepared handle。F2 保持既有 Native Session 事件与面向 Host 的方法不变，其中包括声明式启动使用的同步 `ctx.agentLoop.create()` 兼容入口。
 
-F2 有意不实现 F3 profile Consumer，也不实现 F5 submission receipt 与规范运行时 event sink。在 F3 之前，Router 根据既有 Agent option 构造仅适用于 Native 的兼容 snapshot。在 F5 之前，外部 assistant 与 activity 报告会在 sink 处失败，而 Native driver 仍是既有 turn、step、request、inbox 与 assistant 事件的生产者。该过渡在不声称外部 Provider 已能完成面向产品运行的前提下保持 Native 行为稳定。
+F2 有意不实现 F5 submission receipt 与规范运行时 event sink。在 F5 之前，外部 assistant 与 activity 报告会在 sink 处失败，而 Native driver 仍是既有 turn、step、request、inbox 与 assistant 事件的生产者。该过渡在不声称外部 Provider 已能完成面向产品运行的前提下保持 Native 行为稳定。
+
+#### F3 Runtime Profile 与 subagent route
+
+`@deepseek-ai/dsh-agent-runtime-profile` 拥有 `agent-runtime` Settings 命名空间，并把每次新运行解析为完整、深度冻结的非秘密快照。快照记录所观察到的 Settings revision 以关联审计信息，但 Settings 不保留历史 revision。编辑或删除已存 profile 只影响后续解析。凭据引用保留在快照中；`resolveCredentials()` 在每次进程启动时单独读取当前值，缺失必要服务或值时会在启动前失败。
+
+Router 选择快照指定的 Provider generation，并在 preparation 前取得共享 profile 容量。异步 create 与 resume 按可取消 FIFO 顺序等待；Native 同步兼容入口在没有立即可用的 slot 时以 `AGENT_BUSY` 失败。租约会一直保留到 Provider 完全停稳且公共 teardown 完成。`AgentOptions.runtimeProfile` 选择 profile；既有 provider 与 token option 只作为 Native 覆盖接受，模型覆盖则需要 profile 明确允许。
+
+`@deepseek-ai/dsh-subagent-runtime-route` 为每条已配置的一次性 route 维护一个包装 `SubagentProvider` 和一个 `dsh-tool-subagent` 实例。现有 `ctx.subagents` 服务仍是公开 dispatch 与生命周期权威。每次启动都会解析新快照，按快照中的 Provider id 选择底层 Provider，采用 route 与 profile 容量中的较小值，并持有租约直到底层运行完全 dispose。Settings reconcile 通过各自的 Cordis fiber 替换或移除注册。
+
+F3 不解释启动字段、不构造进程环境、不执行沙箱策略，也不把快照持久化到 Session Header。F4 负责安全启动与凭据脱敏；F5 负责持久快照身份、resume 与 fork 重建、submission receipt 和规范运行时事件。
 
 Web RPC schema 在本预发布阶段同步更新。ACP 协议行为保持版本 1；ACP Host 把 receipt settlement 转换为现有 ACP 响应，并自行 flush 有序输出队列。JSON-RPC `serverInfo.version` 更新为 `0.0.2`；`session/prompt` 同时返回 message id 与 submission id，submission start 和 settlement 通知取代 inbox-splice 推断。旧 SDK Client 会因 version／schema 校验失败，而不会获得兼容模拟。Headless 等待 receipt settlement，随后只 flush 与其关联的会话区间。
 

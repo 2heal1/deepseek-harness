@@ -7,7 +7,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
+import { mountNativeTestRuntimeRouter } from './runtime-router.ts'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { ReactLoopDriver } from '../src/agent.ts'
@@ -25,7 +25,7 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  await mountNativeTestRuntimeRouter(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx

@@ -15,11 +15,12 @@ A turn flows through the six packages in one loop: the driver in [`agent-loop`](
 | `tools/` | The scoped tool registry and guarded execution pipeline (`ctx.tools`) | [tools.md](tools.md) |
 | `agent/` | The `Agent` interface, live registry, initiator scope, and `agent/*` event vocabulary (`ctx.agents`) | this page |
 | `agent-runtime/` | Provider discovery and provider-neutral runtime types (`ctx.agentRuntimes`) | this page |
+| `agent-runtime-profile/` | Settings-backed profile snapshots, credential references, and shared capacity (`ctx.agentRuntimeProfiles`) | this page |
 | `agent-runtime-router/` | The sole Agent factory and common lifecycle owner (`ctx.agentRuntimeRouter`) | this page |
 | `agent-loop/` | The Native runtime Provider and React loop driver (`ctx.agentLoop`) | this page |
 | `scope/` | The scoped-registration primitive the registries and loop build per-agent scoping on | [scope.md](scope.md) |
 
-`scope/` is the one non-service package: a dependency-free library (`createScope`/`scopeOf`/`scopeTarget`) that sits below `session/` and `system-prompt/` in the module graph precisely so they can consume it without a cycle. The Router owns public Agent identity, publication, admission, rollback, and teardown; `agent-loop` supplies the default Native driver and runs it inside `ctx.agents.withInitiator()`. Extension plugins depend on `agent`, while runtime implementations register through `agent-runtime`. The default composition that wires this spine into a runnable agent is [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md).
+`scope/` is the one non-service package: a dependency-free library (`createScope`/`scopeOf`/`scopeTarget`) that sits below `session/` and `system-prompt/` in the module graph precisely so they can consume it without a cycle. `agent-runtime-profile` validates Settings and resolves a complete immutable non-secret snapshot for each new run; profile edits affect later resolutions, while credential values are resolved separately for each process start. The Router selects the Provider named by that snapshot and holds shared profile capacity through complete runtime teardown. It also owns public Agent identity, publication, admission, and rollback; `agent-loop` supplies the default Native driver and runs it inside `ctx.agents.withInitiator()`. Extension plugins depend on `agent`, while runtime implementations register through `agent-runtime`. The default composition that wires this spine into a runnable agent is [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md).
 
 ## Creation and ownership
 
@@ -161,6 +162,8 @@ type AgentStatus = 'idle' | 'running'
 ```ts type-equiv
 /** Merge-extensible agent creation options. Persona belongs to system-prompt sections. */
 interface AgentOptions {
+  /** Runtime Profile selected for a new Session; omission uses the configured default. */
+  runtimeProfile?: string
   /** Provider route (must have a registered adapter at call time). */
   provider?: string
   /** Model id interpreted by the selected provider adapter. */
@@ -573,6 +576,64 @@ Types: [ScopeKey](scope.md)
 
 Source: [`packages/preset/agent-presets/src/index.ts:82`](../../packages/preset/agent-presets/src/index.ts)
 
+<a id="ctxagentruntimeprofiles--agentruntimeprofiles"></a>
+
+### `ctx.agentRuntimeProfiles` — `AgentRuntimeProfiles`
+
+Settings-backed profile resolver shared by the Agent Router and subagent routes.
+
+```ts cordis-catalog
+/**
+ * Resolve one complete immutable profile for a new runtime.
+ * @param id - profile id, or the current default when omitted.
+ * @param overrides - caller values resolved into the returned snapshot.
+ * @returns a detached non-secret effective snapshot.
+ * @throws {AgentRuntimeError} when the profile is absent or invalid.
+ */
+resolve(id?: string, overrides: RuntimeProfileOverrides = {}): RuntimeProfileSnapshot
+
+/**
+ * Resolve one configured one-shot subagent route.
+ * @param id - route id.
+ * @returns the immutable route and profile snapshot.
+ * @throws {AgentRuntimeError} when the route or profile is absent.
+ */
+resolveRoute(id: string): ResolvedRuntimeSubagentRoute
+
+/**
+ * List configured runtime-backed subagent route ids in settings order.
+ * @returns detached route ids.
+ */
+listRoutes(): string[]
+
+/**
+ * Wait for a shared profile slot in cancelable FIFO order.
+ * @param profile - immutable snapshot fixing the profile capacity.
+ * @param signal - cancellation while waiting.
+ * @param upperLimit - optional route limit; cannot raise profile capacity.
+ * @returns a lease held until runtime quiescence and cleanup complete.
+ */
+acquire( profile: RuntimeProfileSnapshot, signal: AbortSignal, upperLimit?: number, ): Promise<RuntimeCapacityLease>
+
+/**
+ * Acquire an immediately available slot for the Native synchronous entry.
+ * @param profile - immutable snapshot fixing profile capacity.
+ * @returns a lease held until Native runtime quiescence.
+ * @throws {AgentRuntimeError} code `AGENT_BUSY` rather than queueing.
+ */
+acquireSync(profile: RuntimeProfileSnapshot): RuntimeCapacityLease
+
+/**
+ * Resolve every credential reference for one process start.
+ * @param profile - pinned profile whose references are read.
+ * @returns exact target-to-value entries for the launcher.
+ * @throws {AgentRuntimeError} before process creation when a reference is missing.
+ */
+async resolveCredentials( profile: RuntimeProfileSnapshot, ): Promise<ResolvedRuntimeCredentials>
+```
+
+Source: [`packages/core/agent-runtime-profile/src/index.ts:428`](../../packages/core/agent-runtime-profile/src/index.ts)
+
 <a id="ctxagentruntimerouter--agentruntimerouter"></a>
 
 ### `ctx.agentRuntimeRouter` — `AgentRuntimeRouter`
@@ -613,7 +674,7 @@ async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandl
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:517`](../../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:466`](../../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="ctxagentruntimes--agentruntimeregistry"></a>
 
@@ -847,7 +908,7 @@ A fully configured agent and live session were published. Setup is composition-o
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:178`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:180`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentdisposed--emit"></a>
 
@@ -869,7 +930,7 @@ An agent left the registry; AgentLoop emits this after driver quiescence and sco
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:187`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:189`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agenterror--emit"></a>
 
@@ -893,7 +954,7 @@ A step or turn errored. The machine reports a failure here even when the error h
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:309`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:311`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxclaimed--emit"></a>
 
@@ -917,7 +978,7 @@ One message left the inbox inside its open turn. If the proposed step is rejecte
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:216`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:218`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxdiscarded--emit"></a>
 
@@ -938,7 +999,7 @@ One message was discarded from the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:224`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:226`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxinserted--emit"></a>
 
@@ -959,7 +1020,7 @@ One message entered the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:205`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:207`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentpre-step--waterfall"></a>
 
@@ -984,7 +1045,7 @@ Reject a proposed step or replace the messages that enter it. Calling `next()` p
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:250`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:252`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest--waterfall"></a>
 
@@ -1010,7 +1071,7 @@ Replace the frozen call configuration. `await next()` yields the config the mach
 
 Types: [LlmCallConfig](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:263`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:265`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest-error--waterfall"></a>
 
@@ -1039,7 +1100,7 @@ Handle one failed model-request attempt before the loop retries or closes its st
 
 Types: [LlmFailure](llm-streaming.md) · [ResolvedRetryPolicy](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:279`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:281`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentsession-start--emit"></a>
 
@@ -1063,7 +1124,7 @@ The session lifecycle began, once before the first turn. Use `agent.inject()` to
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:236`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:238`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentstatus--emit"></a>
 
@@ -1086,7 +1147,7 @@ Agent status changed (`idle` ⇄ `running`). A waking delivery enters `running` 
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:197`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:199`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentturn-stopping--serial"></a>
 
@@ -1117,7 +1178,7 @@ The turn is about to close: the model owes no response (no live tool calls, no f
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:297`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:299`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agent-loop-events"></a>
 

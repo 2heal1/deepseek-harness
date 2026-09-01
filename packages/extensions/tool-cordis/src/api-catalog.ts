@@ -228,6 +228,53 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'agentRuntimeProfiles',
+    summary: 'Settings-backed profile resolver shared by the Agent Router and subagent routes.',
+    description: 'Settings-backed profile resolver shared by the Agent Router and subagent routes.',
+    methods: [
+      {
+        signature: 'resolve(id?: string, overrides: RuntimeProfileOverrides = {}): RuntimeProfileSnapshot',
+        description: 'Resolve one complete immutable profile for a new runtime.',
+        parameters: [{ name: 'id', description: 'profile id, or the current default when omitted.' }, { name: 'overrides', description: 'caller values resolved into the returned snapshot.' }],
+        returns: 'a detached non-secret effective snapshot.',
+        throws: ['{AgentRuntimeError} when the profile is absent or invalid.'],
+      },
+      {
+        signature: 'resolveRoute(id: string): ResolvedRuntimeSubagentRoute',
+        description: 'Resolve one configured one-shot subagent route.',
+        parameters: [{ name: 'id', description: 'route id.' }],
+        returns: 'the immutable route and profile snapshot.',
+        throws: ['{AgentRuntimeError} when the route or profile is absent.'],
+      },
+      {
+        signature: 'listRoutes(): string[]',
+        description: 'List configured runtime-backed subagent route ids in settings order.',
+        parameters: [],
+        returns: 'detached route ids.',
+      },
+      {
+        signature: 'acquire( profile: RuntimeProfileSnapshot, signal: AbortSignal, upperLimit?: number, ): Promise<RuntimeCapacityLease>',
+        description: 'Wait for a shared profile slot in cancelable FIFO order.',
+        parameters: [{ name: 'profile', description: 'immutable snapshot fixing the profile capacity.' }, { name: 'signal', description: 'cancellation while waiting.' }, { name: 'upperLimit', description: 'optional route limit; cannot raise profile capacity.' }],
+        returns: 'a lease held until runtime quiescence and cleanup complete.',
+      },
+      {
+        signature: 'acquireSync(profile: RuntimeProfileSnapshot): RuntimeCapacityLease',
+        description: 'Acquire an immediately available slot for the Native synchronous entry.',
+        parameters: [{ name: 'profile', description: 'immutable snapshot fixing profile capacity.' }],
+        returns: 'a lease held until Native runtime quiescence.',
+        throws: ['{AgentRuntimeError} code `AGENT_BUSY` rather than queueing.'],
+      },
+      {
+        signature: 'async resolveCredentials( profile: RuntimeProfileSnapshot, ): Promise<ResolvedRuntimeCredentials>',
+        description: 'Resolve every credential reference for one process start.',
+        parameters: [{ name: 'profile', description: 'pinned profile whose references are read.' }],
+        returns: 'exact target-to-value entries for the launcher.',
+        throws: ['{AgentRuntimeError} before process creation when a reference is missing.'],
+      },
+    ],
+  },
+  {
     key: 'agentRuntimeRouter',
     summary: 'Configurable runtime Router and the sole AgentFactory implementation.',
     description: 'Configurable runtime Router and the sole AgentFactory implementation.',
@@ -235,11 +282,6 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'readonly ownership: RouterOwnership',
         description: 'Router-owned lifecycle set used by Provider generations and Agent handles.',
-        parameters: [],
-      },
-      {
-        signature: 'readonly config: Readonly<Config>',
-        description: 'Immutable default Provider selection used before F3 profile resolution.',
         parameters: [],
       },
       {
@@ -292,6 +334,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'a detached provider array.',
       },
     ],
+  },
+  {
+    key: 'agentRuntimeSubagentRoutes',
+    summary: 'Maintains runtime-backed routes as Settings adds, edits, or removes them.',
+    description: 'Maintains runtime-backed routes as Settings adds, edits, or removes them.',
+    methods: [],
   },
   {
     key: 'agents',
@@ -2842,7 +2890,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentOptions',
-    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n}',
+    declaration: 'export interface AgentOptions {\n    runtimeProfile?: string;\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n}',
   },
   {
     name: 'AgentPreset',
@@ -3925,6 +3973,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ResolvedRetryPolicy = ResolvedNormalRetryPolicy | ResolvedAlwaysRetryPolicy;',
   },
   {
+    name: 'ResolvedRuntimeCredentials',
+    declaration: 'export type ResolvedRuntimeCredentials = Readonly<Record<string, string>>;',
+  },
+  {
+    name: 'ResolvedRuntimeSubagentRoute',
+    declaration: 'export interface ResolvedRuntimeSubagentRoute {\n    readonly id: string;\n    readonly mode: \'one-shot\';\n    readonly maxDepth: number;\n    readonly maxConcurrentRuns: number;\n    readonly toolName: string;\n    readonly profile: RuntimeProfileSnapshot;\n}',
+  },
+  {
     name: 'ResolvedSubagentStartRequest',
     declaration: 'export interface ResolvedSubagentStartRequest extends SubagentStartRequest {\n    readonly descriptor: SubagentDescriptorData;\n}',
   },
@@ -3965,6 +4021,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RunnerFailureRule {\n    allowedExitCodes?: readonly number[];\n    fatalSignatures: readonly string[];\n    informationalLines?: readonly string[];\n}',
   },
   {
+    name: 'RuntimeCapacityLease',
+    declaration: 'export interface RuntimeCapacityLease {\n    release(): void;\n}',
+  },
+  {
     name: 'RuntimeCapacitySnapshot',
     declaration: 'export interface RuntimeCapacitySnapshot {\n    readonly maxConcurrentRuns: number;\n}',
   },
@@ -3999,6 +4059,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RuntimeProcessDeadlines',
     declaration: 'export interface RuntimeProcessDeadlines {\n    readonly startupMs: number;\n    readonly turnMs: number;\n    readonly shutdownMs: number;\n    readonly terminationMs: number;\n}',
+  },
+  {
+    name: 'RuntimeProfileOverrides',
+    declaration: 'export interface RuntimeProfileOverrides {\n    readonly model?: string;\n    readonly nativeLlmProvider?: string;\n    readonly nativeMaxTokens?: number;\n    readonly cwd?: string;\n}',
   },
   {
     name: 'RuntimeProfileSnapshot',

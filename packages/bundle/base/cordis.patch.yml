@@ -61,10 +61,34 @@
     - id: agent-runtime
       name: '@deepseek-ai/dsh-agent-runtime'
 
+    - id: agent-runtime-profile
+      name: '@deepseek-ai/dsh-agent-runtime-profile'
+      config:
+        defaultMainProfile: native
+        profiles:
+          native:
+            provider: native
+            launch:
+              executable: !!js process.execPath
+              resolution: absolute
+              cwdPolicy: session-workspace
+            model:
+              allowSessionOverride: true
+            product:
+              kind: native-agent-loop
+            permissions:
+              policy:
+                kind: harness
+              enforcement: required
+            process:
+              startupTimeoutMs: 15000
+              turnTimeoutMs: 1800000
+              shutdownTimeoutMs: 5000
+              terminationTimeoutMs: 5000
+              maxConcurrentRuns: !!js Number.MAX_SAFE_INTEGER
+
     - id: agent-runtime-router
       name: '@deepseek-ai/dsh-agent-runtime-router'
-      config:
-        provider: native
 
     # The transport-independent default for Agents created by entry points.
     # Settings may supply a saved selection; consumers read it at creation time.
@@ -299,6 +323,9 @@
 
     - id: subagent
       name: '@deepseek-ai/dsh-subagent'
+
+    - id: subagent-runtime-route
+      name: '@deepseek-ai/dsh-subagent-runtime-route'
 
     - id: subagent-spawn-in-process
       name: '@deepseek-ai/dsh-subagent-spawn-in-process'

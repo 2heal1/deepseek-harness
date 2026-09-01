@@ -9,7 +9,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
+import { mountNativeTestRuntimeRouter } from './runtime-router.ts'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import AgentLoop, { AGENT_LOOP_SETTINGS_NAMESPACE } from '@deepseek-ai/dsh-agent-loop'
@@ -40,7 +40,7 @@ async function boot(): Promise<{ ctx: Context; settingsFiber: Fiber; loopFiber: 
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  await mountNativeTestRuntimeRouter(ctx)
   const settingsFiber = ctx.plugin(MemorySettings)
   await settingsFiber.await()
   const loopFiber = ctx.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 4 })

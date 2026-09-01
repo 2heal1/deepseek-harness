@@ -21,6 +21,8 @@ import * as SkillFileSystem from '@deepseek-ai/dsh-skill-filesystem'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
 import * as agentRuntimeInvariant from '@deepseek-ai/dsh-agent-runtime/invariant'
+import AgentRuntimeProfiles from '@deepseek-ai/dsh-agent-runtime-profile'
+import * as agentRuntimeProfileInvariant from '@deepseek-ai/dsh-agent-runtime-profile/invariant'
 import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 import * as agentRuntimeRouterInvariant from '@deepseek-ai/dsh-agent-runtime-router/invariant'
 import GoalService, { type Config as GoalDomainConfig } from '@deepseek-ai/dsh-goal'
@@ -48,6 +50,34 @@ const EXAMPLE_SESSION_TITLE_CONFIG: SessionTitleConfig = {
   fallbackMaxWords: 5,
   fallbackMaxBytes: 40,
   maxTitleBytes: 80,
+}
+
+/** Native Runtime Profile used by the standalone example composition. */
+const EXAMPLE_RUNTIME_PROFILES = {
+  defaultMainProfile: 'native',
+  profiles: {
+    native: {
+      provider: 'native',
+      launch: {
+        executable: process.execPath,
+        resolution: 'absolute' as const,
+        cwdPolicy: 'session-workspace' as const,
+      },
+      model: { allowSessionOverride: true },
+      product: { kind: 'native-agent-loop' },
+      permissions: {
+        policy: { kind: 'harness' },
+        enforcement: 'required' as const,
+      },
+      process: {
+        startupTimeoutMs: 15_000,
+        turnTimeoutMs: 1_800_000,
+        shutdownTimeoutMs: 5_000,
+        terminationTimeoutMs: 5_000,
+        maxConcurrentRuns: Number.MAX_SAFE_INTEGER,
+      },
+    },
+  },
 }
 
 /** Skill bundle config forwarded to the registry, local provider, and model-facing consumer. */
@@ -240,7 +270,8 @@ export function apply(ctx: Context, config: Config): void {
   }
   ctx.plugin(AgentRegistry)
   ctx.plugin(AgentRuntimeRegistry)
-  ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  ctx.plugin(AgentRuntimeProfiles, EXAMPLE_RUNTIME_PROFILES)
+  ctx.plugin(AgentRuntimeRouter, {})
   ctx.plugin(llmRetry)
   if (config.goals !== undefined && config.goals !== false) {
     ctx.plugin(GoalService, config.goals.domain ?? {})
@@ -252,6 +283,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.plugin(sessionInvariant)
   ctx.plugin(agentInvariant)
   ctx.plugin(agentRuntimeInvariant)
+  ctx.plugin(agentRuntimeProfileInvariant)
   ctx.plugin(agentRuntimeRouterInvariant)
   ctx.plugin(scopeInvariant)
   ctx.plugin(agentLoopInvariant)

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
+import { mountNativeTestRuntimeRouter } from './runtime-router.ts'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, { createUserMessage, LlmError  } from '@deepseek-ai/dsh-llm'
 import type { LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
@@ -19,7 +19,7 @@ async function harness(adapter: MockAdapter): Promise<Context> {
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  await mountNativeTestRuntimeRouter(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx

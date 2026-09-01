@@ -12,7 +12,7 @@ import LlmRuntime from '@deepseek-ai/dsh-llm'
 import ToolRuntime, { defineContentToolFixture, TOOL_ABORTED_BEFORE_DISPATCH, TOOL_RUNTIME_SCHEDULER, type PostToolDecision, type PreToolDecision } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
+import { mountNativeTestRuntimeRouter } from './runtime-router.ts'
 import AgentLoop, { DEFAULT_MAX_PARALLEL_TOOL_CALLS } from '@deepseek-ai/dsh-agent-loop'
 import { MockAdapter, textResponse } from './mock-adapter.ts'
 import { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
@@ -26,7 +26,7 @@ async function harness(adapter: MockAdapter, maxParallelToolCalls?: number) {
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  await mountNativeTestRuntimeRouter(ctx)
   await ctx.plugin(AgentLoop, {
     agents: [],
     ...maxParallelToolCalls === undefined ? {} : { maxParallelToolCalls },
@@ -286,7 +286,7 @@ describe('tool-call scheduler: rolling pool honors maxParallelToolCalls', () => 
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
 
     const loop = new AgentLoop(ctx, { agents: [] })
     expect(loop.config.maxParallelToolCalls).toBe(DEFAULT_MAX_PARALLEL_TOOL_CALLS)
@@ -356,7 +356,7 @@ describe('tool-call scheduler: rolling pool honors maxParallelToolCalls', () => 
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [], maxParallelToolCalls: 1 })
     ctx.llm.registerAdapter(['mock'], adapter)
     const gated = gatedParallelTool('p')
@@ -718,7 +718,7 @@ describe('code-mode native-tool denial through the agent loop', () => {
     await ctx.plugin(FakeCodeRuntime as any)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     ctx.llm.registerAdapter(['mock'], adapter)
     return ctx

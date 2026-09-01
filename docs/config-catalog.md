@@ -199,21 +199,146 @@ export type PresetTrust = 'system' | 'user'
 
 Source: [`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/agent-presets/src/preset.ts)
 
+<a id="deepseek-aidsh-agent-runtime-profile"></a>
+
+## `@deepseek-ai/dsh-agent-runtime-profile`
+
+```ts config-catalog
+/** Settings-owned Runtime Profile and route document. */
+export interface AgentRuntimeProfileSettings {
+  /** Profile selected when AgentOptions omits runtimeProfile. */
+  defaultMainProfile: string
+  /** Named stored Runtime Profiles. */
+  profiles: Record<string, RuntimeProfileConfig>
+  /** Named one-shot subagent routes. */
+  subagentRoutes?: Record<string, RuntimeSubagentRouteConfig>
+}
+
+/** Stored Runtime Profile. Values are non-secret and JSON-compatible. */
+export interface RuntimeProfileConfig {
+  /** Registered runtime Provider id. */
+  provider: string
+  /** Runtime snapshot schema version accepted by the Provider. */
+  schemaVersion?: number
+  /** Version of the Provider-owned options object. */
+  providerOptionsVersion?: number
+  /** Provider-owned lossless JSON options. */
+  providerOptions?: unknown
+  /** Executable and working-directory policy. */
+  launch: RuntimeProfileLaunchConfig
+  /** Model selection policy. */
+  model?: RuntimeProfileModelConfig
+  /** Product-owned lossless JSON configuration. */
+  product?: unknown
+  /** Permission requirements the Provider and launcher must enforce. */
+  permissions: {
+    /** Provider-owned lossless JSON permission policy. */
+    policy: unknown
+    /** Whether unavailable enforcement rejects launch. */
+    enforcement: 'required' | 'best-effort'
+    /** Unattended approval behavior. */
+    approval?: 'unattended-fail-closed'
+  }
+  /** Product-native tool allowlist. */
+  nativeTools?: {
+    /** Exact product-native tool ids allowed for the runtime. */
+    allowed?: string[]
+  }
+  /** Harness tool-gateway policy. */
+  harnessTools?: {
+    /** Transport used to expose approved Harness tools. */
+    transport?: 'none' | 'mcp'
+    /** Exact Harness tool ids allowed through the transport. */
+    allowed?: string[]
+  }
+  /** Credential references mapped onto process environment targets. */
+  credentials?: {
+    /** Environment target to credential reference mapping. */
+    env?: Record<string, RuntimeProfileCredentialConfig>
+  }
+  /** Runtime deadlines and shared profile capacity. */
+  process: {
+    /** Maximum milliseconds for process startup and protocol readiness. */
+    startupTimeoutMs: number
+    /** Maximum milliseconds for one runtime turn. */
+    turnTimeoutMs: number
+    /** Maximum milliseconds for cooperative shutdown. */
+    shutdownTimeoutMs: number
+    /** Maximum milliseconds for forced termination and quiescence. */
+    terminationTimeoutMs: number
+    /** Maximum live runs sharing this profile id. */
+    maxConcurrentRuns: number
+  }
+}
+
+/** Stored one-shot subagent route backed by a Runtime Profile. */
+export interface RuntimeSubagentRouteConfig {
+  /** Runtime Profile resolved for each new child run. */
+  runtimeProfile: string
+  /** V1 route mode. */
+  mode?: 'one-shot'
+  /** Maximum absolute delegation depth accepted by this route. */
+  maxDepth: number
+  /** Route-local capacity ceiling; cannot raise profile capacity. */
+  maxConcurrentRuns: number
+  /** Model-facing delegation tool name. */
+  toolName: string
+}
+
+/** Stored executable and working-directory configuration. */
+export interface RuntimeProfileLaunchConfig {
+  /** Executable name or path passed to the secure launcher. */
+  executable: string
+  /** Literal argument vector, without shell interpolation. */
+  args?: string[]
+  /** Whether the executable is absolute or searched in these directories. */
+  resolution?: 'absolute' | RuntimeProfileExecutableResolution
+  /** Working directory source for this runtime. */
+  cwdPolicy: 'session-workspace' | 'parent-workspace' | {
+    /** Fixed working directory. */
+    fixed: string
+  }
+  /** Explicit ambient environment names the secure launcher may inherit. */
+  ambientEnv?: string[]
+  /** Literal non-secret environment entries. */
+  env?: Record<string, string>
+}
+
+/** Stored model selection configuration. */
+export interface RuntimeProfileModelConfig {
+  /** Provider-owned default model id. */
+  default?: string
+  /** Whether one Session may select another model. */
+  allowSessionOverride?: boolean
+}
+
+/** Stored credential reference. */
+export interface RuntimeProfileCredentialConfig {
+  /** Credential service reference resolved separately for each process start. */
+  credentialRef: string
+}
+
+/** Search-path executable resolution stored in one Runtime Profile. */
+export interface RuntimeProfileExecutableResolution {
+  /** Ordered executable search directories. */
+  searchPath: string[]
+}
+```
+
+Source: [`packages/core/agent-runtime-profile/src/index.ts:145`](../packages/core/agent-runtime-profile/src/index.ts)
+
 <a id="deepseek-aidsh-agent-runtime-router"></a>
 
 ## `@deepseek-ai/dsh-agent-runtime-router`
 
-Requires: `agents` · `sessions` · `agentRuntimes` · `llm` · `tools` · `systemPrompt`
+Requires: `agents` · `sessions` · `agentRuntimes` · `agentRuntimeProfiles` · `llm` · `tools` · `systemPrompt`
 
 ```ts config-catalog
-/** Router configuration before Runtime Profile resolution moves to F3. */
-export interface Config {
-  /** Provider selected for AgentFactory create and resume operations. */
-  provider: string
-}
+/** Router has no deployment-varying selection; Runtime Profiles own it. */
+export interface Config {}
 ```
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:61`](../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:63`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 
@@ -305,7 +430,7 @@ export interface GoalConfig {
 
 Depends on: [`AgentLoopConfig`](#deepseek-aidsh-agent-loop) · [`GoalDomainConfig`](#deepseek-aidsh-goal) · [`InvariantConfig`](#deepseek-aidsh-invariants) · [`JobsConfig`](#deepseek-aidsh-jobs-local) · [`SessionTitleConfig`](#deepseek-aidsh-session-title) · [`SkillFileSystem`](../packages/skill/skill-filesystem/src/index.ts) · [`SkillRegistryConfig`](#deepseek-aidsh-skill) · [`SystemPromptConfig`](#deepseek-aidsh-system-prompt) · [`toolBash`](../packages/shell/tool-bash/src/index.ts) · [`toolGoal`](../packages/goal/tool-goal/src/index.ts) · [`toolJobs`](../packages/jobs/tool-jobs/src/index.ts) · [`ToolsConfig`](#deepseek-aidsh-tools) · [`toolSkill`](../packages/skill/tool-skill/src/index.ts) · [`workspaceContext`](../packages/context/agent-instructions/src/index.ts)
 
-Source: [`packages/examples/agent-spine-demo/src/index.ts:96`](../packages/examples/agent-spine-demo/src/index.ts)
+Source: [`packages/examples/agent-spine-demo/src/index.ts:126`](../packages/examples/agent-spine-demo/src/index.ts)
 
 <a id="deepseek-aidsh-agent-tool-presentation"></a>
 
@@ -2329,6 +2454,19 @@ export interface Config {
 ```
 
 Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:31`](../packages/subagent/subagent-fork-in-process/src/index.ts)
+
+<a id="deepseek-aidsh-subagent-runtime-route"></a>
+
+## `@deepseek-ai/dsh-subagent-runtime-route`
+
+Requires: `agentRuntimeProfiles` · `subagents` · `tools` · `systemPrompt`
+
+```ts config-catalog
+/** Route Consumer configuration. Route definitions live in Settings. */
+export interface Config {}
+```
+
+Source: [`packages/subagent/subagent-runtime-route/src/index.ts:31`](../packages/subagent/subagent-runtime-route/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-spawn-in-process"></a>
 
