@@ -47,7 +47,9 @@ dsh --profile web --dump-config
 | [`core/tools`](subsystems/tools.md) | 作用域化的工具注册表和带把关的执行流水线 | `ctx.tools` |
 | [`core/agent`](subsystems/core.md) | `Agent` 接口、活跃 agent 注册表和 `agent/*` 事件 | `ctx.agents` |
 | [`core/agent-runtime`](../packages/core/agent-runtime/README.md) | 可配置运行时 Provider 注册表和提供方无关词汇 | `ctx.agentRuntimes` |
+| [`core/agent-runtime-profile`](../packages/core/agent-runtime-profile/README.md) | 由 Settings 支持的 Runtime Profile 快照、凭据与共享容量 | `ctx.agentRuntimeProfiles` |
 | [`core/agent-runtime-router`](../packages/core/agent-runtime-router/README.md) | 唯一 Agent Factory 与运行时生命周期 Consumer | `ctx.agentRuntimeRouter` |
+| [`subagent/subagent-runtime-route`](../packages/subagent/subagent-runtime-route/README.md) | 由 Runtime Profile 支持的一次性子 route 与委派工具 | `ctx.agentRuntimeSubagentRoutes` |
 | [`core/agent-loop`](subsystems/core.md) | Native 运行时 Provider 与具体循环驱动器 | `ctx.agentLoop` |
 | [`core/scope`](subsystems/scope.md) | 按 agent 划分作用域的注册原语 | 库，无 ctx 键 |
 | [`llm/llm`](subsystems/llm-streaming.md) | 消息与流式词汇表，以及适配器 seam | `ctx.llm` |

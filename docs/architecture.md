@@ -47,7 +47,9 @@ Here are some core packages that contribute to the Cordis tree.
 | [`core/tools`](subsystems/tools.md) | The scoped tool registry and guarded execution pipeline | `ctx.tools` |
 | [`core/agent`](subsystems/core.md) | The `Agent` interface, live registry, and `agent/*` events | `ctx.agents` |
 | [`core/agent-runtime`](../packages/core/agent-runtime/README.md) | Configurable runtime Provider registry and provider-neutral vocabulary | `ctx.agentRuntimes` |
+| [`core/agent-runtime-profile`](../packages/core/agent-runtime-profile/README.md) | Settings-backed Runtime Profile snapshots, credentials, and shared capacity | `ctx.agentRuntimeProfiles` |
 | [`core/agent-runtime-router`](../packages/core/agent-runtime-router/README.md) | Sole Agent factory and runtime lifecycle Consumer | `ctx.agentRuntimeRouter` |
+| [`subagent/subagent-runtime-route`](../packages/subagent/subagent-runtime-route/README.md) | Runtime Profile-backed one-shot child routes and delegation tools | `ctx.agentRuntimeSubagentRoutes` |
 | [`core/agent-loop`](subsystems/core.md) | Native runtime Provider and concrete loop driver | `ctx.agentLoop` |
 | [`core/scope`](subsystems/scope.md) | The per-agent scoped-registration primitive | library, no key |
 | [`llm/llm`](subsystems/llm-streaming.md) | Message and stream vocabulary plus the adapter seam | `ctx.llm` |

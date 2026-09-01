@@ -170,6 +170,7 @@
     { "path": "./packages/core/system-prompt" },
     { "path": "./packages/core/agent" },
     { "path": "./packages/core/agent-runtime" },
+    { "path": "./packages/core/agent-runtime-profile" },
     { "path": "./packages/core/agent-default-model" },
     { "path": "./packages/interaction/commands" },
     {
@@ -268,6 +269,7 @@
     { "path": "./packages/test-support/loader-smoke" },
     { "path": "./packages/test-support/llm-mock-server" },
     { "path": "./packages/subagent/subagent" },
+    { "path": "./packages/subagent/subagent-runtime-route" },
     { "path": "./packages/subagent/tool-subagent" },
     { "path": "./packages/subagent/tool-subagent-control" },
     { "path": "./packages/subagent/tool-subagent-report" },

@@ -6,7 +6,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture, type PostToolDecision } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
+import { mountNativeTestRuntimeRouter } from './runtime-router.ts'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
@@ -35,7 +35,7 @@ async function harness(adapter: MockAdapter) {
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  await mountNativeTestRuntimeRouter(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], adapter)
   return ctx
@@ -532,7 +532,7 @@ describe('turn numbering continues across seeded sessions', () => {
     await ctx2.plugin(ToolRuntime)
     await ctx2.plugin(AgentRegistry)
     await ctx2.plugin(AgentRuntimeRegistry)
-    await ctx2.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx2)
     await ctx2.plugin(AgentLoop, { agents: [] })
     ctx2.llm.registerAdapter(['mock'], second)
 
@@ -686,7 +686,7 @@ describe('turn and step boundary recovery', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1120,7 +1120,7 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1172,7 +1172,7 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1224,7 +1224,7 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1272,7 +1272,7 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)
@@ -1322,7 +1322,7 @@ describe('disposal and cancellation during pre-step assembly', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+    await mountNativeTestRuntimeRouter(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountInvariants(ctx)
     ctx.llm.registerAdapter(['mock'], adapter)

@@ -52,7 +52,7 @@
 | P1 | 架构冻结 | P0a、P0b、P0c | P1 | 高级主干所有者 | `done` | `feat/configurable-cli-p1-architecture` | [PR #5](https://github.com/2heal1/deepseek-harness/pull/5) | [P1 冻结约定](../notes/proposed/feature/2026-08-17-configurable-cli-agent-runtimes-and-gui.zh.md#p1-冻结约定)：Agent／submission、Router 生命周期、事件来源、snapshot／fork、错误迁移与安全启动；高级架构复核确认 publication admission 与预发布 Session format version `0`；双语配对、`doc-sync` 28 项、lint 与 `git diff --check` 通过；PR 已合入集成分支 |
 | F1 | agent 运行时 Service Definition | P1 | F1 | 高级 | `done` | `feat/configurable-cli-f1-runtime-service` | [PR #7](https://github.com/2heal1/deepseek-harness/pull/7) | Service Definition、Fake Provider、能力／失败／UTF-8 byte-boundary 与不变量测试；逐文件 100% coverage，`doc-sync` 28 项、build、lint、hygiene 与 CI 27 项通过；PR 已合入集成分支 |
 | F2 | Router 与 Native 提取 | F1 | F | 高级 | `done` | `feat/configurable-cli-f2-router-native` | [PR #8](https://github.com/2heal1/deepseek-harness/pull/8) | Native 行为一致性、事务回滚、取消、资源释放与完全停稳测试；逐文件 100% coverage，`doc-sync` 28 项、build、typecheck、lint、hygiene、全量单测与 CI 18 项通过；PR 已合入集成分支 |
-| F3 | Runtime Profile 与 subagent route | F1 | F | 中等，高级评审 | `not-started` | `feat/configurable-cli-f3-profiles-routes` | — | 校验、快照解析、凭据引用与容量测试 |
+| F3 | Runtime Profile 与 subagent route | F1 | F | 中等，高级评审 | `in-review` | `feat/configurable-cli-f3-profiles-routes` | [PR #9](https://github.com/2heal1/deepseek-harness/pull/9) | Settings 快照、凭据按启动解析、共享 FIFO 容量、Router 接线与 one-shot subagent route；逐文件 100% coverage，`doc-sync` 28 项、build、lint、hygiene 与 pre-push typecheck 通过 |
 | F4 | 安全启动基础能力 | F1、P0c | F | 高级 | `not-started` | `feat/configurable-cli-f4-secure-launch` | — | 精确环境、保留参数、进程树、临时文件与 Windows Launcher 测试 |
 | F5 | 会话事件与 Host API | F1、P0c | F | 高级 | `not-started` | `feat/configurable-cli-f5-events-host-api` | — | Projection、fork、来源、不支持能力与 API schema 测试 |
 | D1 | Codex App Server Provider | P0a、F1、F4 | D | 中等，高级状态机评审 | `not-started` | `feat/configurable-cli-d1-codex-provider` | — | Fixture 一致性、背压、取消与失败清理 |
@@ -106,3 +106,5 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | 2026-08-31 | F2 | 从 `fork/feat/configurable-cli` 的 `7f28ead8ab` 创建 `feat/configurable-cli-f2-router-native`；确认 F1 已合入，Router 与 Native 提取进入 `in-progress` |
 | 2026-08-31 | F2 | Draft [PR #8](https://github.com/2heal1/deepseek-harness/pull/8) 已创建；Router、Native Provider、生命周期与 HMR 测试、逐文件 100% coverage、双语文档与派生目录完成，状态更新为 `in-review` |
 | 2026-09-01 | F2 | [PR #8](https://github.com/2heal1/deepseek-harness/pull/8) 以 `d84d503296` 合入集成分支；最终 CI 18 项通过、9 项按配置跳过，状态更新为 `done` |
+| 2026-09-01 | F3 | 从 `fork/feat/configurable-cli` 的 `d421dd8a38` 创建 `feat/configurable-cli-f3-profiles-routes`；确认 F1 已合入，Runtime Profile 与 subagent route 进入 `in-progress` |
+| 2026-09-01 | F3 | Draft [PR #9](https://github.com/2heal1/deepseek-harness/pull/9) 已创建；Runtime Profile、Router profile 接线、one-shot subagent route、逐文件 100% coverage、双语文档与派生目录完成，状态更新为 `in-review` |

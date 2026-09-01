@@ -24,6 +24,7 @@ import AgentRuntimeRegistry, {
   type PreparedAgentRuntime,
   type RuntimeProfileSnapshot,
 } from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeProfiles from '@deepseek-ai/dsh-agent-runtime-profile'
 import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 import LlmRuntime, { createUserMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
@@ -35,6 +36,35 @@ const capabilities = snapshotAgentRuntimeCapabilities([
   { id: 'continuation' },
   { id: 'queuedInputRead' },
 ])
+
+function profileConfig(provider: string) {
+  return {
+    defaultMainProfile: 'test',
+    profiles: {
+      test: {
+        provider,
+        launch: {
+          executable: process.execPath,
+          resolution: 'absolute' as const,
+          cwdPolicy: 'session-workspace' as const,
+        },
+        model: { allowSessionOverride: true },
+        product: { kind: 'test' },
+        permissions: {
+          policy: { kind: 'test' },
+          enforcement: 'required' as const,
+        },
+        process: {
+          startupTimeoutMs: 1_000,
+          turnTimeoutMs: 1_000,
+          shutdownTimeoutMs: 1_000,
+          terminationTimeoutMs: 1_000,
+          maxConcurrentRuns: 8,
+        },
+      },
+    },
+  }
+}
 
 function message(text: string): UserMessage {
   return createUserMessage({
@@ -174,7 +204,8 @@ async function harness(provider: FakeProvider): Promise<{
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: provider.id })
+  await ctx.plugin(AgentRuntimeProfiles, profileConfig(provider.id))
+  await ctx.plugin(AgentRuntimeRouter, {})
   const providerFiber = ctx.plugin(Object.assign((inner: Context) => {
     inner.agentRuntimes.registerProvider(provider)
   }, { inject: ['agentRuntimes'] }))
@@ -193,11 +224,12 @@ async function preRegisteredHarness(provider: FakeProvider): Promise<{
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(AgentRuntimeProfiles, profileConfig(provider.id))
   const providerFiber = ctx.plugin(Object.assign((inner: Context) => {
     inner.agentRuntimes.registerProvider(provider)
   }, { inject: ['agentRuntimes'] }))
   await providerFiber
-  await ctx.plugin(AgentRuntimeRouter, { provider: provider.id })
+  await ctx.plugin(AgentRuntimeRouter, {})
   return { ctx, providerFiber }
 }
 
@@ -343,10 +375,7 @@ describe('AgentRuntimeRouter', () => {
     await ctx.fiber.dispose()
   })
 
-  it('validates Router configuration, Provider presence, and profile versions', async () => {
-    expect(() => new AgentRuntimeRouter(new Context(), { provider: ' ' }))
-      .toThrow(expect.objectContaining({ code: 'PROFILE_INVALID' }))
-
+  it('validates Provider presence and profile versions', async () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(SessionStore)
@@ -354,7 +383,8 @@ describe('AgentRuntimeRouter', () => {
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentRuntimeRegistry)
-    await ctx.plugin(AgentRuntimeRouter, { provider: 'missing' })
+    await ctx.plugin(AgentRuntimeProfiles, profileConfig('missing'))
+    await ctx.plugin(AgentRuntimeRouter, {})
     await expect(ctx.agents.create({ sessionId: SessionId('missing') }))
       .rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' })
     expect(() => ctx.agentRuntimeRouter.createNative(
@@ -373,16 +403,15 @@ describe('AgentRuntimeRouter', () => {
     await incompatible.ctx.fiber.dispose()
   })
 
-  it('snapshots Native options and rejects malformed prepared handles', async () => {
+  it('resolves profile overrides and rejects malformed prepared handles', async () => {
     const provider = new FakeProvider()
     const { ctx } = await harness(provider)
     const handle = await ctx.agents.create({
       sessionId: SessionId('profile-options'),
       meta: { cwd: '/workspace' },
-      agentOptions: { provider: 'llm-provider', model: 'model', maxTokens: 123 },
+      agentOptions: { model: 'model' },
     })
     const profile = provider.request?.profile as RuntimeProfileSnapshot
-    expect(profile.provider.options).toEqual({ llmProvider: 'llm-provider', maxTokens: 123 })
     expect(profile.launch.cwd).toEqual({ kind: 'fixed', path: '/workspace' })
     expect(profile.model.default).toBe('model')
     await handle.dispose()
@@ -468,6 +497,42 @@ describe('AgentRuntimeRouter', () => {
     duringSetup.abort(new Error('setup cancelled'))
     setupGate.resolve(undefined)
     await expect(creating).rejects.toThrow('setup cancelled')
+    await ctx.fiber.dispose()
+  })
+
+  it('releases capacity when cancellation or Provider removal wins after admission', async () => {
+    const provider = new FakeProvider()
+    const { ctx, providerFiber } = await harness(provider)
+    const release = vi.fn()
+    const cancelled = new AbortController()
+    vi.spyOn(ctx.agentRuntimeProfiles, 'acquire').mockImplementationOnce(async () => {
+      cancelled.abort('late cancellation')
+      return { release }
+    })
+    await expect(ctx.agents.create({
+      sessionId: SessionId('late-cancellation'),
+      signal: cancelled.signal,
+    })).rejects.toThrow('creation aborted')
+    expect(release).toHaveBeenCalledOnce()
+
+    const cancelledWithError = new AbortController()
+    vi.spyOn(ctx.agentRuntimeProfiles, 'acquire').mockImplementationOnce(async () => {
+      cancelledWithError.abort(new Error('late cancellation error'))
+      return { release }
+    })
+    await expect(ctx.agents.create({
+      sessionId: SessionId('late-cancellation-error'),
+      signal: cancelledWithError.signal,
+    })).rejects.toThrow('late cancellation error')
+    expect(release).toHaveBeenCalledTimes(2)
+
+    vi.spyOn(ctx.agentRuntimeProfiles, 'acquire').mockImplementationOnce(async () => {
+      await providerFiber.dispose()
+      return { release }
+    })
+    await expect(ctx.agents.create({ sessionId: SessionId('late-provider-removal') }))
+      .rejects.toMatchObject({ code: 'RUNTIME_UNAVAILABLE' })
+    expect(release).toHaveBeenCalledTimes(3)
     await ctx.fiber.dispose()
   })
 

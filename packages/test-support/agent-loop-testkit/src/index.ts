@@ -8,6 +8,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
+import AgentRuntimeProfiles from '@deepseek-ai/dsh-agent-runtime-profile'
 import AgentRuntimeRouter from '@deepseek-ai/dsh-agent-runtime-router'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
@@ -22,6 +23,40 @@ export interface AgentLoopTestDependenciesOptions {
   readonly systemPrompt?: SystemPromptConfig
   /** Configuration for the tool registry. */
   readonly tools?: ToolRuntimeConfig
+}
+
+/**
+ * Mount the settings-independent Native Runtime Profile and Router used by tests.
+ * @param ctx - test context receiving both services.
+ */
+export async function mountNativeTestRuntimeRouter(ctx: Context): Promise<void> {
+  await ctx.plugin(AgentRuntimeProfiles, {
+    defaultMainProfile: 'native',
+    profiles: {
+      native: {
+        provider: 'native',
+        launch: {
+          executable: process.execPath,
+          resolution: 'absolute',
+          cwdPolicy: 'session-workspace',
+        },
+        model: { allowSessionOverride: true },
+        product: { kind: 'native-agent-loop' },
+        permissions: {
+          policy: { kind: 'harness' },
+          enforcement: 'required',
+        },
+        process: {
+          startupTimeoutMs: 15_000,
+          turnTimeoutMs: 1_800_000,
+          shutdownTimeoutMs: 5_000,
+          terminationTimeoutMs: 5_000,
+          maxConcurrentRuns: Number.MAX_SAFE_INTEGER,
+        },
+      },
+    },
+  })
+  await ctx.plugin(AgentRuntimeRouter, {})
 }
 
 /**
@@ -46,5 +81,5 @@ export async function mountAgentLoopTestDependencies(
   await ctx.plugin(ToolRuntime, options.tools ?? {})
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentRuntimeRegistry)
-  await ctx.plugin(AgentRuntimeRouter, { provider: 'native' })
+  await mountNativeTestRuntimeRouter(ctx)
 }

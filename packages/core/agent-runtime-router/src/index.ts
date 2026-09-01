@@ -23,7 +23,6 @@ import {
   AgentRuntimeError,
   AgentRuntimeId,
   AgentRuntimeProviderId,
-  RuntimeProfileId,
   snapshotAgentRuntimeFacts,
 } from '@deepseek-ai/dsh-agent-runtime'
 import type {
@@ -38,7 +37,10 @@ import type {
   RuntimeProfileSnapshot,
   SubmissionId,
 } from '@deepseek-ai/dsh-agent-runtime'
-import { deepFreeze } from '@deepseek-ai/dsh-llm'
+import type {
+  AgentRuntimeProfiles,
+  RuntimeCapacityLease,
+} from '@deepseek-ai/dsh-agent-runtime-profile'
 import { SessionId, SessionPreparation } from '@deepseek-ai/dsh-session'
 import type { Session, SessionHeader } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
@@ -57,11 +59,8 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** Router configuration before Runtime Profile resolution moves to F3. */
-export interface Config {
-  /** Provider selected for AgentFactory create and resume operations. */
-  provider: string
-}
+/** Router has no deployment-varying selection; Runtime Profiles own it. */
+export interface Config {}
 
 /** Native-only synchronous preparation used by the legacy AgentLoop create helper. */
 interface SynchronousAgentRuntimeProvider extends AgentRuntimeProvider {
@@ -177,60 +176,6 @@ async function raceAbortCall<T>(
   }
 }
 
-/** Build the temporary effective Native snapshot used until F3 owns profiles. */
-function nativeProfile(
-  providerId: ReturnType<typeof AgentRuntimeProviderId>,
-  session: Session,
-  options: AgentOptions,
-): RuntimeProfileSnapshot {
-  const llmProvider = options.provider
-  const model = options.model
-  const maxTokens = options.maxTokens
-  return deepFreeze({
-    schemaVersion: 0,
-    profileId: RuntimeProfileId('native'),
-    settingsRevision: 0,
-    provider: {
-      id: providerId,
-      optionsVersion: 0,
-      options: {
-        ...llmProvider === undefined ? {} : { llmProvider },
-        ...maxTokens === undefined ? {} : { maxTokens },
-      },
-    },
-    launch: {
-      executable: process.execPath,
-      resolution: { kind: 'absolute' },
-      args: [],
-      cwd: session.header.cwd === undefined
-        ? { kind: 'session-workspace' }
-        : { kind: 'fixed', path: session.header.cwd },
-      ambientEnv: [],
-      env: {},
-    },
-    model: {
-      ...model === undefined ? {} : { default: model },
-      allowSessionOverride: true,
-    },
-    product: { kind: 'native-agent-loop' },
-    permissions: {
-      policy: { kind: 'harness' },
-      enforcement: 'required',
-      approval: 'unattended-fail-closed',
-    },
-    nativeTools: { allowed: [] },
-    harnessTools: { transport: 'none', allowed: [] },
-    credentials: [],
-    deadlines: {
-      startupMs: 1,
-      turnMs: 1,
-      shutdownMs: 1,
-      terminationMs: 1,
-    },
-    capacity: { maxConcurrentRuns: 1 },
-  })
-}
-
 /** Validate the prepared handle before any registry publication. */
 function validatePreparedRuntime(
   provider: AgentRuntimeProvider,
@@ -320,7 +265,9 @@ class AgentLifecycle {
   private disposing: Promise<void> | undefined
   private readonly abort = new AbortController()
   private readonly sink: RouterEventSink
+  /* v8 ignore start -- constructor failure leaves no lifecycle that could invoke this placeholder. */
   private unfollowOwner: () => Promise<void> | void = () => {}
+  /* v8 ignore stop */
   private readonly untrack: () => void
   private readonly agentReady = Promise.withResolvers<void>()
 
@@ -331,6 +278,7 @@ class AgentLifecycle {
     providerSignal: AbortSignal,
     session: Session,
     options: AgentOptions,
+    private readonly capacityLease: RuntimeCapacityLease,
     callerSignal?: AbortSignal,
   ) {
     ownerCtx.fiber.assertActive()
@@ -495,6 +443,7 @@ class AgentLifecycle {
       this.detachSession?.()
     } finally {
       this.untrack()
+      this.capacityLease.release()
       if (!ownerTriggered) await this.unfollowOwner()
     }
     if (failure !== undefined) {
@@ -515,32 +464,28 @@ class AgentLifecycle {
 
 /** Configurable runtime Router and the sole AgentFactory implementation. */
 export class AgentRuntimeRouter extends Service implements AgentFactory {
-  static inject = ['agents', 'sessions', 'agentRuntimes', 'llm', 'tools', 'systemPrompt']
+  static inject = [
+    'agents',
+    'sessions',
+    'agentRuntimes',
+    'agentRuntimeProfiles',
+    'llm',
+    'tools',
+    'systemPrompt',
+  ]
 
-  static Config = z.object({
-    provider: z.string().required(),
-  }) as z<Config>
+  static Config = z.object({}) as z<Config>
 
   /** Router-owned lifecycle set used by Provider generations and Agent handles. */
   readonly ownership: RouterOwnership
-  /** Immutable default Provider selection used before F3 profile resolution. */
-  readonly config: Readonly<Config>
   private readonly providerGenerations = new Map<
     AgentRuntimeProviderIdType,
     { readonly provider: AgentRuntimeProvider; readonly abort: AbortController }
   >()
   private readonly runtime: { ctx: Context }
 
-  constructor(ctx: Context, config: Config) {
+  constructor(ctx: Context, _config: Config) {
     super(ctx, 'agentRuntimeRouter')
-    if (config.provider.trim() === '') {
-      throw new AgentRuntimeError({
-        code: 'PROFILE_INVALID',
-        phase: 'profile',
-        message: 'agent runtime Router provider must be non-empty',
-      })
-    }
-    this.config = Object.freeze({ provider: config.provider })
     this.ownership = new RouterOwnership(ctx.fiber)
     this.runtime = { ctx }
     ctx.effect(() => () => this.ownership.dispose(), 'agentRuntimeRouter.transactions()')
@@ -614,22 +559,27 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     meta: Pick<SessionHeader, 'cwd'> = {},
   ): Agent {
     using preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(id, { meta }))
-    const providerId = AgentRuntimeProviderId(this.config.provider)
+    const profile = this.resolveProfile(preparation.session, options)
+    const providerId = profile.provider.id
     const generation = this.requireProviderGeneration(providerId)
-    const profile = this.resolveProfile(generation.provider, preparation.session, options)
-    const lifecycle = new AgentLifecycle(
-      this,
-      ownerCtx,
-      generation.provider,
-      generation.signal,
-      preparation.session,
-      options,
-    )
+    this.assertProfileCompatible(generation.provider, profile)
+    const capacityLease = this.profiles.acquireSync(profile)
+    let lifecycle: AgentLifecycle | undefined
     try {
+      lifecycle = new AgentLifecycle(
+        this,
+        ownerCtx,
+        generation.provider,
+        generation.signal,
+        preparation.session,
+        options,
+        capacityLease,
+      )
       lifecycle.prepareSync(profile)
       return lifecycle.publish('startup').agent
     } catch (error: unknown) {
-      void lifecycle.dispose().catch((disposeError: unknown) => {
+      capacityLease.release()
+      void lifecycle?.dispose().catch((disposeError: unknown) => {
         this.runtime.ctx.logger.warn(`agent "${id}": rollback cleanup failed: ${String(disposeError)}`)
       })
       throw error
@@ -647,8 +597,7 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     if (persistence === undefined) {
       throw new Error('cannot resume: session persistence is not configured (load a dsh-session-persistence backend)')
     }
-    const generation = this.requireProviderGeneration(AgentRuntimeProviderId(this.config.provider))
-    const published = this.resumeWith(ownerCtx, persistence, options, generation)
+    const published = this.resumeWith(ownerCtx, persistence, options)
     this.ownership.trackWrapper(published)
     return published
   }
@@ -658,9 +607,19 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     ownerCtx: Context,
     persistence: SessionPersistence,
     options: ResumeAgentOptions,
-    generation: ProviderGeneration,
   ): Promise<AgentHandle> {
     const id = options.resumeSessionId
+    const profile = this.profiles.resolve(options.agentOptions?.runtimeProfile, {
+      ...options.agentOptions?.model === undefined ? {} : { model: options.agentOptions.model },
+      ...options.agentOptions?.provider === undefined
+        ? {}
+        : { nativeLlmProvider: options.agentOptions.provider },
+      ...options.agentOptions?.maxTokens === undefined
+        ? {}
+        : { nativeMaxTokens: options.agentOptions.maxTokens },
+    })
+    const generation = this.requireProviderGeneration(profile.provider.id)
+    this.assertProfileCompatible(generation.provider, profile)
     const ownerAbort = new AbortController()
     const unfollowOwner = ownerCtx.effect(() => () => {
       ownerAbort.abort(new Error(`agent "${id}" setup aborted: owner disposed during setup`))
@@ -693,6 +652,7 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
         options.signal,
         'resume',
         generation,
+        profile,
       )
     } finally {
       preparation?.[Symbol.dispose]()
@@ -708,32 +668,86 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     signal: AbortSignal | undefined,
     source: SessionStartSource,
     selectedGeneration?: ProviderGeneration,
+    selectedProfile?: RuntimeProfileSnapshot,
   ): Promise<AgentHandle> {
     using ownedPreparation = preparation
-    const providerId = AgentRuntimeProviderId(this.config.provider)
+    if (signal?.aborted === true) {
+      throw signal.reason instanceof Error
+        ? signal.reason
+        : new Error(`agent "${ownedPreparation.session.id}" creation aborted`, {
+          cause: signal.reason,
+        })
+    }
+    const profile = selectedProfile ?? this.resolveProfile(ownedPreparation.session, options)
+    const providerId = profile.provider.id
     const generation = selectedGeneration ?? this.requireProviderGeneration(providerId)
-    const profile = this.resolveProfile(generation.provider, ownedPreparation.session, options)
-    const lifecycle = new AgentLifecycle(
-      this,
+    this.assertProfileCompatible(generation.provider, profile)
+    const capacityLease = await this.acquireCapacity(
       ownerCtx,
-      generation.provider,
-      generation.signal,
-      ownedPreparation.session,
-      options,
+      generation,
+      profile,
       signal,
+      ownedPreparation.session.id,
     )
+    let lifecycle: AgentLifecycle | undefined
     try {
+      lifecycle = new AgentLifecycle(
+        this,
+        ownerCtx,
+        generation.provider,
+        generation.signal,
+        ownedPreparation.session,
+        options,
+        capacityLease,
+        signal,
+      )
       await lifecycle.prepare(profile)
       const setupCommit = await raceAbort(setup?.(lifecycle.agent.ctx), lifecycle.signal, lifecycle.agent.id)
       setupCommit?.commit()
       return lifecycle.publish(source)
     } catch (error: unknown) {
+      capacityLease.release()
       try {
-        await lifecycle.dispose()
+        await lifecycle?.dispose()
       } catch (disposeError: unknown) {
-        this.runtime.ctx.logger.warn(`agent "${lifecycle.agent.id}": rollback cleanup failed: ${String(disposeError)}`)
+        this.runtime.ctx.logger.warn(
+          `agent "${ownedPreparation.session.id}": rollback cleanup failed: ${String(disposeError)}`,
+        )
       }
       throw error
+    }
+  }
+
+  /** Wait for capacity under caller, Router, Provider, and request ownership. */
+  private async acquireCapacity(
+    ownerCtx: Context,
+    generation: ProviderGeneration,
+    profile: RuntimeProfileSnapshot,
+    callerSignal: AbortSignal | undefined,
+    id: SessionId,
+  ): Promise<RuntimeCapacityLease> {
+    const ownerAbort = new AbortController()
+    const unfollowOwner = ownerCtx.effect(() => () => {
+      ownerAbort.abort(new Error(`agent "${id}" capacity wait aborted: owner disposed`))
+    }, `agentRuntimeRouter.capacity(${id})`)
+    const signal = AbortSignal.any([
+      ...callerSignal === undefined ? [] : [callerSignal],
+      ownerAbort.signal,
+      this.ownership.signal,
+      generation.signal,
+    ])
+    let lease: RuntimeCapacityLease | undefined
+    try {
+      lease = await this.profiles.acquire(profile, signal)
+      ownerCtx.fiber.assertActive()
+      this.assertActive()
+      if (generation.signal.aborted) throw generation.signal.reason
+      return lease
+    } catch (error: unknown) {
+      lease?.release()
+      throw error
+    } finally {
+      await unfollowOwner()
     }
   }
 
@@ -764,20 +778,36 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     })
   }
 
-  /** Build and compatibility-check the temporary F2 Native profile. */
+  /** Resolve one settings-backed profile before runtime resources exist. */
   private resolveProfile(
-    provider: AgentRuntimeProvider,
     session: Session,
     options: AgentOptions,
   ): RuntimeProfileSnapshot {
-    const profile = nativeProfile(provider.id, session, options)
-    if (provider.profileSnapshotVersions.includes(profile.schemaVersion)) return profile
+    return this.profiles.resolve(options.runtimeProfile, {
+      ...options.model === undefined ? {} : { model: options.model },
+      ...options.provider === undefined ? {} : { nativeLlmProvider: options.provider },
+      ...options.maxTokens === undefined ? {} : { nativeMaxTokens: options.maxTokens },
+      ...session.header.cwd === undefined ? {} : { cwd: session.header.cwd },
+    })
+  }
+
+  /** Check the selected Provider against the pinned profile representation. */
+  private assertProfileCompatible(
+    provider: AgentRuntimeProvider,
+    profile: RuntimeProfileSnapshot,
+  ): void {
+    if (provider.profileSnapshotVersions.includes(profile.schemaVersion)) return
     throw new AgentRuntimeError({
       code: 'RUNTIME_INCOMPATIBLE',
       phase: 'profile',
       message: `agent runtime provider "${provider.id}" does not accept profile snapshot version ${profile.schemaVersion}`,
       providerId: provider.id,
     })
+  }
+
+  /** Untraced Runtime Profile service owned by the Router composition. */
+  private get profiles(): AgentRuntimeProfiles {
+    return this.runtime.ctx.agentRuntimeProfiles
   }
 }
 

@@ -15,11 +15,12 @@
 | `tools/` | 带作用域的工具注册表与受保护的执行流水线（`ctx.tools`） | [tools.md](tools.md) |
 | `agent/` | `Agent` 接口、实时注册表、发起者作用域与 `agent/*` 事件词汇（`ctx.agents`） | 本页 |
 | `agent-runtime/` | Provider 发现与提供方无关的运行时类型（`ctx.agentRuntimes`） | 本页 |
+| `agent-runtime-profile/` | 由 Settings 支持的 profile 快照、凭据引用与共享容量（`ctx.agentRuntimeProfiles`） | 本页 |
 | `agent-runtime-router/` | 唯一的 Agent Factory 与公共生命周期 owner（`ctx.agentRuntimeRouter`） | 本页 |
 | `agent-loop/` | Native 运行时 Provider 与 React 循环 driver（`ctx.agentLoop`） | 本页 |
 | `scope/` | 注册表与循环用于构建按 agent 作用域的注册原语 | [scope.md](scope.md) |
 
-`scope/` 是这里唯一的非服务包：一个零依赖库（`createScope`/`scopeOf`/`scopeTarget`），在模块图中位于 `session/` 与 `system-prompt/` 之下，正是为了让它们消费它而不形成环。Router 拥有公开 Agent identity、发布、准入、回滚与 teardown；`agent-loop` 提供默认 Native driver，并在 `ctx.agents.withInitiator()` 内运行它。扩展插件依赖 `agent`，运行时实现则通过 `agent-runtime` 注册。把这条主干接成可运行 Agent 的默认组合是 [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md)。
+`scope/` 是这里唯一的非服务包：一个零依赖库（`createScope`/`scopeOf`/`scopeTarget`），在模块图中位于 `session/` 与 `system-prompt/` 之下，正是为了让它们消费它而不形成环。`agent-runtime-profile` 校验 Settings，并为每次新运行解析一份完整、不可变的非秘密快照；profile 编辑只影响后续解析，而凭据值会在每次进程启动时单独解析。Router 选择该快照指定的 Provider，并持有共享 profile 容量直到运行时完全 teardown。它还拥有公开 Agent identity、发布、准入与回滚；`agent-loop` 提供默认 Native driver，并在 `ctx.agents.withInitiator()` 内运行它。扩展插件依赖 `agent`，运行时实现则通过 `agent-runtime` 注册。把这条主干接成可运行 Agent 的默认组合是 [`examples/agent-spine-demo`](../../packages/examples/agent-spine-demo/README.md)。
 
 <a id="creation-and-ownership"></a>
 
@@ -165,6 +166,8 @@ type AgentStatus = 'idle' | 'running'
 ```ts type-equiv
 /** Merge-extensible agent creation options. Persona belongs to system-prompt sections. */
 interface AgentOptions {
+  /** Runtime Profile selected for a new Session; omission uses the configured default. */
+  runtimeProfile?: string
   /** Provider route (must have a registered adapter at call time). */
   provider?: string
   /** Model id interpreted by the selected provider adapter. */
@@ -581,6 +584,64 @@ Types: [ScopeKey](scope.md)
 
 Source: [`packages/preset/agent-presets/src/index.ts:82`](../../packages/preset/agent-presets/src/index.ts)
 
+<a id="ctxagentruntimeprofiles--agentruntimeprofiles"></a>
+
+### `ctx.agentRuntimeProfiles` — `AgentRuntimeProfiles`
+
+Settings-backed profile resolver shared by the Agent Router and subagent routes.
+
+```ts cordis-catalog
+/**
+ * Resolve one complete immutable profile for a new runtime.
+ * @param id - profile id, or the current default when omitted.
+ * @param overrides - caller values resolved into the returned snapshot.
+ * @returns a detached non-secret effective snapshot.
+ * @throws {AgentRuntimeError} when the profile is absent or invalid.
+ */
+resolve(id?: string, overrides: RuntimeProfileOverrides = {}): RuntimeProfileSnapshot
+
+/**
+ * Resolve one configured one-shot subagent route.
+ * @param id - route id.
+ * @returns the immutable route and profile snapshot.
+ * @throws {AgentRuntimeError} when the route or profile is absent.
+ */
+resolveRoute(id: string): ResolvedRuntimeSubagentRoute
+
+/**
+ * List configured runtime-backed subagent route ids in settings order.
+ * @returns detached route ids.
+ */
+listRoutes(): string[]
+
+/**
+ * Wait for a shared profile slot in cancelable FIFO order.
+ * @param profile - immutable snapshot fixing the profile capacity.
+ * @param signal - cancellation while waiting.
+ * @param upperLimit - optional route limit; cannot raise profile capacity.
+ * @returns a lease held until runtime quiescence and cleanup complete.
+ */
+acquire( profile: RuntimeProfileSnapshot, signal: AbortSignal, upperLimit?: number, ): Promise<RuntimeCapacityLease>
+
+/**
+ * Acquire an immediately available slot for the Native synchronous entry.
+ * @param profile - immutable snapshot fixing profile capacity.
+ * @returns a lease held until Native runtime quiescence.
+ * @throws {AgentRuntimeError} code `AGENT_BUSY` rather than queueing.
+ */
+acquireSync(profile: RuntimeProfileSnapshot): RuntimeCapacityLease
+
+/**
+ * Resolve every credential reference for one process start.
+ * @param profile - pinned profile whose references are read.
+ * @returns exact target-to-value entries for the launcher.
+ * @throws {AgentRuntimeError} before process creation when a reference is missing.
+ */
+async resolveCredentials( profile: RuntimeProfileSnapshot, ): Promise<ResolvedRuntimeCredentials>
+```
+
+Source: [`packages/core/agent-runtime-profile/src/index.ts:428`](../../packages/core/agent-runtime-profile/src/index.ts)
+
 <a id="ctxagentruntimerouter--agentruntimerouter"></a>
 
 ### `ctx.agentRuntimeRouter` — `AgentRuntimeRouter`
@@ -621,7 +682,7 @@ async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandl
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:517`](../../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:466`](../../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="ctxagentruntimes--agentruntimeregistry"></a>
 
@@ -855,7 +916,7 @@ A fully configured agent and live session were published. Setup is composition-o
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:178`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:180`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentdisposed--emit"></a>
 
@@ -877,7 +938,7 @@ An agent left the registry; AgentLoop emits this after driver quiescence and sco
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:187`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:189`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agenterror--emit"></a>
 
@@ -901,7 +962,7 @@ A step or turn errored. The machine reports a failure here even when the error h
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:309`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:311`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxclaimed--emit"></a>
 
@@ -925,7 +986,7 @@ One message left the inbox inside its open turn. If the proposed step is rejecte
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:216`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:218`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxdiscarded--emit"></a>
 
@@ -946,7 +1007,7 @@ One message was discarded from the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:224`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:226`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxinserted--emit"></a>
 
@@ -967,7 +1028,7 @@ One message entered the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:205`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:207`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentpre-step--waterfall"></a>
 
@@ -992,7 +1053,7 @@ Reject a proposed step or replace the messages that enter it. Calling `next()` p
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:250`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:252`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest--waterfall"></a>
 
@@ -1018,7 +1079,7 @@ Replace the frozen call configuration. `await next()` yields the config the mach
 
 Types: [LlmCallConfig](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:263`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:265`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest-error--waterfall"></a>
 
@@ -1047,7 +1108,7 @@ Handle one failed model-request attempt before the loop retries or closes its st
 
 Types: [LlmFailure](llm-streaming.md) · [ResolvedRetryPolicy](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:279`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:281`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentsession-start--emit"></a>
 
@@ -1071,7 +1132,7 @@ The session lifecycle began, once before the first turn. Use `agent.inject()` to
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:236`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:238`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentstatus--emit"></a>
 
@@ -1094,7 +1155,7 @@ Agent status changed (`idle` ⇄ `running`). A waking delivery enters `running` 
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:197`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:199`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentturn-stopping--serial"></a>
 
@@ -1125,7 +1186,7 @@ The turn is about to close: the model owes no response (no live tool calls, no f
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:297`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:299`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agent-loop-events"></a>
 

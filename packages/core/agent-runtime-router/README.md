@@ -2,33 +2,27 @@
 
 English | [中文](README.zh.md)
 
-The sole `AgentFactory` Consumer for configurable Agent runtimes. It selects a registered Provider and owns the common Session, Agent, publication, rollback, and teardown transaction.
+The sole `AgentFactory` Consumer for configurable Agent runtimes. It resolves a Runtime Profile, selects its registered Provider, and owns the common Session, Agent, publication, rollback, capacity, and teardown transaction.
 
 ## Service: `AgentRuntimeRouter` (ctx key: `agentRuntimeRouter`)
 
-Load `AgentRegistry`, `AgentRuntimeRegistry`, and this package before a concrete Provider. The Router installs itself through `ctx.agents.setFactory()`; Providers never install or replace that factory.
+Load `AgentRegistry`, `AgentRuntimeRegistry`, `AgentRuntimeProfiles`, and this package before a concrete Provider. The Router installs itself through `ctx.agents.setFactory()`; Providers never install or replace that factory.
 
-`ctx.agents.create()` and `ctx.agents.resume()` capture one exact Provider registration generation before preparing resources. Provider removal aborts persistence loading, preparation, setup, and every live lifecycle from that generation with `RUNTIME_UNAVAILABLE`. A replacement with the same id serves only later transactions.
+`ctx.agents.create()` and `ctx.agents.resume()` resolve one immutable profile snapshot, then capture one exact registration generation for that profile's Provider before preparing resources. Provider removal aborts persistence loading, preparation, setup, and every live lifecycle from that generation with `RUNTIME_UNAVAILABLE`. A replacement with the same id serves only later transactions.
 
 Publication enters the Session and Agent registries, synchronously announces `session/created` and `agent/created`, emits `agent/session-start`, then opens admission. Registry lookup may expose the Agent during those notifications, but waking input rejects with `SUBMISSION_REJECTED` in phase `publication`. Failure closes admission before rollback and removes both registry entries before rejecting.
 
-The caller context, Router service, and selected Provider generation are structural owners. Any owner teardown converges on one memoized disposal: close admission, cancel and drain the prepared runtime, dispose the Agent scope, detach the Agent, and detach the Session. Disposal waits for provider quiescence even when cleanup ultimately reports `DISPOSE_FAILED`.
+The caller context, Router service, and selected Provider generation are structural owners. Any owner teardown converges on one memoized disposal: close admission, cancel and drain the prepared runtime, dispose the Agent scope, detach the Agent, detach the Session, then release the profile capacity lease. Disposal waits for provider quiescence even when cleanup ultimately reports `DISPOSE_FAILED`.
 
 ## Native Transition
 
-F2 preserves the existing Native API while Hosts migrate in F5. `RoutedAgent` delegates inbox, status, cancellation, maintenance, and send operations to the Native `AgentDriver` returned by the prepared handle. Capability checks guard optional operations. Non-waking setup injection is permitted during publication; waking input opens only after synchronous publication succeeds.
+The existing Native API remains available while Hosts migrate in F5. `RoutedAgent` delegates inbox, status, cancellation, maintenance, and send operations to the Native `AgentDriver` returned by the prepared handle. Capability checks guard optional operations. Non-waking setup injection is permitted during publication; waking input opens only after synchronous publication succeeds.
 
-The temporary F2 profile always selects the configured Provider and carries the existing Native model options. F3 replaces this adapter with resolved Runtime Profiles. The event sink rejects assistant and activity output until F5 installs canonical durable runtime events, while the Native driver continues to append the established Native Session events.
+`AgentOptions.runtimeProfile` selects a profile; omission uses the configured default. Existing `provider`, `model`, and `maxTokens` options become Native profile overrides. External profiles reject Native-only overrides, and every profile rejects a Session model override unless it explicitly allows one. The event sink rejects assistant and activity output until F5 installs canonical durable runtime events, while the Native driver continues to append the established Native Session events.
 
 ## Configuration
 
-```ts
-interface Config {
-  provider: string
-}
-```
-
-`provider` is the registered Provider id selected for create and resume. Missing or removed Providers fail explicitly; the Router never falls back to Native.
+The Router has no configuration fields. Runtime selection belongs to [`dsh-agent-runtime-profile`](../agent-runtime-profile/README.md). Missing profiles, incompatible snapshot schema versions, and absent or removed Providers fail explicitly; the Router never falls back to Native.
 
 ## Invariants
 
@@ -52,6 +46,6 @@ The Router does not rewrite request prefixes. Native cache behavior is unchanged
 
 ## Known Limitations and Deferred Work
 
-- **Native-only profile adapter** - F3 replaces the temporary profile snapshot with settings-backed profile resolution.
 - **No provider-neutral submission receipts** - F5 migrates Hosts and the Agent API to receipts and installs canonical runtime event production.
 - **No external output admission yet** - assistant and activity reports through the event sink fail until F5 can validate and persist them.
+- **Resolved snapshots are not yet Session headers** - F5 owns durable profile identity and resume or fork reconstruction; the Router currently resolves a fresh snapshot for each create or resume transaction.

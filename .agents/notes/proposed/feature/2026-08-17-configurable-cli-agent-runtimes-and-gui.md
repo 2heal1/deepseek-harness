@@ -22,7 +22,7 @@ The first useful release supports native execution, a Codex App Server-compatibl
 
 ### P1 frozen contracts
 
-The following contracts are the implementation input for F1, F2, F4, and F5. Those work packages may add private helpers and provider-specific data, but changing these public identities, ownership rules, event producers, persistence rules, or security guarantees requires another decision update.
+The following contracts are the implementation input for F1 through F5. Those work packages may add private helpers and provider-specific data, but changing these public identities, ownership rules, event producers, persistence rules, or security guarantees requires another decision update.
 
 #### Agent, submissions, and capabilities
 
@@ -101,7 +101,17 @@ The package does not install `AgentFactory`, publish a Session or Agent, resolve
 
 `@deepseek-ai/dsh-agent-loop` is the `native` Provider. Its prepared handle fixes the Native capability set and owns a `ReactLoopDriver`; the Router-owned Agent delegates the existing inbox, cancellation, maintenance, and waking operations to that driver. Provider unload drains all prepared handles before removing its registration. Existing Native Session events and Host-facing methods remain unchanged in F2, including the synchronous `ctx.agentLoop.create()` compatibility entry used by declarative startup.
 
-F2 intentionally does not implement the F3 profile Consumer or the F5 submission receipts and canonical runtime-event sink. Until F3, the Router builds a Native-only compatibility snapshot from existing Agent options. Until F5, external assistant and activity reports fail at the sink, while the Native driver remains the producer of existing turn, step, request, inbox, and assistant events. This transition keeps Native behavior stable without claiming that external Providers can yet complete a product-facing run.
+F2 intentionally does not implement the F5 submission receipts and canonical runtime-event sink. Until F5, external assistant and activity reports fail at the sink, while the Native driver remains the producer of existing turn, step, request, inbox, and assistant events. This transition keeps Native behavior stable without claiming that external Providers can yet complete a product-facing run.
+
+#### F3 Runtime Profiles and subagent routes
+
+`@deepseek-ai/dsh-agent-runtime-profile` owns the `agent-runtime` Settings namespace and resolves each new run to a complete deeply frozen non-secret snapshot. The snapshot records the observed Settings revision for audit correlation but Settings does not retain historical revisions. Editing or deleting a stored profile affects only later resolutions. Credential references remain in the snapshot; `resolveCredentials()` reads current values separately for each process start and fails before launch when a required service or value is absent.
+
+The Router selects the Provider generation named by the snapshot and acquires shared profile capacity before preparation. Asynchronous create and resume wait in cancelable FIFO order; the Native synchronous compatibility entry fails with `AGENT_BUSY` when no slot is immediately available. The lease remains held until Provider quiescence and common teardown complete. `AgentOptions.runtimeProfile` selects a profile, while existing provider and token options are accepted only as Native overrides and model overrides require profile permission.
+
+`@deepseek-ai/dsh-subagent-runtime-route` maintains one wrapper `SubagentProvider` and one `dsh-tool-subagent` instance for each configured one-shot route. The existing `ctx.subagents` service remains the public dispatch and lifecycle authority. A start resolves a fresh snapshot, selects the underlying Provider by the snapshot's Provider id, applies the lower of route and profile capacity, and holds that lease through the underlying run's quiescent disposal. Settings reconciliation replaces or removes registrations through their Cordis fibers.
+
+F3 does not interpret launch fields, construct process environments, enforce sandbox policy, or persist snapshots into Session headers. F4 owns secure launch and credential redaction; F5 owns durable snapshot identity, resume and fork reconstruction, submission receipts, and canonical runtime events.
 
 Web RPC schemas move in lockstep during this pre-release. ACP wire behavior remains protocol version 1; the ACP Host translates receipt settlement to the existing ACP response and flushes its own ordered output queue. JSON-RPC `serverInfo.version` becomes `0.0.2`; `session/prompt` returns both message and submission ids, and submission start and settlement notifications replace inbox-splice inference. Old SDK clients fail version/schema validation instead of receiving compatibility emulation. Headless awaits the receipt settlement and then flushes only its correlated Session interval.
 

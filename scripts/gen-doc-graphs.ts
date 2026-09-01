@@ -350,12 +350,27 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary.',
   },
   {
+    key: 'agentRuntimeProfiles',
+    pkg: 'agent-runtime-profile',
+    title: 'Runtime Profile resolver',
+    mode: 'core',
+    consumers: ['agent-runtime-router', 'subagent-runtime-route'],
+    note: 'Resolves validated Settings into immutable non-secret snapshots, resolves credentials per process start, and owns shared profile capacity.',
+  },
+  {
     key: 'agentRuntimeRouter',
     pkg: 'agent-runtime-router',
     title: 'Agent runtime Router',
     mode: 'core',
     consumers: ['agent-spine-demo'],
-    note: 'Installs the sole AgentFactory and owns common Provider selection, publication, rollback, and teardown.',
+    note: 'Installs the sole AgentFactory and owns profile-based Provider selection, publication, rollback, capacity lifetime, and teardown.',
+  },
+  {
+    key: 'agentRuntimeSubagentRoutes',
+    pkg: 'subagent-runtime-route',
+    title: 'Runtime-backed subagent routes',
+    mode: 'core',
+    note: 'Maintains one wrapper Provider and delegation tool per Settings-backed one-shot route while ctx.subagents remains the dispatch authority.',
   },
   {
     key: 'agentDefaultModel',
@@ -492,7 +507,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Subagent provider and continuation service',
     mode: 'seam',
     implementations: ['subagent-spawn-in-process', 'subagent-fork-in-process', 'subagent-acp', 'subagent-codex', 'subagent-claude-code', 'subagent-dsh-sdk'],
-    consumers: ['tool-subagent', 'tool-subagent-control', 'tool-ralph'],
+    consumers: ['subagent-runtime-route', 'tool-subagent', 'tool-subagent-control', 'tool-ralph'],
     note: 'Providers implement transports; the service also owns optional Activation-based continuation orchestration, tool-subagent selects one-shot or continuable delegation, tool-subagent-control delivers follow-ups, and tool-ralph requires one fresh structured-output route.',
   },
   {

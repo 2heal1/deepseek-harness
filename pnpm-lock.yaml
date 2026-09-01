@@ -1018,6 +1018,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-profile
       '@deepseek-ai/dsh-agent-runtime-router':
         specifier: workspace:^
         version: link:../../core/agent-runtime-router
@@ -1150,6 +1153,9 @@ importers:
       '@deepseek-ai/dsh-subagent-fork-in-process':
         specifier: workspace:^
         version: link:../../subagent/subagent-fork-in-process
+      '@deepseek-ai/dsh-subagent-runtime-route':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-runtime-route
       '@deepseek-ai/dsh-subagent-spawn-in-process':
         specifier: workspace:^
         version: link:../../subagent/subagent-spawn-in-process
@@ -3672,6 +3678,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../agent-runtime-profile
       '@deepseek-ai/dsh-agent-runtime-router':
         specifier: workspace:^
         version: link:../agent-runtime-router
@@ -3724,6 +3733,34 @@ importers:
         specifier: workspace:^
         version: link:../session
 
+  packages/core/agent-runtime-profile:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent-runtime':
+        specifier: workspace:^
+        version: link:../agent-runtime
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../session
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+
   packages/core/agent-runtime-router:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -3739,6 +3776,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../agent-runtime-profile
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
@@ -4056,6 +4096,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-profile
       '@deepseek-ai/dsh-agent-runtime-router':
         specifier: workspace:^
         version: link:../../core/agent-runtime-router
@@ -5648,6 +5691,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-profile
       '@deepseek-ai/dsh-agent-runtime-router':
         specifier: workspace:^
         version: link:../../core/agent-runtime-router
@@ -7718,6 +7764,49 @@ importers:
         specifier: workspace:^
         version: link:../../interaction/user-approval
 
+  packages/subagent/subagent-runtime-route:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-agent-runtime':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-profile
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@deepseek-ai/dsh-settings':
+        specifier: workspace:^
+        version: link:../../settings/settings
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:^
+        version: link:../subagent
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@deepseek-ai/dsh-tool-subagent':
+        specifier: workspace:^
+        version: link:../tool-subagent
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+
   packages/subagent/subagent-spawn-in-process:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -8099,6 +8188,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-profile
       '@deepseek-ai/dsh-agent-runtime-router':
         specifier: workspace:^
         version: link:../../core/agent-runtime-router
@@ -8784,6 +8876,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../packages/core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:^
+        version: link:../../packages/core/agent-runtime-profile
       '@deepseek-ai/dsh-agent-runtime-router':
         specifier: workspace:^
         version: link:../../packages/core/agent-runtime-router
@@ -8994,6 +9089,9 @@ importers:
       '@deepseek-ai/dsh-subagent-in-process-driver':
         specifier: workspace:^
         version: link:../../packages/subagent/subagent-in-process-driver
+      '@deepseek-ai/dsh-subagent-runtime-route':
+        specifier: workspace:^
+        version: link:../../packages/subagent/subagent-runtime-route
       '@deepseek-ai/dsh-subagent-spawn-in-process':
         specifier: workspace:^
         version: link:../../packages/subagent/subagent-spawn-in-process
