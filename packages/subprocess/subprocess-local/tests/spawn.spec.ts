@@ -205,6 +205,25 @@ describe('spawnSubprocess', () => {
     expect(result.stdout.text).toBe('callers-choice\n')
   })
 
+  it('uses only explicit entries when the caller requests an exact environment', async () => {
+    process.env.SUBPROCESS_EXACT_AMBIENT = 'must-not-leak'
+    try {
+      const result = await finish(spawnSubprocess({
+        ...spec('unused'),
+        argv: [
+          process.execPath,
+          '-e',
+          'console.log(`${process.env.ONLY}/${process.env.SUBPROCESS_EXACT_AMBIENT ?? "absent"}`)',
+        ],
+        envMode: 'exact',
+        env: { ONLY: 'explicit' },
+      }))
+      expect(result.stdout.text).toBe('explicit/absent\n')
+    } finally {
+      delete process.env.SUBPROCESS_EXACT_AMBIENT
+    }
+  })
+
   it.skipIf(process.platform === 'win32')('runs in the requested cwd', async () => {
     const result = await finish(spawnSubprocess(spec('pwd', { cwd: '/tmp' })))
     expect(result.stdout.text.trim()).toMatch(/\/tmp$/)
@@ -835,6 +854,18 @@ describe('coverage seams', () => {
       expect(childEnv({ DSH_X: '1' }).DSH_X).toBe('1')
     } finally {
       platform.mockRestore()
+    }
+  })
+
+  it('childEnv treats exact entries as the whole environment and rejects tombstones', () => {
+    process.env.SUBPROCESS_EXACT_AMBIENT = 'must-not-leak'
+    try {
+      expect(childEnv(undefined, 'exact')).toEqual({})
+      expect(childEnv({ ONLY: 'explicit' }, 'exact')).toEqual({ ONLY: 'explicit' })
+      expect(() => childEnv({ MISSING: undefined }, 'exact'))
+        .toThrow('exact environment entry "MISSING" is undefined')
+    } finally {
+      delete process.env.SUBPROCESS_EXACT_AMBIENT
     }
   })
 

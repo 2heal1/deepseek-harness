@@ -354,8 +354,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'agent-runtime-profile',
     title: 'Runtime Profile resolver',
     mode: 'core',
-    consumers: ['agent-runtime-router', 'subagent-runtime-route'],
+    consumers: ['agent-runtime-launcher', 'agent-runtime-router', 'subagent-runtime-route'],
     note: 'Resolves validated Settings into immutable non-secret snapshots, resolves credentials per process start, and owns shared profile capacity.',
+  },
+  {
+    key: 'agentRuntimeLauncher',
+    pkg: 'agent-runtime-launcher',
+    title: 'Secure external runtime launcher',
+    mode: 'core',
+    note: 'Builds exact environments, protects Driver-owned controls, and owns bounded process-tree and temporary-material cleanup.',
   },
   {
     key: 'agentRuntimeRouter',
@@ -409,8 +416,8 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Subprocess seam',
     mode: 'seam',
     implementations: ['subprocess-local', 'subprocess-e2b'],
-    consumers: ['bash-local', 'bash-sandbox', 'terminal-bash', 'lsp-stdio', 'subagent-acp', 'subagent-codex', 'subagent-claude-code'],
-    note: 'The bash executors, the PTY shell backend, the LSP host, and the out-of-process ACP, Codex, and Claude Code subagent backends spawn through ctx.subprocess; the service owns process coordinates, tree/session lifetime, stdio dispositions, terminal mechanics, and kill escalation.',
+    consumers: ['agent-runtime-launcher', 'bash-local', 'bash-sandbox', 'terminal-bash', 'lsp-stdio', 'subagent-acp', 'subagent-codex', 'subagent-claude-code'],
+    note: 'The secure Agent Runtime launcher, bash executors, PTY shell backend, LSP host, and out-of-process subagent backends spawn through ctx.subprocess; the service owns process coordinates, tree/session lifetime, stdio dispositions, terminal mechanics, and kill escalation.',
   },
   {
     key: 'shell',

@@ -128,6 +128,8 @@ F4 implements one launcher used by every external runtime under these rules:
 7. Enforce positive startup, turn, graceful-shutdown, and final-termination deadlines from the snapshot. Timeout stops admission, requests protocol cancellation when available, closes protocol input, escalates through the subprocess process-tree terminator, awaits `waitForExit`, and only then completes rollback or disposal.
 8. Capacity remains held until complete process-tree quiescence and temporary-material cleanup. A cancellation or cleanup failure preserves the original terminal reason and independently reports `DISPOSE_FAILED`; no success result may hide incomplete cleanup.
 
+`@deepseek-ai/dsh-agent-runtime-launcher` implements this shared launch path at `ctx.agentRuntimeLauncher`. External Providers supply protocol shutdown hooks and trusted reserved-control and permission-enforcement declarations; the launcher owns executable policy, `envMode: exact`, per-start credential resolution, private launch material, literal known-value redaction, deadlines, and the ordered join with `ctx.subprocess`. The Router or runtime-route Consumer retains the F3 capacity lease until the Provider has disposed this handle. F4 adds no Session event or persisted runtime identity; those remain F5 work.
+
 ### Terms and ownership
 
 | Term | Meaning | Owner |

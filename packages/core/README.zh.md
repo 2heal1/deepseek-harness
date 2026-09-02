@@ -13,11 +13,12 @@
 | [`agent/`](agent/README.md) | Agent 接口、注册表和事件词汇 | `ctx.agents` |
 | [`agent-runtime/`](agent-runtime/README.md) | 可配置运行时 Provider 注册表和提供方无关词汇 | `ctx.agentRuntimes` |
 | [`agent-runtime-profile/`](agent-runtime-profile/README.md) | 由 Settings 支持的 Runtime Profile 解析、凭据与共享容量 | `ctx.agentRuntimeProfiles` |
+| [`agent-runtime-launcher/`](agent-runtime-launcher/README.md) | 外部运行时进程的安全启动与 teardown | `ctx.agentRuntimeLauncher` |
 | [`agent-runtime-router/`](agent-runtime-router/README.md) | 唯一 Agent Factory 与运行时生命周期 Consumer | `ctx.agentRuntimeRouter` |
 | [`agent-default-model/`](agent-default-model/README.md) | 各 Agent 入口共享的默认模型选择 | `ctx.agentDefaultModel` |
 | [`agent-loop/`](agent-loop/README.md) | Native 运行时 Provider 与具体循环驱动器 | `ctx.agentLoop` |
 
-`scope` 提供共享作用域原语。`agent` 负责公开 Agent 约定；`agent-runtime` 定义可配置运行时 Provider，`agent-runtime-profile` 解析不可变的非秘密设置快照，`agent-runtime-router` 通过唯一 Factory 消费两者，`agent-loop` 提供 Native 执行。`agent-default-model` 负责部署选择，Agent 入口仅在会话自身没有选择时使用它。
+`scope` 提供共享作用域原语。`agent` 负责公开 Agent 约定；`agent-runtime` 定义可配置运行时 Provider，`agent-runtime-profile` 解析不可变的非秘密设置快照，`agent-runtime-launcher` 根据这些快照启动外部运行时进程树，`agent-runtime-router` 通过唯一 Factory 消费 Provider，`agent-loop` 提供 Native 执行。`agent-default-model` 负责部署选择，Agent 入口仅在会话自身没有选择时使用它。
 
 可运行组合属于 [`examples/agent-spine-demo`](../examples/agent-spine-demo/README.md)；该分组只负责可替换的主干组件。
 

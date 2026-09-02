@@ -119,11 +119,15 @@ interface SubprocessSpawnSpec {
    */
   signal?: AbortSignal | undefined
   /**
-   * Explicit environment entries merged onto the implementation's scrubbed
-   * parent base (see `scrubbedParentEnv`), with no namespace validation. A
-   * string is a deliberate caller opt-in, so a forwarded credential-shaped
-   * entry or current `DSH_*` fact survives the scrub; `undefined` is a
-   * tombstone that removes an ordinary ambient entry from the child.
+   * Environment construction policy. Omission preserves the general-purpose
+   * scrubbed-parent behavior; security-sensitive launchers use `exact`.
+   */
+  envMode?: SubprocessEnvironmentMode | undefined
+  /**
+   * Child environment entries. Under `scrubbed-parent`, these merge onto the
+   * implementation's scrubbed ambient base and `undefined` removes one
+   * inherited entry. Under `exact`, this mapping is the complete environment
+   * and every value must be a string.
    */
   env?: NodeJS.ProcessEnv | undefined
 }
@@ -320,5 +324,5 @@ abstract spawn(spec: SubprocessSpawnSpec): SubprocessHandle
 abstract spawnTerminal(spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle>
 ```
 
-Source: [`packages/subprocess/subprocess/src/index.ts:102`](../../packages/subprocess/subprocess/src/index.ts)
+Source: [`packages/subprocess/subprocess/src/index.ts:103`](../../packages/subprocess/subprocess/src/index.ts)
 <!-- END GENERATED cordis-surface -->

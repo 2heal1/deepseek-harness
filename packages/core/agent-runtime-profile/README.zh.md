@@ -29,7 +29,7 @@
 
 标识符以字母开头，并只使用小写字母、数字和连字符。环境目标使用 POSIX 环境变量名。JSON 自有字段必须无损往返；白名单只能包含互不重复的非空值；凭据环境目标与字面量环境目标不能重叠。运行时支持的 route 条目另外包含 profile id、工具名、深度限制和正数 route 容量。完整 schema 见生成的[配置目录](../../../docs/config-catalog.md#deepseek-aidsh-agent-runtime-profile)。
 
-本包负责校验配置并解析策略输入；它不执行命令、不构造子进程环境、不执行沙箱，也不把快照持久化到 Session Header。这些职责分别属于安全启动器、Provider 和 Session 集成。
+本包负责校验配置并解析策略输入；它不执行命令、不构造子进程环境、不执行沙箱，也不把快照持久化到 Session Header。这些职责分别属于[安全 Launcher](../agent-runtime-launcher/README.md)、Provider 和 Session 集成。
 
 ## 失败与所有权
 
@@ -60,5 +60,5 @@
 ## 已知限制和延后工作
 
 - **快照尚未成为持久 Session 身份** - F5 会把完整的非秘密快照持久化到 Session Header，并定义 resume 与 fork 行为。
-- **启动策略仅是数据** - F4 负责可执行文件解析、精确环境构造、保留参数和变量、沙箱执行、进程树 teardown 与脱敏。
+- **启动策略仅是数据** - 安全 Launcher 负责解析可执行文件、构造精确环境、保护 reserved control、管理进程树 teardown 并提供 known-value 脱敏；选定的 Provider 提供协议行为和它所声明的 sandbox 机制。
 - **凭据值有意保持临时性** - 调用方取得供一次进程启动使用的解析值；本服务在返回后不会缓存、持久化或脱敏这些值。

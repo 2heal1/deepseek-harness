@@ -30,6 +30,7 @@ flowchart TD
     pkg_agent_default_model["agent-default-model"]
     pkg_agent_loop["agent-loop"]
     pkg_agent_runtime["agent-runtime"]
+    pkg_agent_runtime_launcher["agent-runtime-launcher"]
     pkg_agent_runtime_profile["agent-runtime-profile"]
     pkg_agent_runtime_router["agent-runtime-router"]
     pkg_agent_tool_presentation["agent-tool-presentation"]
@@ -560,6 +561,13 @@ flowchart TD
   pkg_agent_default_model --> pkg_invariants
   pkg_agent_default_model --> pkg_llm
   pkg_agent_default_model --> pkg_settings
+  pkg_agent_runtime_launcher --> pkg_agent_runtime
+  pkg_agent_runtime_launcher --> pkg_agent_runtime_profile
+  pkg_agent_runtime_launcher --> pkg_home_paths
+  pkg_agent_runtime_launcher --> pkg_invariants
+  pkg_agent_runtime_launcher --> pkg_launch_environment
+  pkg_agent_runtime_launcher --> pkg_subprocess
+  pkg_agent_runtime_launcher --> pkg_timeout
   pkg_goal --> pkg_agent
   pkg_goal --> pkg_brand
   pkg_goal --> pkg_invariants
@@ -1579,6 +1587,7 @@ flowchart TD
 | [`workspace`](../packages/workspace/workspace) | `workspace` | [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`storage`](../packages/storage/storage), [`storage-domain`](../packages/storage/storage-domain) |
 | [`llm-retry`](../packages/llm/llm-retry) | `llm` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`timeout`](../packages/util/timeout) |
 | [`agent-default-model`](../packages/core/agent-default-model) | `core` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`settings`](../packages/settings/settings) |
+| [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher) | `core` | [`agent-runtime`](../packages/core/agent-runtime), [`agent-runtime-profile`](../packages/core/agent-runtime-profile), [`home-paths`](../packages/util/home-paths), [`invariants`](../packages/runtime-diagnostics/invariants), [`launch-environment`](../packages/util/launch-environment), [`subprocess`](../packages/subprocess/subprocess), [`timeout`](../packages/util/timeout) |
 | [`goal`](../packages/goal/goal) | `goal` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`typert-protocol`](../packages/typert/protocol) |
 | [`fs-local`](../packages/fs/fs-local) | `fs` | [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`fs-observation-policy`](../packages/fs/fs-observation-policy) | `fs` | [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants) |

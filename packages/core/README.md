@@ -13,11 +13,12 @@ The session log, system-prompt assembly, tool registry, agent vocabulary, deploy
 | [`agent/`](agent/README.md) | Agent interface, registry, and event vocabulary | `ctx.agents` |
 | [`agent-runtime/`](agent-runtime/README.md) | Configurable runtime Provider registry and provider-neutral vocabulary | `ctx.agentRuntimes` |
 | [`agent-runtime-profile/`](agent-runtime-profile/README.md) | Settings-backed Runtime Profile resolution, credentials, and shared capacity | `ctx.agentRuntimeProfiles` |
+| [`agent-runtime-launcher/`](agent-runtime-launcher/README.md) | Secure external-runtime process launch and teardown | `ctx.agentRuntimeLauncher` |
 | [`agent-runtime-router/`](agent-runtime-router/README.md) | Sole Agent factory and runtime lifecycle Consumer | `ctx.agentRuntimeRouter` |
 | [`agent-default-model/`](agent-default-model/README.md) | Default model selection shared by Agent entry points | `ctx.agentDefaultModel` |
 | [`agent-loop/`](agent-loop/README.md) | Native runtime Provider and concrete loop driver | `ctx.agentLoop` |
 
-`scope` supplies the shared scoping primitive. `agent` owns the public Agent contract; `agent-runtime` defines configurable runtime Providers, `agent-runtime-profile` resolves immutable non-secret settings snapshots, `agent-runtime-router` consumes both through the sole factory, and `agent-loop` provides Native execution. `agent-default-model` owns the deployment selection an Agent entry point uses only when a session has no selection of its own.
+`scope` supplies the shared scoping primitive. `agent` owns the public Agent contract; `agent-runtime` defines configurable runtime Providers, `agent-runtime-profile` resolves immutable non-secret settings snapshots, `agent-runtime-launcher` starts external runtime process trees under those snapshots, `agent-runtime-router` consumes Providers through the sole factory, and `agent-loop` provides Native execution. `agent-default-model` owns the deployment selection an Agent entry point uses only when a session has no selection of its own.
 
 Runnable compositions belong to [`examples/agent-spine-demo`](../examples/agent-spine-demo/README.md); this group owns only the swappable spine pieces.
 
