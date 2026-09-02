@@ -204,11 +204,11 @@ export function deriveTrajectoryLayout(input: TrajectoryLayoutInput): readonly T
 
   const representedRequests = new Set<string>()
   for (const node of nodes) {
-    if (node.kind === 'assistant' && node.step > 0) {
+    if (node.kind === 'assistant' && node.step !== undefined && node.step > 0) {
       representedRequests.add(`${node.turn}\u0000${node.step}`)
     }
   }
-  if (partial !== null && partial.step > 0) {
+  if (partial !== null && partial.step !== undefined && partial.step > 0) {
     representedRequests.add(`${partial.turn}\u0000${partial.step}`)
   }
   for (const call of runningCalls) {
@@ -391,7 +391,7 @@ export function deriveTrajectoryLayout(input: TrajectoryLayoutInput): readonly T
       const laidList = withSubCalls(
         expandAssistant(node, index + 1, prevAbsTime, resultByCall, callStartById, callById),
       )
-      if (node.step > 0) pushStep(node.turn, node.step, laidList)
+      if (node.step !== undefined && node.step > 0) pushStep(node.turn, node.step, laidList)
       else for (const laid of laidList) pushMessage(node.turn, laid)
       const last = laidList[laidList.length - 1]
       if (last !== undefined) index = last.cell.index
@@ -457,7 +457,9 @@ export function deriveTrajectoryLayout(input: TrajectoryLayoutInput): readonly T
   if (partial !== null) {
     const fake: AssistantMessageNode = {
       kind: 'assistant', seq: Number.MAX_SAFE_INTEGER, time: 0,
-      turn: partial.turn, step: partial.step, blocks: partial.blocks,
+      turn: partial.turn,
+      ...partial.step === undefined ? {} : { step: partial.step },
+      blocks: partial.blocks,
     }
     const laidList = withSubCalls(expandAssistant(
       fake,
@@ -468,7 +470,9 @@ export function deriveTrajectoryLayout(input: TrajectoryLayoutInput): readonly T
       callById,
       { streaming: true },
     ))
-    if (partial.step > 0) pushStep(partial.turn, partial.step, laidList)
+    if (partial.step !== undefined && partial.step > 0) {
+      pushStep(partial.turn, partial.step, laidList)
+    }
     else for (const laid of laidList) pushMessage(partial.turn, laid)
     const last = laidList[laidList.length - 1]
     if (last !== undefined) index = last.cell.index
@@ -881,11 +885,16 @@ function steeringPlacement(
     && (locatedTurn === undefined || followingAssistant.turn === locatedTurn)) {
     return {
       turn: followingAssistant.turn,
-      ...(followingAssistant.step > 0 ? { step: followingAssistant.step } : {}),
+      ...(followingAssistant.step !== undefined && followingAssistant.step > 0
+        ? { step: followingAssistant.step }
+        : {}),
     }
   }
   if (partial !== null && (locatedTurn === undefined || partial.turn === locatedTurn)) {
-    return { turn: partial.turn, ...(partial.step > 0 ? { step: partial.step } : {}) }
+    return {
+      turn: partial.turn,
+      ...(partial.step !== undefined && partial.step > 0 ? { step: partial.step } : {}),
+    }
   }
   if (locatedTurn !== undefined) return { turn: locatedTurn }
   return { turn: lastAssistantTurn ?? 1 }
@@ -910,7 +919,7 @@ function enclosingPromptTurn(
   partial: ConversationSnapshot['partial'],
 ): number {
   const next = nodes.find(node =>
-    node.seq > seq && node.kind === 'assistant' && node.step > 0)
+    node.seq > seq && node.kind === 'assistant' && node.step !== undefined && node.step > 0)
   if (next?.kind === 'assistant') return next.turn
   return partial?.turn ?? 1
 }

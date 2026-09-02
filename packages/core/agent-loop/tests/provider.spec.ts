@@ -123,6 +123,7 @@ describe('Native Agent runtime Provider', () => {
       submissionId: SubmissionId('submission'),
       message: message(),
       signal: new AbortController().signal,
+      started() {},
     })
     expect(result.reason).toEqual({ kind: 'completed' })
     runtime.cancel(SubmissionId('submission'), { kind: 'user' })
@@ -132,6 +133,7 @@ describe('Native Agent runtime Provider', () => {
       submissionId: SubmissionId('disposed'),
       message: message(),
       signal: new AbortController().signal,
+      started() {},
     })).rejects.toMatchObject({ code: 'RUNTIME_FAILED', phase: 'submission' })
     await handle.dispose()
     await ctx.fiber.dispose()
@@ -155,6 +157,7 @@ describe('Native Agent runtime Provider', () => {
       submissionId: SubmissionId('busy'),
       message: message(),
       signal: new AbortController().signal,
+      started() {},
     })).rejects.toMatchObject({ code: 'AGENT_BUSY' })
     await busy.dispose()
 
@@ -165,6 +168,7 @@ describe('Native Agent runtime Provider', () => {
       submissionId: SubmissionId('empty'),
       message: message(),
       signal: new AbortController().signal,
+      started() {},
     })).rejects.toMatchObject({ code: 'RUNTIME_FAILED', phase: 'turn' })
     await empty.dispose()
     await handle.dispose()
@@ -185,6 +189,7 @@ describe('Native Agent runtime Provider', () => {
       submissionId: SubmissionId('pre-aborted'),
       message: message(),
       signal: aborted.signal,
+      started() {},
     })).resolves.toEqual({
       reason: { kind: 'aborted', reason: { kind: 'user' } },
     })
@@ -209,6 +214,7 @@ describe('Native Agent runtime Provider', () => {
       submissionId: SubmissionId('abort'),
       message: message(),
       signal: controller.signal,
+      started() {},
     })
     controller.abort()
     await expect(submission).resolves.toEqual({

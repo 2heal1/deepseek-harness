@@ -96,6 +96,21 @@ interface Agent {
   whenIdle(): Promise<void>
 
   /**
+   * Durably accept one ordinary user submission and return its exact lifecycle receipt.
+   * @param message - identified user input accepted as one submission.
+   * @returns receipt whose promises correlate start and terminal settlement.
+   */
+  submit(message: UserMessage): SubmissionReceipt
+
+  /**
+   * Request cancellation of one accepted submission.
+   * @param submissionId - exact submission to cancel.
+   * @param cause - caller intent recorded if cancellation wins.
+   * @returns whether cancellation won before terminal settlement.
+   */
+  cancelSubmission(submissionId: SubmissionId, cause: AgentCancelCause): boolean
+
+  /**
    * Run one non-turn maintenance task from the true idle phase. The task starts
    * synchronously after claiming that phase; later waking input remains in the
    * inbox until the task settles, while public status stays `idle`.
@@ -611,6 +626,13 @@ Settings-backed profile resolver shared by the Agent Router and subagent routes.
 resolve(id?: string, overrides: RuntimeProfileOverrides = {}): RuntimeProfileSnapshot
 
 /**
+ * Validate and detach the Runtime Profile snapshot stored in a Session Header.
+ * @param value - persisted non-secret JSON snapshot.
+ * @returns complete immutable snapshot independent of current Settings.
+ */
+restore(value: JsonValue | undefined): RuntimeProfileSnapshot
+
+/**
  * Resolve one configured one-shot subagent route.
  * @param id - route id.
  * @returns the immutable route and profile snapshot.
@@ -650,7 +672,7 @@ acquireSync(profile: RuntimeProfileSnapshot): RuntimeCapacityLease
 async resolveCredentials( profile: RuntimeProfileSnapshot, ): Promise<ResolvedRuntimeCredentials>
 ```
 
-Source: [`packages/core/agent-runtime-profile/src/index.ts:428`](../../packages/core/agent-runtime-profile/src/index.ts)
+Source: [`packages/core/agent-runtime-profile/src/index.ts:594`](../../packages/core/agent-runtime-profile/src/index.ts)
 
 <a id="ctxagentruntimerouter--agentruntimerouter"></a>
 
@@ -692,7 +714,7 @@ async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandl
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:466`](../../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:583`](../../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="ctxagentruntimes--agentruntimeregistry"></a>
 
@@ -898,7 +920,7 @@ list(): Agent[]
 roots(): Agent[]
 ```
 
-Source: [`packages/core/agent/src/index.ts:256`](../../packages/core/agent/src/index.ts)
+Source: [`packages/core/agent/src/index.ts:257`](../../packages/core/agent/src/index.ts)
 
 <a id="agent-events"></a>
 
@@ -926,7 +948,7 @@ A fully configured agent and live session were published. Setup is composition-o
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:180`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:199`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentdisposed--emit"></a>
 
@@ -948,7 +970,7 @@ An agent left the registry; AgentLoop emits this after driver quiescence and sco
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:189`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:208`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agenterror--emit"></a>
 
@@ -972,7 +994,7 @@ A step or turn errored. The machine reports a failure here even when the error h
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:311`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:330`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxclaimed--emit"></a>
 
@@ -996,7 +1018,7 @@ One message left the inbox inside its open turn. If the proposed step is rejecte
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:218`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:237`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxdiscarded--emit"></a>
 
@@ -1017,7 +1039,7 @@ One message was discarded from the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:226`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:245`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentinboxinserted--emit"></a>
 
@@ -1038,7 +1060,7 @@ One message entered the live inbox.
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:207`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:226`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentpre-step--waterfall"></a>
 
@@ -1063,7 +1085,7 @@ Reject a proposed step or replace the messages that enter it. Calling `next()` p
 
 Types: [Scoped](scope.md) · [UserMessage](session.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:252`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:271`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest--waterfall"></a>
 
@@ -1089,7 +1111,7 @@ Replace the frozen call configuration. `await next()` yields the config the mach
 
 Types: [LlmCallConfig](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:265`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:284`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentrequest-error--waterfall"></a>
 
@@ -1118,7 +1140,7 @@ Handle one failed model-request attempt before the loop retries or closes its st
 
 Types: [LlmFailure](llm-streaming.md) · [ResolvedRetryPolicy](llm-streaming.md) · [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:281`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:300`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentsession-start--emit"></a>
 
@@ -1142,7 +1164,7 @@ The session lifecycle began, once before the first turn. Use `agent.inject()` to
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:238`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:257`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentstatus--emit"></a>
 
@@ -1165,7 +1187,7 @@ Agent status changed (`idle` ⇄ `running`). A waking delivery enters `running` 
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:199`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:218`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agentturn-stopping--serial"></a>
 
@@ -1196,7 +1218,7 @@ The turn is about to close: the model owes no response (no live tool calls, no f
 
 Types: [Scoped](scope.md)
 
-Source: [`packages/core/agent/src/runtime-types.ts:299`](../../packages/core/agent/src/runtime-types.ts)
+Source: [`packages/core/agent/src/runtime-types.ts:318`](../../packages/core/agent/src/runtime-types.ts)
 
 <a id="agent-loop-events"></a>
 

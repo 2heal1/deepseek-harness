@@ -15,7 +15,7 @@ import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { contentHasImage, createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import { isAppendSurfaceEvent, isJsonValue } from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionEventMap, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
@@ -38,7 +38,8 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {
   ApiProxy, ConfigurableProviderView, CredentialView, GoalRef, HistoryEntry, HostFrame,
   ModelCatalogFailure, ModelProviderGroup,
-  ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
+  ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata,
+  SessionProjectionsBlock, SessionRuntimeStatus, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
   WorkspaceId, WorkspaceView,
 } from './api/index.ts'
@@ -90,7 +91,11 @@ import type { ApprovalOutcome, ApprovalRequestId } from '@deepseek-ai/dsh-user-a
 // `ctx.get('approval')` without a value dependency on the seam (optional composition).
 import type {} from '@deepseek-ai/dsh-user-approval'
 import { approvalResponsePayloadSchema } from './api/approvals.schema.ts'
-import { imageLimitsProjectionSchema, sessionListMetadataProjectionSchema } from './api/sessions.schema.ts'
+import {
+  imageLimitsProjectionSchema,
+  sessionListMetadataProjectionSchema,
+  sessionRuntimeStatusProjectionSchema,
+} from './api/sessions.schema.ts'
 import { questionResponsePayloadSchema } from './api/questions.schema.ts'
 import type { ClientResponse, RpcError, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
 import { RpcId } from './api/rpc.ts'
@@ -1210,7 +1215,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   // header here would silently undo the switch on the next restart and
   // restore that history under the old tool set.
   const agentFor = createApiRemoteAgentResolver(ctx, {
-    agentOptions,
     setup: async ({ meta, events }) =>
       (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
   })
@@ -1239,6 +1243,21 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       schema: sessionListMetadataProjectionSchema,
       init: () => ({ blank: true, lastPromptAt: null }),
       apply: applySessionListMetadata,
+      view: state => state,
+      stateVersion: 1,
+    })
+  })
+
+  // Runtime facts are complete snapshots, so the Host projection is a
+  // last-wins fold with no process-local enrichment or Settings lookup.
+  ctx.inject(['sessionProjections'], (projectionCtx) => {
+    projectionCtx.sessionProjections.register<'runtimeStatus', SessionRuntimeStatus>({
+      key: 'runtimeStatus',
+      schema: sessionRuntimeStatusProjectionSchema,
+      init: () => null,
+      apply: (state, event) => event.type === 'agent/runtime/facts'
+        ? event.data
+        : state,
       view: state => state,
       stateVersion: 1,
     })
@@ -1601,7 +1620,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // longer make.
           return (await ctx.agents.resume({
             resumeSessionId: sessionId,
-            agentOptions: agentOptions(),
             setup: (await composeAgent(storedPreset)).setup,
           })).agent
         }
@@ -2346,8 +2364,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               ...forkComposition.agentPreset === undefined
                 ? {}
                 : { agentPreset: forkComposition.agentPreset },
+              ...source.header.runtimeProfile === undefined
+                ? {}
+                : { runtimeProfile: source.header.runtimeProfile },
             },
-            agentOptions: agentOptions(),
             setup: forkComposition.setup,
           })
         } catch (error: unknown) {
@@ -2386,7 +2406,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { value: clientTimeZone },
           })
         }
-        const resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
+        const resolved = await turnAgentFor<{
+          accepted: true
+          receipt?: { submissionId: string; messageId: MessageId }
+        }>(request, sessionId)
         if ('refused' in resolved) return resolved.refused
         const agent = resolved.agent
         // Request identity and optional browser zone ride the exact durable user message.
@@ -2396,7 +2419,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
         }
         const hasImage = content.some(part => part.type === 'image')
-        const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
+        const admit = async (): Promise<RpcResponse<{
+          accepted: true
+          receipt?: { submissionId: string; messageId: MessageId }
+        }>> => {
           try {
             if (hasImage) {
               const current = selectionFor(agent).current
@@ -2411,8 +2437,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             }
             const durable = await durablePromptContent(ctx, content)
             const message: UserMessage = createUserMessage({ content: durable, source })
-            if (mode === 'steer') agent.steer(message)
-            else agent.followup(message)
+            if (mode === 'steer') {
+              agent.steer(message)
+              return ok(request, { accepted: true as const })
+            }
+            const receipt = agent.submit(message)
+            return ok(request, {
+              accepted: true as const,
+              receipt: {
+                submissionId: receipt.id,
+                messageId: receipt.messageId,
+              },
+            })
           } catch (error: unknown) {
             if (error instanceof AttachmentError) {
               return err(request, {
@@ -2427,6 +2463,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               details: { reason: String(error) },
             })
           }
+          /* v8 ignore next -- both successful delivery branches return above. */
           return ok(request, { accepted: true as const })
         }
         return hasImage ? serializeImageAdmission(agent, admit) : admit()

@@ -14,19 +14,19 @@ Publication enters the Session and Agent registries, synchronously announces `se
 
 The caller context, Router service, and selected Provider generation are structural owners. Any owner teardown converges on one memoized disposal: close admission, cancel and drain the prepared runtime, dispose the Agent scope, detach the Agent, detach the Session, then release the profile capacity lease. Disposal waits for provider quiescence even when cleanup ultimately reports `DISPOSE_FAILED`.
 
-## Native Transition
+## Submission and events
 
-The existing Native API remains available while Hosts migrate in F5. `RoutedAgent` delegates inbox, status, cancellation, maintenance, and send operations to the Native `AgentDriver` returned by the prepared handle. Capability checks guard optional operations. Non-waking setup injection is permitted during publication; waking input opens only after synchronous publication succeeds.
+`RoutedAgent.submit()` synchronously appends `agent/submission/accepted` and returns a receipt whose `started` and `settled` promises follow the durable lifecycle records. The Router serializes Provider submissions, targets cancellation by `SubmissionId`, and keeps `Agent.status` running until every admitted submission settles. Disposal closes admission, cancels outstanding work, and waits for durable settlement before releasing the Provider.
 
-`AgentOptions.runtimeProfile` selects a profile; omission uses the configured default. Existing `provider`, `model`, and `maxTokens` options become Native profile overrides. External profiles reject Native-only overrides, and every profile rejects a Session model override unless it explicitly allows one. The event sink rejects assistant and activity output until F5 installs canonical durable runtime events, while the Native driver continues to append the established Native Session events.
+The restricted event sink appends normalized runtime facts and activity plus external assistant chunks and messages. It verifies runtime, Provider, submission, turn, capability, provenance, and JSON-size relationships before append. Native execution continues to own its step, request, inbox, tool, and model-output events; exact turn correlation reaches the Router through the Native submission request.
 
 ## Configuration
 
-The Router has no configuration fields. Runtime selection belongs to [`dsh-agent-runtime-profile`](../agent-runtime-profile/README.md). Missing profiles, incompatible snapshot schema versions, and absent or removed Providers fail explicitly; the Router never falls back to Native.
+The Router has no configuration fields. Runtime selection belongs to [`dsh-agent-runtime-profile`](../agent-runtime-profile/README.md). A new Session stores its complete resolved snapshot in the Header. Resume restores only that snapshot and rejects conflicting caller overrides, missing Providers, incompatible snapshot versions, and runtimes without `resume`; it never consults current Settings or falls back to Native. Fork copies the snapshot by value, removes parent runtime facts and external identity, remaps retained event references, and prepares a new runtime.
 
 ## Invariants
 
-The optional `@deepseek-ai/dsh-agent-runtime-router/invariant` companion is intentionally empty. Session and Agent companions already verify the published registry relationships; Router transaction ordering is covered by direct lifecycle tests rather than a duplicate fixed-example invariant.
+The optional `@deepseek-ai/dsh-agent-runtime-router/invariant` companion folds each Session independently. It verifies submission identity and ordering, one active started submission, open-turn correlation, runtime activity ownership, and external assistant provenance against the latest runtime facts.
 
 ## Model Experience
 
@@ -34,7 +34,7 @@ The optional `@deepseek-ai/dsh-agent-runtime-router/invariant` companion is inte
 
 #### What the model sees
 
-F2 adds no model-visible content. Native requests retain the same system prompt, tools, messages, and Session events; the Router's `agent/runtime/facts` remain durable metadata rather than prompt content.
+Native requests retain their existing system prompt, tools, and messages. External assistant messages become canonical conversation history with `source.kind: 'runtime'` provenance; runtime facts, activity, and submission lifecycle records remain model-hidden.
 
 #### Token effect
 
@@ -46,6 +46,5 @@ The Router does not rewrite request prefixes. Native cache behavior is unchanged
 
 ## Known Limitations and Deferred Work
 
-- **No provider-neutral submission receipts** - F5 migrates Hosts and the Agent API to receipts and installs canonical runtime event production.
-- **No external output admission yet** - assistant and activity reports through the event sink fail until F5 can validate and persist them.
-- **Resolved snapshots are not yet Session headers** - F5 owns durable profile identity and resume or fork reconstruction; the Router currently resolves a fresh snapshot for each create or resume transaction.
+- **External protocol Providers remain separate work** - the Router can persist and project their canonical output, but Codex App Server and ACP runtime implementations are delivered by later work packages.
+- **Persistence flushing remains caller-owned** - receipt settlement follows synchronous event append and dispatch; Hosts flush storage and transport queues at their own response boundary.

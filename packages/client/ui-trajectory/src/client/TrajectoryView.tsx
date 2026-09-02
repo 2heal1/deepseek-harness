@@ -154,7 +154,7 @@ export function TrajectoryView({
   const requestNumbers = useMemo<readonly TrajectoryRequestNumber[]>(() => {
     const assistantsByStep = new Map<string, AssistantMessageNode>()
     for (const node of nodes) {
-      if (node.kind !== 'assistant' || node.step <= 0) continue
+      if (node.kind !== 'assistant' || node.step === undefined || node.step <= 0) continue
       assistantsByStep.set(`${node.turn}\u0000${node.step}`, node)
     }
     const requestsByStep = new Map(
@@ -273,7 +273,7 @@ export function TrajectoryView({
     ? null
     : {
       turn: partial.turn,
-      step: partial.step,
+      ...partial.step === undefined ? {} : { step: partial.step },
       blocks: partial.blocks.map(block => timelineBlock(block)),
     },
   [partialStep, partialTurn, timelinePartialSignature])

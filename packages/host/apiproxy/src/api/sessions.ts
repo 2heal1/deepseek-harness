@@ -5,6 +5,7 @@
  */
 
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { AgentRuntimeFacts } from '@deepseek-ai/dsh-agent-runtime/types'
 import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session/types'
@@ -32,6 +33,8 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      * composed — clients skip the pre-check and let the host answer.
      */
     imageLimits: ImageAttachmentLimits
+    /** Latest durable non-secret facts reported by the Session's runtime. */
+    runtimeStatus: SessionRuntimeStatus
   }
 }
 
@@ -42,6 +45,9 @@ export interface SessionListMetadata {
   /** Latest source.kind=user message time in the checkpoint prefix. */
   lastPromptAt: number | null
 }
+
+/** Latest durable runtime facts exposed to Host clients, or null before preparation reports them. */
+export type SessionRuntimeStatus = AgentRuntimeFacts | null
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -350,7 +356,11 @@ export interface SessionsApi {
     content: PromptContentPart[]
     clientTimeZone?: string
   }>):
-  Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string } }>>
+  Promise<RpcResponse<{
+    accepted: true
+    receipt?: { submissionId: string; messageId: MessageId }
+    command?: { kind: 'success'; text?: string }
+  }>>
 
   /** Reads one durable image after proving that this session's log references its id. */
   attachment(request: RpcRequest<{ sessionId: SessionId; attachmentId: AttachmentIdType }>):

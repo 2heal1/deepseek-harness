@@ -13,6 +13,7 @@ import CredentialProvider, {
   type CredentialRef,
   type ResolvedCredential,
 } from '@deepseek-ai/dsh-credentials'
+import type { JsonValue } from '@deepseek-ai/dsh-session'
 import SettingsProvider, { type SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { describe, expect, it } from 'vitest'
 
@@ -68,6 +69,16 @@ function settings(overrides: Partial<AgentRuntimeProfileSettings> = {}): AgentRu
 
 function mainProfile() {
   return settings().profiles.main!
+}
+
+type MutableRecord = Record<string, unknown>
+
+function recordAt(record: MutableRecord, key: string): MutableRecord {
+  const value = record[key]
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`expected ${key} test fixture to be an object`)
+  }
+  return value as MutableRecord
 }
 
 class MemorySettings extends SettingsProvider {
@@ -337,6 +348,203 @@ describe('AgentRuntimeProfiles', () => {
     expect(ctx.agentRuntimeProfiles.resolve('main').settingsRevision).toBe(1)
     expect(ctx.agentRuntimeProfiles.resolve('main').model.default).toBe('edited-model')
     expect(snapshot.model.default).toBe('session-model')
+    await ctx.fiber.dispose()
+  })
+
+  it('restores a detached immutable snapshot without consulting Settings', async () => {
+    const ctx = await harness()
+    const persisted = structuredClone(ctx.agentRuntimeProfiles.resolve())
+    const restored = ctx.agentRuntimeProfiles.restore(persisted as unknown as JsonValue)
+
+    expect(restored).toEqual(persisted)
+    expect(restored).not.toBe(persisted)
+    expect(Object.isFrozen(restored)).toBe(true)
+    expect(Object.isFrozen(restored.launch)).toBe(true)
+
+    const searched = structuredClone(persisted) as unknown as MutableRecord
+    recordAt(searched, 'launch').resolution = {
+      kind: 'search-path',
+      paths: ['/usr/local/bin'],
+    }
+    expect(ctx.agentRuntimeProfiles.restore(searched as never).launch.resolution)
+      .toEqual({ kind: 'search-path', paths: ['/usr/local/bin'] })
+    await ctx.fiber.dispose()
+  })
+
+  it.each([
+    ['missing snapshot', undefined, 'has no Runtime Profile snapshot'],
+    ['null snapshot', null, 'must be a JSON object'],
+    ['array snapshot', [], 'must be a JSON object'],
+  ])('rejects a %s during restore', async (_label, value, message) => {
+    const ctx = await harness()
+    expect(() => ctx.agentRuntimeProfiles.restore(value as never))
+      .toThrow(expect.objectContaining({
+        code: 'RUNTIME_INCOMPATIBLE',
+        phase: 'resume',
+        message: expect.stringContaining(message) as unknown,
+      }))
+    await ctx.fiber.dispose()
+  })
+
+  it.each([
+    ['non-string profile id', (root: MutableRecord) => { root.profileId = 1 }, 'id must be a string'],
+    ['invalid profile id', (root: MutableRecord) => { root.profileId = 'Bad Id' }, 'must match'],
+    ['missing provider', (root: MutableRecord) => { delete root.provider }, 'provider must be a JSON object'],
+    ['non-string provider id', (root: MutableRecord) => {
+      recordAt(root, 'provider').id = 1
+    }, 'provider id must be a string'],
+    ['invalid provider id', (root: MutableRecord) => {
+      recordAt(root, 'provider').id = 'Bad Id'
+    }, 'must match'],
+    ['invalid schema version', (root: MutableRecord) => { root.schemaVersion = -1 }, 'non-negative'],
+    ['invalid settings revision', (root: MutableRecord) => { root.settingsRevision = -1 }, 'non-negative'],
+    ['invalid options version', (root: MutableRecord) => {
+      recordAt(root, 'provider').optionsVersion = -1
+    }, 'non-negative'],
+    ['missing launch', (root: MutableRecord) => { delete root.launch }, 'launch must be a JSON object'],
+    ['empty executable', (root: MutableRecord) => {
+      recordAt(root, 'launch').executable = ''
+    }, 'executable must be a non-empty string'],
+    ['non-array arguments', (root: MutableRecord) => {
+      recordAt(root, 'launch').args = {}
+    }, 'arguments must be strings'],
+    ['non-string argument', (root: MutableRecord) => {
+      recordAt(root, 'launch').args = [1]
+    }, 'arguments must be strings'],
+    ['non-array ambient environment', (root: MutableRecord) => {
+      recordAt(root, 'launch').ambientEnv = {}
+    }, 'ambientEnv must contain strings'],
+    ['non-string ambient environment', (root: MutableRecord) => {
+      recordAt(root, 'launch').ambientEnv = [1]
+    }, 'ambientEnv must contain strings'],
+    ['duplicate ambient environment', (root: MutableRecord) => {
+      recordAt(root, 'launch').ambientEnv = ['LANG', 'LANG']
+    }, 'unique non-empty strings'],
+    ['missing environment', (root: MutableRecord) => {
+      delete recordAt(root, 'launch').env
+    }, 'environment must be a JSON object'],
+    ['invalid environment name', (root: MutableRecord) => {
+      recordAt(recordAt(root, 'launch'), 'env')['BAD-NAME'] = 'value'
+    }, 'environment name'],
+    ['non-string environment value', (root: MutableRecord) => {
+      recordAt(recordAt(root, 'launch'), 'env').LOG_LEVEL = 1
+    }, 'environment values must be strings'],
+    ['non-array search paths', (root: MutableRecord) => {
+      recordAt(recordAt(root, 'launch'), 'resolution').kind = 'search-path'
+      recordAt(recordAt(root, 'launch'), 'resolution').paths = {}
+    }, 'search paths must be strings'],
+    ['non-string search path', (root: MutableRecord) => {
+      recordAt(recordAt(root, 'launch'), 'resolution').kind = 'search-path'
+      recordAt(recordAt(root, 'launch'), 'resolution').paths = [1]
+    }, 'search paths must be strings'],
+    ['invalid resolution', (root: MutableRecord) => {
+      recordAt(recordAt(root, 'launch'), 'resolution').kind = 'relative'
+    }, 'executable resolution is invalid'],
+    ['invalid cwd policy', (root: MutableRecord) => {
+      recordAt(recordAt(root, 'launch'), 'cwd').kind = 'temporary'
+    }, 'cwd policy is invalid'],
+    ['empty fixed cwd', (root: MutableRecord) => {
+      const cwd = recordAt(recordAt(root, 'launch'), 'cwd')
+      cwd.kind = 'fixed'
+      cwd.path = ''
+    }, 'cwd policy is invalid'],
+    ['missing model', (root: MutableRecord) => { delete root.model }, 'model policy must be a JSON object'],
+    ['invalid model override flag', (root: MutableRecord) => {
+      recordAt(root, 'model').allowSessionOverride = 'yes'
+    }, 'model policy is invalid'],
+    ['invalid default model', (root: MutableRecord) => {
+      recordAt(root, 'model').default = 1
+    }, 'model policy is invalid'],
+    ['missing permissions', (root: MutableRecord) => {
+      delete root.permissions
+    }, 'permissions must be a JSON object'],
+    ['invalid permission enforcement', (root: MutableRecord) => {
+      recordAt(root, 'permissions').enforcement = 'optional'
+    }, 'permission enforcement is invalid'],
+    ['invalid approval policy', (root: MutableRecord) => {
+      recordAt(root, 'permissions').approval = 'interactive'
+    }, 'approval policy is invalid'],
+    ['missing native tools', (root: MutableRecord) => {
+      delete root.nativeTools
+    }, 'native tools must be a JSON object'],
+    ['missing Harness tools', (root: MutableRecord) => {
+      delete root.harnessTools
+    }, 'Harness tools must be a JSON object'],
+    ['non-array native tools', (root: MutableRecord) => {
+      recordAt(root, 'nativeTools').allowed = {}
+    }, 'native tools must contain strings'],
+    ['non-string Harness tool', (root: MutableRecord) => {
+      recordAt(root, 'harnessTools').allowed = [1]
+    }, 'Harness tools must contain strings'],
+    ['duplicate Harness tool', (root: MutableRecord) => {
+      recordAt(root, 'harnessTools').allowed = ['todo', 'todo']
+    }, 'unique non-empty strings'],
+    ['invalid Harness transport', (root: MutableRecord) => {
+      recordAt(root, 'harnessTools').transport = 'stdio'
+    }, 'tool transport is invalid'],
+    ['tools without transport', (root: MutableRecord) => {
+      const tools = recordAt(root, 'harnessTools')
+      tools.transport = 'none'
+      tools.allowed = ['todo']
+    }, 'transport "none"'],
+    ['non-array credentials', (root: MutableRecord) => {
+      root.credentials = {}
+    }, 'credentials must be an array'],
+    ['invalid credential entry', (root: MutableRecord) => {
+      root.credentials = [null]
+    }, 'credential mapping must be a JSON object'],
+    ['non-string credential target', (root: MutableRecord) => {
+      root.credentials = [{ target: 1, credentialRef: 'REF' }]
+    }, 'credential target must be a string'],
+    ['invalid credential target', (root: MutableRecord) => {
+      root.credentials = [{ target: 'BAD-NAME', credentialRef: 'REF' }]
+    }, 'credential target'],
+    ['duplicate credential target', (root: MutableRecord) => {
+      root.credentials = [
+        { target: 'KEY', credentialRef: 'REF_A' },
+        { target: 'KEY', credentialRef: 'REF_B' },
+      ]
+    }, 'more than once'],
+    ['non-string credential reference', (root: MutableRecord) => {
+      root.credentials = [{ target: 'KEY', credentialRef: 1 }]
+    }, 'credential reference must be a string'],
+    ['invalid credential reference', (root: MutableRecord) => {
+      root.credentials = [{ target: 'KEY', credentialRef: 'bad-ref' }]
+    }, 'credential ref'],
+    ['missing deadlines', (root: MutableRecord) => {
+      delete root.deadlines
+    }, 'deadlines must be a JSON object'],
+    ['invalid deadline', (root: MutableRecord) => {
+      recordAt(root, 'deadlines').startupMs = 0
+    }, 'startupMs'],
+    ['missing capacity', (root: MutableRecord) => {
+      delete root.capacity
+    }, 'capacity must be a JSON object'],
+    ['invalid capacity', (root: MutableRecord) => {
+      recordAt(root, 'capacity').maxConcurrentRuns = 0
+    }, 'maxConcurrentRuns'],
+    ['missing provider options', (root: MutableRecord) => {
+      delete recordAt(root, 'provider').options
+    }, 'omits required JSON values'],
+    ['missing product', (root: MutableRecord) => {
+      delete root.product
+    }, 'omits required JSON values'],
+    ['missing permission policy', (root: MutableRecord) => {
+      delete recordAt(root, 'permissions').policy
+    }, 'omits required JSON values'],
+    ['non-JSON provider options', (root: MutableRecord) => {
+      recordAt(root, 'provider').options = { invalid: BigInt(1) }
+    }, 'lossless JSON'],
+  ])('rejects restored snapshot with %s', async (_label, mutate, message) => {
+    const ctx = await harness()
+    const persisted = structuredClone(ctx.agentRuntimeProfiles.resolve()) as unknown as MutableRecord
+    mutate(persisted)
+    expect(() => ctx.agentRuntimeProfiles.restore(persisted as never))
+      .toThrow(expect.objectContaining({
+        code: 'RUNTIME_INCOMPATIBLE',
+        phase: 'resume',
+        message: expect.stringContaining(message) as unknown,
+      }))
     await ctx.fiber.dispose()
   })
 

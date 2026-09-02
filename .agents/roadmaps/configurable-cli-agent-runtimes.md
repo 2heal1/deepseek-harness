@@ -54,7 +54,7 @@
 | F2 | Router 与 Native 提取 | F1 | F | 高级 | `done` | `feat/configurable-cli-f2-router-native` | [PR #8](https://github.com/2heal1/deepseek-harness/pull/8) | Native 行为一致性、事务回滚、取消、资源释放与完全停稳测试；逐文件 100% coverage，`doc-sync` 28 项、build、typecheck、lint、hygiene、全量单测与 CI 18 项通过；PR 已合入集成分支 |
 | F3 | Runtime Profile 与 subagent route | F1 | F | 中等，高级评审 | `done` | `feat/configurable-cli-f3-profiles-routes` | [PR #9](https://github.com/2heal1/deepseek-harness/pull/9) | Settings 快照、凭据按启动解析、共享 FIFO 容量、Router 接线与 one-shot subagent route；逐文件 100% coverage，`doc-sync` 28 项、build、lint、hygiene、pre-push typecheck 与 CI 18 项通过；PR 已合入集成分支 |
 | F4 | 安全启动基础能力 | F1、P0c | F | 高级 | `done` | `feat/configurable-cli-f4-secure-launch` | [PR #10](https://github.com/2heal1/deepseek-harness/pull/10) | 唯一安全 Launcher、精确环境、保留参数、进程树完全停稳、私有临时材料、known-value 脱敏与 Windows Launcher；逐文件 100% coverage，`doc-sync` 28 项、build、lint、hygiene、pre-push typecheck 与 CI 18 项通过；PR 已合入集成分支 |
-| F5 | 会话事件与 Host API | F1、P0c | F | 高级 | `not-started` | `feat/configurable-cli-f5-events-host-api` | — | Projection、fork、来源、不支持能力与 API schema 测试 |
+| F5 | 会话事件与 Host API | F1、P0c | F | 高级 | `in-progress` | `feat/configurable-cli-f5-events-host-api` | — | Projection、fork、来源、不支持能力与 API schema 测试 |
 | D1 | Codex App Server Provider | P0a、F1、F4 | D | 中等，高级状态机评审 | `not-started` | `feat/configurable-cli-d1-codex-provider` | — | Fixture 一致性、背压、取消与失败清理 |
 | D2 | ACP 一次性 Provider | P0b、F1、F4 | D | 中等，高级状态机评审 | `not-started` | `feat/configurable-cli-d2-acp-provider` | — | Fixture 一致性、一次性结果、取消与失败清理 |
 | U1 | Profile、route 与能力 UI | F3、F5 | D | 中等；固定表单可交给较低 agent | `not-started` | `feat/configurable-cli-u1-runtime-ui` | — | 表单、探测、可信写入、禁用状态与 Client schema 测试 |
@@ -112,3 +112,4 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | 2026-09-01 | F4 | 从 `fork/feat/configurable-cli` 的 `b5804914fe` 创建 `feat/configurable-cli-f4-secure-launch`；确认 F1 与 P0c 已合入，安全启动基础能力进入 `in-progress` |
 | 2026-09-01 | F4 | Draft [PR #10](https://github.com/2heal1/deepseek-harness/pull/10) 已创建；唯一安全 Launcher、精确环境与保留项、Windows policy、私有临时材料、脱敏、deadline 和进程树完全停稳完成，状态更新为 `in-review` |
 | 2026-09-01 | F4 | [PR #10](https://github.com/2heal1/deepseek-harness/pull/10) 以 `b53828445a` 合入集成分支；补齐 Windows 路径与 symlink coverage，最终 CI 18 项通过、9 项按配置跳过，状态更新为 `done` |
+| 2026-09-02 | F5 | 从 `fork/feat/configurable-cli` 的 `02d60ba7d6` 创建 `feat/configurable-cli-f5-events-host-api`；确认 F1 与 P0c 已合入，会话事件与 Host API 进入 `in-progress` |

@@ -1134,6 +1134,24 @@ describe('Team mailbox and waiting', () => {
 
     const inactiveStarted = await spawn(ctx, lead, 'inactive-target')
     await waitNoAgent(ctx, inactiveStarted.member.id)
+    const stored = await ctx.sessionPersistence.inspect(inactiveStarted.member.id)
+    const metaWithoutSeedLength = { ...stored.meta }
+    delete metaWithoutSeedLength.seedLength
+    vi.spyOn(ctx.sessionPersistence, 'inspect').mockResolvedValueOnce({
+      ...stored,
+      meta: metaWithoutSeedLength,
+    })
+    const persistedTargetRecorded = Reflect.get(internal, 'persistedTargetRecorded') as (
+      targetId: SessionId,
+      messageId: TeamMessageId,
+      signal: AbortSignal,
+    ) => Promise<boolean | undefined>
+    await expect(persistedTargetRecorded.call(
+      internal,
+      inactiveStarted.member.id,
+      TeamMessageId('absent-message'),
+      SIGNAL,
+    )).resolves.toBe(false)
     const inspect = vi.spyOn(ctx.sessionPersistence, 'inspect').mockRejectedValueOnce(new Error('inspect unavailable'))
     const uncertain = await ctx.agentTeams.sendMessage(lead, {
       target: 'inactive-target', content: content('inspection failure'), delivery: 'wakeup', signal: SIGNAL,

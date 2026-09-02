@@ -86,13 +86,25 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
     it('round-trips a session: create + append → load returns identical meta and byte-identical events', async () => {
       const { persistence, dispose } = await make()
       try {
-        const m = meta('s1', '/work')
+        const m = {
+          ...meta('s1', '/work'),
+          runtimeProfile: {
+            schemaVersion: 0,
+            profileId: 'main',
+            provider: { id: 'native' },
+          },
+        }
         const log = oneTurnLog()
         await persistence.create(m)
         await persistence.append(m.id, log)
 
         const loaded = await persistence.load(m.id)
-        expect(loaded.meta).toMatchObject({ version: SESSION_FORMAT_VERSION, id: m.id, cwd: '/work' })
+        expect(loaded.meta).toMatchObject({
+          version: SESSION_FORMAT_VERSION,
+          id: m.id,
+          cwd: '/work',
+          runtimeProfile: m.runtimeProfile,
+        })
         expect(loaded.events).toEqual(log)
       } finally {
         await dispose()

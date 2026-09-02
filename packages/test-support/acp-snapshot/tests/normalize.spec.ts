@@ -488,6 +488,43 @@ describe('tokenizeSessionFixtureCwd', () => {
     expect(tokenizeSessionFixtureCwd(out)).toBe(out)
   })
 
+  it('stores an absolute Node executable with a portable token', () => {
+    const raw = `${JSON.stringify({
+      type: 'session',
+      id: 's',
+      createdAt: 1,
+      cwd: '/tmp/acp-snap-cwd-abc123',
+      runtimeProfile: {
+        launch: {
+          executable: '/opt/homebrew/Cellar/node/26.5.1/bin/node',
+        },
+      },
+    })}\n`
+
+    const out = tokenizeSessionFixtureCwd(raw)
+    expect(out).toContain('"executable":"{{nodeExecutable}}"')
+    expect(out).not.toContain('/opt/homebrew')
+    expect(tokenizeSessionFixtureCwd(out)).toBe(out)
+  })
+
+  it('leaves Runtime Profiles without an object launch unchanged', () => {
+    for (const runtimeProfile of [
+      {},
+      { launch: null },
+      { launch: 'external' },
+    ]) {
+      const raw = `${JSON.stringify({
+        type: 'session',
+        id: 's',
+        createdAt: 1,
+        cwd: '/tmp/acp-snap-cwd-abc123',
+        runtimeProfile,
+      })}\n`
+
+      expect(tokenizeSessionFixtureCwd(raw)).toContain(JSON.stringify(runtimeProfile))
+    }
+  })
+
   it('rejects a log without a session cwd', () => {
     expect(() => tokenizeSessionFixtureCwd('')).toThrow(
       'acp-snapshot: cannot tokenize a cwd without a basename',

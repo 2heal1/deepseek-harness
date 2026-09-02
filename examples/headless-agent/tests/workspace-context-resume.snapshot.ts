@@ -9,11 +9,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { normalizeSessionLog, scrubRequestHeaders, type NormalizeContext } from '@deepseek-ai/dsh-acp-snapshot'
+import { mountNativeTestRuntimeProfiles } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, {
   SESSION_FORMAT_VERSION,
   SessionId,
+  type JsonValue,
   type SessionEvent,
   type SessionHeader,
 } from '@deepseek-ai/dsh-session'
@@ -48,12 +50,18 @@ async function seedVisibleBaseline(
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+  const profiles = await mountNativeTestRuntimeProfiles(ctx)
   const meta: SessionHeader = {
     version: SESSION_FORMAT_VERSION,
     id: sessionId,
     createdAt: 1,
     cwd,
     delegationDepth: 0,
+    runtimeProfile: profiles.resolve('native', {
+      cwd,
+      model: 'deepseek-v4-flash',
+      nativeLlmProvider: 'deepseek-official',
+    }) as unknown as JsonValue,
   }
   const files = options.files ?? [{ name: 'AGENTS.md', content: oldInstruction }]
   const baseline = renderWorkspaceContext(files.map(file => ({

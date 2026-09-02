@@ -11,6 +11,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { z } from 'zod'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
+import {
+  AgentRuntimeId,
+  AgentRuntimeProviderId,
+  snapshotAgentRuntimeCapabilities,
+  snapshotAgentRuntimeFacts,
+} from '@deepseek-ai/dsh-agent-runtime'
 import { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -122,6 +128,37 @@ describe('session.history projections block', () => {
     seedMessages(session, 1)
     await drained
     expect(frames.some(f => f.type === 'session/projection' && f.key === 'imageLimits')).toBe(false)
+  })
+
+  it('projects the latest durable runtime facts without exposing profile settings', async () => {
+    const { ctx, session } = await harness(true)
+    const gateway = api(ctx)
+    const runtimeId = AgentRuntimeId('runtime-projection')
+    const providerId = AgentRuntimeProviderId('external')
+    session.append('agent/runtime/facts', snapshotAgentRuntimeFacts({
+      runtimeId,
+      providerId,
+      capabilities: snapshotAgentRuntimeCapabilities([
+        { id: 'runtimeActivity', metadata: { fidelity: 'partial' } },
+      ]),
+      phase: 'ready',
+      product: { value: 'External Product', source: 'protocol' },
+      protocol: { value: 'external-rpc', source: 'protocol' },
+    }))
+
+    const response = await gateway.sessions.history(request({ sessionId: session.id }))
+    if (!response.result.ok) throw new Error('history failed')
+    expect(response.result.value.projections?.values.runtimeStatus).toEqual({
+      runtimeId,
+      providerId,
+      capabilities: [{
+        id: 'runtimeActivity',
+        metadata: { fidelity: 'partial' },
+      }],
+      phase: 'ready',
+      product: { value: 'External Product', source: 'protocol' },
+      protocol: { value: 'external-rpc', source: 'protocol' },
+    })
   })
 
   it('leaves the imageLimits key absent while no attachment service is composed', async () => {

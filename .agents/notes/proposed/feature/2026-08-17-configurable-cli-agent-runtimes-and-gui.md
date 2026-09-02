@@ -115,6 +115,14 @@ F3 does not interpret launch fields, construct process environments, enforce san
 
 Web RPC schemas move in lockstep during this pre-release. ACP wire behavior remains protocol version 1; the ACP Host translates receipt settlement to the existing ACP response and flushes its own ordered output queue. JSON-RPC `serverInfo.version` becomes `0.0.2`; `session/prompt` returns both message and submission ids, and submission start and settlement notifications replace inbox-splice inference. Old SDK clients fail version/schema validation instead of receiving compatibility emulation. Headless awaits the receipt settlement and then flushes only its correlated Session interval.
 
+#### F5 durable sessions, events, and callers
+
+The Router stores the complete non-secret effective snapshot in every new Session Header. JSONL writes it in the header record; SQLite schema 18 stores it in `sessions.runtime_profile`. Resume restores that snapshot before Provider preparation and rejects a missing or malformed value, a conflicting caller override, an unavailable generation, or missing `resume` capability. Fork copies the snapshot by value, excludes parent `agent/runtime/facts`, remaps retained sequence references, and starts with a fresh runtime identity.
+
+`RoutedAgent.submit()` owns acceptance, serial start, targeted cancellation, and terminal settlement. The Router event sink is the only external producer of canonical runtime facts, activity, and assistant output; its relational invariant rejects unknown or overlapping submissions, mismatched turns and identities, activity outside the running submission, and external assistant provenance inconsistent with the current Provider. Runtime activity is bounded to 16 KiB of UTF-8 JSON and requires `runtimeActivity`.
+
+Web Host publishes the latest runtime facts as the typed `runtimeStatus` Session projection. ACP, Headless, the JSON-RPC server and both SDKs use submission receipts instead of inbox or whole-Agent-idle inference. JSON-RPC version `0.0.2` returns `{ messageId, submissionId }`; clients collect through the matching durable settlement. F5 does not add an external protocol Provider, main-agent vertical slice, activity UI, or runtime selector.
+
 #### Secure launch
 
 F4 implements one launcher used by every external runtime under these rules:

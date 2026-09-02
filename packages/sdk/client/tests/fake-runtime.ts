@@ -19,7 +19,7 @@
  * - `FAKE_INIT_ERROR_ONCE_FILE`: fail `initialize` (code 7) only when this
  *   marker file does NOT exist yet, creating it — so the first runtime
  *   process fails the handshake and a respawned one succeeds (retry probe).
- * - `FAKE_ECHO_CWD_IN_INIT`: reply `serverInfo.version` = this process's cwd
+ * - `FAKE_ECHO_CWD_IN_INIT`: reply `serverInfo.name` = this process's cwd
  *   (wire-visible spawn-cwd probe).
  * - `FAKE_MALFORMED_EVENT`: the turn's `session.event` carries a number as
  *   the event; `FAKE_MALFORMED_MESSAGE`: assistant/message content is not an
@@ -88,13 +88,14 @@ function assistantText(): string {
   return parts.join('\n')
 }
 
-function runTurn(sessionId: string): void {
+function runTurn(sessionId: string, submissionId: string): void {
   const text = assistantText()
   if (env.FAKE_MALFORMED_EVENT !== undefined) {
     notify('session.event', { sessionId, event: 42 })
     return
   }
   event(sessionId, 'turn/start', { turn: 0 })
+  event(sessionId, 'agent/submission/started', { submissionId, turn: 0 })
   event(sessionId, 'assistant/chunk', { turn: 0, step: 0, chunk: { type: 'text-delta', index: 0, text } })
   if (env.FAKE_MALFORMED_MESSAGE !== undefined) {
     event(sessionId, 'assistant/message', {
@@ -146,6 +147,10 @@ function runTurn(sessionId: string): void {
       lastAssistantMessage: [{ type: 'text', text: 'child says hi' }],
     })
   }
+  event(sessionId, 'agent/submission/settled', {
+    submissionId,
+    result: { kind: 'completed', reason: { kind: reasonKind } },
+  })
 }
 
 function sessionIdOf(params: Record<string, unknown> | undefined): string {
@@ -170,7 +175,7 @@ reader.on('line', (line) => {
         const poll = setInterval(() => {
           if (!existsSync(go)) return
           clearInterval(poll)
-          write({ jsonrpc: '2.0', id, result: { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } } })
+          write({ jsonrpc: '2.0', id, result: { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.2' } } })
         }, 5)
         return
       }
@@ -188,23 +193,23 @@ reader.on('line', (line) => {
         return
       }
       if (env.FAKE_ECHO_CWD_IN_INIT !== undefined) {
-        respond({ serverInfo: { name: 'deepseek-harness-sdk-runtime', version: process.cwd() } })
+        respond({ serverInfo: { name: process.cwd(), version: '0.0.2' } })
         return
       }
-      respond({ serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } })
+      respond({
+        serverInfo: {
+          name: 'deepseek-harness-sdk-runtime',
+          version: env.FAKE_PROTOCOL_VERSION ?? '0.0.2',
+        },
+      })
       return
     case 'session/prompt': {
       const sessionId = sessionIdOf(frame.params)
       const messageId = `fake-user-${seq}`
-      event(sessionId, 'agent/inbox/spliced', {
-        target: 'next-turn',
-        start: 0,
-        inserted: [{
-          id: messageId,
-          role: 'user',
-          content: [],
-          source: { kind: 'user' },
-        }],
+      const submissionId = `fake-submission-${seq}`
+      event(sessionId, 'agent/submission/accepted', {
+        submissionId,
+        messageId,
       })
       notify('session.status', { sessionId, status: 'running' })
       if (env.FAKE_STREAM_THEN_MALFORMED !== undefined) {
@@ -217,9 +222,9 @@ reader.on('line', (line) => {
         respond({})
         return
       }
-      runTurn(sessionId)
+      runTurn(sessionId, submissionId)
       notify('session.status', { sessionId, status: 'idle' })
-      respond({ messageId })
+      respond({ messageId, submissionId })
       return
     }
     case 'shutdown':

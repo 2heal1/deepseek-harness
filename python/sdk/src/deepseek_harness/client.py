@@ -14,8 +14,16 @@ from typing import Callable, TypeAlias, TypeVar
 
 from pydantic import BaseModel
 
-from .errors import JsonRpcError, TransportClosedError
-from .models import IncomingRequest, InitializeResponse, JsonObject, JsonValue, Notification
+from .errors import JsonRpcError, SdkProtocolError, TransportClosedError
+from .models import (
+    HARNESS_SDK_PROTOCOL_VERSION,
+    IncomingRequest,
+    InitializeResponse,
+    JsonObject,
+    JsonValue,
+    Notification,
+    SessionPromptResult,
+)
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 NotificationFilter: TypeAlias = Callable[[Notification], bool]
@@ -130,7 +138,16 @@ class HarnessClient:
         if max_tokens is not None:
             payload["maxTokens"] = max_tokens
         try:
-            return self.request("initialize", payload, response_model=InitializeResponse)
+            response = self.request("initialize", payload, response_model=InitializeResponse)
+            server_info = response.serverInfo
+            if server_info is None or server_info.name is None or server_info.version is None:
+                raise SdkProtocolError("initialize response requires serverInfo.name and serverInfo.version")
+            if server_info.version != HARNESS_SDK_PROTOCOL_VERSION:
+                raise SdkProtocolError(
+                    "unsupported DeepSeek Harness SDK protocol version "
+                    f'"{server_info.version}" (expected "{HARNESS_SDK_PROTOCOL_VERSION}")'
+                )
+            return response
         except BaseException:
             self.close()
             raise
@@ -142,17 +159,16 @@ class HarnessClient:
         *,
         on_notification: Callable[[Notification], None] | None = None,
         notification_subscription: "NotificationSubscription | None" = None,
-    ) -> str:
+    ) -> SessionPromptResult:
         payload: JsonObject = {"sessionId": session_id, "contentBlocks": content_blocks}
-        response = self.request(
+        return self.request(
             "session/prompt",
             payload,
-            response_model=_SessionPromptResponse,
+            response_model=SessionPromptResult,
             on_notification=on_notification,
             notification_filter=self._notification_belongs_to_session_tree(session_id),
             notification_subscription=notification_subscription,
         )
-        return response.messageId
 
     def request(
         self,
@@ -543,10 +559,6 @@ class NotificationSubscription:
             if isinstance(item, BaseException):
                 raise item
             on_notification(item)
-
-
-class _SessionPromptResponse(BaseModel):
-    messageId: str
 
 
 class _ShutdownResponse(BaseModel):

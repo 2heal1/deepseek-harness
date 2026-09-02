@@ -39,6 +39,8 @@ function stubAgentForSession(session: Session): StubAgent {
     inbox,
     ctx: new Context(),
     status: 'idle',
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send: () => {},
     followup: () => {},
     steer: () => {},

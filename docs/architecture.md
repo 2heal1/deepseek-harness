@@ -100,6 +100,8 @@ The session log is the source of the context the model sees. `deriveMessages()` 
 
 **Model-visible means logged.** Anything that reaches a model request must be reconstructable from the log, and a runtime invariant asserts it. This is why a new model-visible input requires a new session event: extend `SessionEventMap` and render from the log.
 
+Each published Agent submission has a durable receipt lifecycle: acceptance identifies the user message, start allocates its turn, and settlement records the terminal reason. The Router is the sole producer of these records and the canonical sink for external runtime facts, activity, and assistant provenance. A Session Header pins the complete non-secret Runtime Profile snapshot; resume uses that snapshot, while fork copies it and removes parent runtime identity.
+
 ## Capability seams
 
 A **seam** is a swappable capability with three roles: a **Service Definition** declaring the interface, a **Service Provider** implementing it, and a **Consumer** using it, commonly a model-facing tool. A package may combine roles, but one role alone is not a seam; adding a capability means designing all three ([capability graph](capability-seams.md)).

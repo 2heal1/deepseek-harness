@@ -132,6 +132,10 @@ function validateSessionHeader(id: SessionId, input: unknown): SessionHeader {
   if (record.agentPreset !== undefined && typeof record.agentPreset !== 'string') {
     throw new Error('session header agentPreset must be a string')
   }
+  if (record.runtimeProfile !== undefined
+    && snapshotJsonValue(record.runtimeProfile) === undefined) {
+    throw new Error('session header runtimeProfile must be lossless JSON')
+  }
   return deepFreeze(record as unknown as SessionHeader)
 }
 
@@ -328,8 +332,22 @@ function assertMessageEventShape(event: Record<string, unknown>, subject: string
   }
   const sourceRecord = source as Record<string, unknown>
   if (type === 'assistant/message') {
-    if (sourceRecord['kind'] !== 'model' || !hasProviderModel(sourceRecord)) {
-      throw new Error(`${subject} message must have model source`)
+    if (sourceRecord['kind'] === 'model' && hasProviderModel(sourceRecord)) return
+    const provenance = record?.['provenance']
+    const runtime = provenance !== null && typeof provenance === 'object'
+      ? provenance as Record<string, unknown>
+      : undefined
+    if (sourceRecord['kind'] !== 'runtime'
+      || typeof sourceRecord['provider'] !== 'string'
+      || sourceRecord['provider'] === ''
+      || sourceRecord['source'] !== 'protocol'
+      || record?.['step'] !== undefined
+      || runtime?.['kind'] !== 'runtime'
+      || runtime['provider'] !== sourceRecord['provider']
+      || runtime['source'] !== 'protocol'
+      || typeof runtime['submissionId'] !== 'string'
+      || runtime['submissionId'] === '') {
+      throw new Error(`${subject} message must have model or runtime protocol source`)
     }
     return
   }
@@ -783,6 +801,45 @@ export class SessionForkError extends Error {
   }
 }
 
+/** Remove runtime identities from a fork seed and preserve every retained reference. */
+function forkSeedWithoutRuntimeFacts(events: readonly SessionEvent[]): SessionEvent[] {
+  const runtimeFactsEventType: string = 'agent/runtime/facts'
+  const retained = events.filter(event => event.type !== runtimeFactsEventType)
+  const remapped = new Map(retained.map((event, index) => [event.seq, index]))
+  const remapSeq = (seq: number): number => {
+    const mapped = remapped.get(seq)
+    if (mapped === undefined) {
+      throw new SessionForkError(
+        `fork seed event references excluded runtime fact at seq ${seq}`,
+        'INVALID_BOUNDARY',
+      )
+    }
+    return mapped
+  }
+  return retained.map((event, seq) => {
+    const surface = event as SessionEvent & {
+      sourceEventSeqs?: number[]
+      surfaceOp?: 'append' | { op: 'replace'; start: number; end: number }
+    }
+    return {
+      ...event,
+      seq,
+      ...surface.sourceEventSeqs === undefined
+        ? {}
+        : { sourceEventSeqs: surface.sourceEventSeqs.map(remapSeq) },
+      ...surface.surfaceOp === undefined || surface.surfaceOp === 'append'
+        ? {}
+        : {
+          surfaceOp: {
+            op: 'replace' as const,
+            start: remapSeq(surface.surfaceOp.start),
+            end: remapSeq(surface.surfaceOp.end),
+          },
+        },
+    }
+  })
+}
+
 /**
  * In-memory session store (`ctx.sessions`).
  *
@@ -884,6 +941,7 @@ export class SessionStore extends Service {
       ...meta?.origin === undefined ? {} : { origin: meta.origin },
       ...meta?.delegationDepth === undefined ? {} : { delegationDepth: meta.delegationDepth },
       ...meta?.agentPreset === undefined ? {} : { agentPreset: meta.agentPreset },
+      ...meta?.runtimeProfile === undefined ? {} : { runtimeProfile: meta.runtimeProfile },
     }
     return Session.create(sessionId, seed, header)
   }
@@ -1083,13 +1141,16 @@ export class SessionStore extends Service {
       throw new SessionForkError(`session "${childSessionId}" already exists`, 'SESSION_ALREADY_EXISTS')
     }
     const liveSource = this._resolveForkSource(source)
-    const seed = this._forkSeed(liveSource, boundary)
+    const seed = forkSeedWithoutRuntimeFacts(this._forkSeed(liveSource, boundary))
     return this.create(childSessionId, {
       seed,
       meta: {
         ...liveSource.header.cwd !== undefined ? { cwd: liveSource.header.cwd } : {},
         parentSession: liveSource.id,
         seedLength: seed.length,
+        ...liveSource.header.runtimeProfile === undefined
+          ? {}
+          : { runtimeProfile: liveSource.header.runtimeProfile },
       },
     })
   }

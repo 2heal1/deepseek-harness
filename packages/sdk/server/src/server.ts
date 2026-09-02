@@ -24,6 +24,7 @@ import type {
   SubagentFinishedNotification,
   SubagentStartedNotification,
 } from '@deepseek-ai/dsh-sdk-protocol'
+import { HARNESS_SDK_PROTOCOL_VERSION } from '@deepseek-ai/dsh-sdk-protocol'
 
 interface SessionRecord {
   handle: AgentHandle
@@ -121,13 +122,18 @@ export class HarnessSdkJsonRpcServer {
       if (this.provider !== 'deepseek-official') throw new Error(`no adapter registered for provider "${this.provider}"`)
       this.llmFiber = await this.ctx.plugin(LlmDeepSeek, {})
     }
-    return { serverInfo: { name: 'deepseek-harness-sdk-runtime', version: '0.0.1' } }
+    return {
+      serverInfo: {
+        name: 'deepseek-harness-sdk-runtime',
+        version: HARNESS_SDK_PROTOCOL_VERSION,
+      },
+    }
   }
 
   /**
-   * Queue one identified prompt without assigning later activity to it.
+   * Accept one identified prompt and return its durable submission correlation.
    * @param params - target session and user content.
-   * @returns the durable message identity.
+   * @returns the durable message and submission identities.
    */
   async prompt(params: SessionPromptParams): Promise<SessionPromptResult> {
     const rec = await this.getOrCreateSession(params.sessionId)
@@ -138,8 +144,8 @@ export class HarnessSdkJsonRpcServer {
       throw new Error(`session agent was disposed outside the server: ${params.sessionId}`)
     }
     const message = createUserMessage({ content: params.contentBlocks, source: { kind: 'user' } })
-    rec.handle.agent.followup(message)
-    return { messageId: message.id }
+    const receipt = rec.handle.agent.submit(message)
+    return { messageId: receipt.messageId, submissionId: receipt.id }
   }
 
   /**

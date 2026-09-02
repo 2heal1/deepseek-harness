@@ -30,6 +30,8 @@ function stubAgent(ctx: Context, rawId: string): Agent {
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',
     ctx: scopeFiber.ctx,
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),

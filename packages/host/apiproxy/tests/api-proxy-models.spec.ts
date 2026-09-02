@@ -29,6 +29,15 @@ function request<P>(payload: P): RpcRequest<P> {
   return { rpcId: RpcId(`models-${String(nextRpc++)}`), payload }
 }
 
+function receipt(message: UserMessage): ReturnType<Agent['submit']> {
+  return {
+    id: 'submission-test' as never,
+    messageId: message.id,
+    started: Promise.resolve({} as never),
+    settled: Promise.resolve({} as never),
+  }
+}
+
 class CatalogAdapter extends LlmAdapter {
   constructor(
     private readonly name: string,
@@ -159,8 +168,8 @@ describe('Web session model selection', () => {
         return AttachmentStore.prototype.saveImages.call(attachments, inputs)
       },
     } as never)
-    const followup = vi.fn()
-    Object.assign(agent, { followup })
+    const submit = vi.fn<Agent['submit']>(receipt)
+    Object.assign(agent, { submit })
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
       cwd: '/tmp',
@@ -178,7 +187,7 @@ describe('Web session model selection', () => {
     expect(result.result.ok).toBe(true)
     expect(validateImage.mock.calls.map(([input]) => [...input.data])).toEqual([[1], [2]])
     expect(saveImage.mock.calls.map(([input]) => [...input.data])).toEqual([[1], [2]])
-    expect((followup.mock.calls[0]?.[0] as UserMessage).content).toEqual([
+    expect((submit.mock.calls[0]?.[0] as UserMessage).content).toEqual([
       {
         type: 'image',
         attachment: {

@@ -75,6 +75,30 @@ describe('API Remote Agent resolver races', () => {
     await ctx.fiber.dispose()
   })
 
+  it('resolves Agent options for a cold resume', async () => {
+    const ctx = await createContext()
+    const sessionId = sid('configured-cold-resume')
+    const meta = header(sessionId)
+    let published: Session | undefined
+    provideSession(ctx, meta, () => {
+      published = ctx.sessions.create(sessionId, { meta: { cwd: '/proj' } })
+      return Promise.resolve({ meta, events: [] })
+    })
+    const resume = vi.spyOn(ctx.agents, 'resume').mockImplementation(async () => {
+      if (published === undefined) throw new Error('Session was not published')
+      return { agent: stubAgent(ctx, published), dispose: () => Promise.resolve() }
+    })
+    const agentOptions = { provider: 'mock', model: 'configured' }
+
+    const result = await createApiRemoteAgentResolver(ctx, {
+      agentOptions: () => agentOptions,
+    })(sessionId)
+
+    expect(result).toMatchObject({ agent: { id: sessionId } })
+    expect(resume).toHaveBeenCalledWith({ resumeSessionId: sessionId, agentOptions })
+    await ctx.fiber.dispose()
+  })
+
   it('rejects a subagent Session published after durable inspection', async () => {
     const ctx = await createContext()
     const sessionId = sid('owned-attach-race')

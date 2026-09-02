@@ -422,9 +422,16 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
       expect(normalizedResult).toBe(await readFile(resultExpectedPath, 'utf8'))
 
       // Wire-shape invariants that must hold in every mode.
+      const accepted = result.events.find(event => event.type === 'agent/submission/accepted')
+      expect(accepted).toBeDefined()
       expect(notifications.at(-1)).toMatchObject({
-        method: 'session.status',
-        params: { status: 'idle' },
+        method: 'session.event',
+        params: {
+          event: {
+            type: 'agent/submission/settled',
+            data: accepted?.data,
+          },
+        },
       })
       expect(observedFiles).toEqual(scenario.expectedFiles ?? {})
       if (scenario.expectedTools !== undefined) {

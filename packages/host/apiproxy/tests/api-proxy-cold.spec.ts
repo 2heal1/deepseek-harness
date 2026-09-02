@@ -14,6 +14,7 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { TypertLookupFailure } from '@deepseek-ai/dsh-typert-protocol'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import { createUserMessage, MessageId } from '@deepseek-ai/dsh-llm'
+import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
@@ -32,6 +33,15 @@ const sid = (id: string): SessionId => id as SessionId
 let nextRpc = 1
 function request<P>(payload: P): RpcRequest<P> {
   return { rpcId: RpcId(`cold-${String(nextRpc++)}`), payload }
+}
+
+function receipt(message: UserMessage): ReturnType<Agent['submit']> {
+  return {
+    id: 'submission-test' as never,
+    messageId: message.id,
+    started: Promise.resolve({} as never),
+    settled: Promise.resolve({} as never),
+  }
 }
 
 function header(id: string, createdAt: number, extra: Partial<SessionHeader> = {}): SessionHeader {
@@ -597,8 +607,8 @@ describe('subagent ownership fence', () => {
       }],
       meta: { cwd: '/proj', parentSession: sid('session-source'), seedLength: 1 },
     })
-    const followup = vi.fn()
-    const agent = { id: session.id, session, status: 'idle', ctx, followup } as unknown as Agent
+    const submit = vi.fn<Agent['submit']>(receipt)
+    const agent = { id: session.id, session, status: 'idle', ctx, submit } as unknown as Agent
     ctx.agents.register(agent)
     const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
 
@@ -608,7 +618,7 @@ describe('subagent ownership fence', () => {
       content: [{ type: 'text', text: 'ordinary work' }],
     }))
     expect(response.result.ok).toBe(true)
-    expect(followup).toHaveBeenCalledOnce()
+    expect(submit).toHaveBeenCalledOnce()
   })
 
   it('canonicalizes a supplied browser zone on the exact prompt and rejects invalid names', async () => {
@@ -617,8 +627,8 @@ describe('subagent ownership fence', () => {
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(UserQuestionService)
     const session = ctx.sessions.create(sid('session-browser-zone'), { meta: { cwd: '/proj' } })
-    const followup = vi.fn()
-    const agent = { id: session.id, session, status: 'idle', ctx, followup } as unknown as Agent
+    const submit = vi.fn<Agent['submit']>(receipt)
+    const agent = { id: session.id, session, status: 'idle', ctx, submit } as unknown as Agent
     ctx.agents.register(agent)
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ({ provider: 'p', model: 'm' }),
@@ -637,7 +647,7 @@ describe('subagent ownership fence', () => {
     await expect(api.sessions.prompt(zonedRequest)).resolves.toMatchObject({
       result: { ok: true },
     })
-    expect(followup).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(submit).toHaveBeenNthCalledWith(1, expect.objectContaining({
       source: { kind: 'user', rpcId: zonedRequest.rpcId, clientTimeZone: canonical },
     }))
 
@@ -650,7 +660,7 @@ describe('subagent ownership fence', () => {
     await expect(api.sessions.prompt(utcRequest)).resolves.toMatchObject({
       result: { ok: true },
     })
-    expect(followup).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(submit).toHaveBeenNthCalledWith(2, expect.objectContaining({
       source: { kind: 'user', rpcId: utcRequest.rpcId, clientTimeZone: 'UTC' },
     }))
 
@@ -662,7 +672,7 @@ describe('subagent ownership fence', () => {
     await expect(api.sessions.prompt(unzonedRequest)).resolves.toMatchObject({
       result: { ok: true },
     })
-    expect(followup).toHaveBeenNthCalledWith(3, expect.objectContaining({
+    expect(submit).toHaveBeenNthCalledWith(3, expect.objectContaining({
       source: { kind: 'user', rpcId: unzonedRequest.rpcId },
     }))
 
@@ -682,7 +692,7 @@ describe('subagent ownership fence', () => {
         },
       })
     }
-    expect(followup).toHaveBeenCalledTimes(3)
+    expect(submit).toHaveBeenCalledTimes(3)
   })
 })
 
@@ -740,6 +750,7 @@ describe('sessions.prompt synchronous rejection', () => {
       session,
       status: 'idle',
       ctx,
+      submit: () => { throw new Error('agent "session-throwing" lifecycle disposed') },
       followup: () => { throw new Error('agent "session-throwing" lifecycle disposed') },
       steer: () => { throw new Error('agent "session-throwing" lifecycle disposed') },
     } as unknown as Agent)

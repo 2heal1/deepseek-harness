@@ -142,7 +142,6 @@ export async function startInProcessRun(
     request.signal,
     request.prompt,
     childId,
-    activationBoundary,
     structured,
   )
 }
@@ -156,10 +155,10 @@ function drivePublishedRun(
   signal: AbortSignal,
   prompt: ContentBlock[],
   childId: SessionId,
-  boundary: number,
   structured: StructuredAttachment | undefined,
 ): SubagentRun {
   const child = handle.agent
+  const boundary = child.session.firstLiveSeq
   const flags = { cancelled: false }
   const onAbort = (): void => {
     flags.cancelled = true

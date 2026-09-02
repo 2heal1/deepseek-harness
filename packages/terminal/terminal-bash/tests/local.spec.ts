@@ -41,6 +41,8 @@ function stubAgent(ctx: Context, rawId: string): Agent {
     id, options: {}, capabilities: [], session, inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',
     ctx: scope.ctx,
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send: () => {},
     followup: () => {}, steer: () => {}, inject: () => {}, cancel() {},
     runMaintenance: task => task(new AbortController().signal),

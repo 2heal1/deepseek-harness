@@ -8,6 +8,7 @@ import { Context, FiberState, Service } from '@deepseek-ai/cordis'
 import type { Fiber } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import type {
   Agent,
   AgentFactory,
@@ -23,6 +24,7 @@ import {
   AgentRuntimeError,
   AgentRuntimeId,
   AgentRuntimeProviderId,
+  hasAgentRuntimeCapability,
   snapshotAgentRuntimeFacts,
 } from '@deepseek-ai/dsh-agent-runtime'
 import type {
@@ -42,7 +44,7 @@ import type {
   RuntimeCapacityLease,
 } from '@deepseek-ai/dsh-agent-runtime-profile'
 import { SessionId, SessionPreparation } from '@deepseek-ai/dsh-session'
-import type { Session, SessionHeader } from '@deepseek-ai/dsh-session'
+import type { JsonValue, Session, SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { RoutedAgent } from './agent.ts'
 
@@ -196,9 +198,91 @@ function validatePreparedRuntime(
   return facts
 }
 
+/** Reconstruct Agent-facing Native options from one persisted effective snapshot. */
+function restoredAgentOptions(
+  profile: RuntimeProfileSnapshot,
+  requested: AgentOptions,
+  phase: 'profile' | 'resume',
+): AgentOptions {
+  const providerOptions = profile.provider.options !== null
+    && typeof profile.provider.options === 'object'
+    && !Array.isArray(profile.provider.options)
+    ? profile.provider.options
+    : {}
+  const restored: AgentOptions = {
+    runtimeProfile: profile.profileId,
+    ...profile.model.default === undefined ? {} : { model: profile.model.default },
+    ...typeof providerOptions['llmProvider'] === 'string'
+      ? { provider: providerOptions['llmProvider'] }
+      : {},
+    ...typeof providerOptions['maxTokens'] === 'number'
+      ? { maxTokens: providerOptions['maxTokens'] }
+      : {},
+  }
+  for (const key of ['runtimeProfile', 'provider', 'model', 'maxTokens'] as const) {
+    if (requested[key] !== undefined && requested[key] !== restored[key]) {
+      throw new AgentRuntimeError({
+        code: 'RUNTIME_INCOMPATIBLE',
+        phase,
+        message: `agent option "${key}" conflicts with the stored Runtime Profile snapshot`,
+        providerId: profile.provider.id,
+      })
+    }
+  }
+  return restored
+}
+
+/** Remove parent runtime identities and remap retained events and the lineage boundary. */
+function forkSeedWithoutRuntimeFacts(
+  events: readonly SessionEvent[] | undefined,
+  seedLength: number | undefined,
+): { readonly events: readonly SessionEvent[]; readonly seedLength: number } | undefined {
+  if (events === undefined) return undefined
+  const lineageBoundary = seedLength ?? events.length
+  const retained = events.filter(event => event.type !== 'agent/runtime/facts')
+  const remapped = new Map(retained.map((event, index) => [event.seq, index]))
+  const remapSeq = (seq: number): number => {
+    const mapped = remapped.get(seq)
+    if (mapped === undefined) {
+      throw new AgentRuntimeError({
+        code: 'RUNTIME_INCOMPATIBLE',
+        phase: 'profile',
+        message: `fork seed event references excluded runtime fact at seq ${seq}`,
+      })
+    }
+    return mapped
+  }
+  return {
+    events: retained.map((event, seq) => {
+      const surface = event as SessionEvent & {
+        sourceEventSeqs?: number[]
+        surfaceOp?: 'append' | { op: 'replace'; start: number; end: number }
+      }
+      return {
+        ...event,
+        seq,
+        ...surface.sourceEventSeqs === undefined
+          ? {}
+          : { sourceEventSeqs: surface.sourceEventSeqs.map(remapSeq) },
+        ...surface.surfaceOp === undefined || surface.surfaceOp === 'append'
+          ? {}
+          : {
+            surfaceOp: {
+              op: 'replace' as const,
+              start: remapSeq(surface.surfaceOp.start),
+              end: remapSeq(surface.surfaceOp.end),
+            },
+          },
+      }
+    }),
+    seedLength: retained.filter(event => event.seq < lineageBoundary).length,
+  }
+}
+
 /** Mutable sink state closed before provider teardown. */
 class RouterEventSink implements AgentRuntimeEventSink {
   private open = true
+  private agent!: RoutedAgent
 
   constructor(
     readonly runtimeId: ReturnType<typeof AgentRuntimeId>,
@@ -207,6 +291,10 @@ class RouterEventSink implements AgentRuntimeEventSink {
 
   close(): void {
     this.open = false
+  }
+
+  bind(agent: RoutedAgent): void {
+    this.agent = agent
   }
 
   facts(facts: AgentRuntimeFacts): void {
@@ -220,28 +308,30 @@ class RouterEventSink implements AgentRuntimeEventSink {
         providerId: this.providerId,
       })
     }
+    this.agent.appendRuntimeFacts(snapshot)
   }
 
-  assistantChunk(_submissionId: SubmissionId, _chunk: AgentRuntimeAssistantChunk): void {
-    this.unsupportedOutput()
-  }
-
-  assistantMessage(_submissionId: SubmissionId, _output: AgentRuntimeAssistantOutput): void {
-    this.unsupportedOutput()
-  }
-
-  activity(_activity: AgentRuntimeActivity): void {
-    this.unsupportedOutput()
-  }
-
-  private unsupportedOutput(): never {
+  assistantChunk(submissionId: SubmissionId, chunk: AgentRuntimeAssistantChunk): void {
     this.assertOpen()
-    throw new AgentRuntimeError({
-      code: 'RUNTIME_INCOMPATIBLE',
-      phase: 'turn',
-      message: 'provider output requires the F5 canonical event sink',
-      providerId: this.providerId,
-    })
+    this.agent.appendRuntimeAssistantChunk(submissionId, chunk)
+  }
+
+  assistantMessage(submissionId: SubmissionId, output: AgentRuntimeAssistantOutput): void {
+    this.assertOpen()
+    this.agent.appendRuntimeAssistantMessage(submissionId, output)
+  }
+
+  activity(activity: AgentRuntimeActivity): void {
+    this.assertOpen()
+    if (activity.runtimeId !== this.runtimeId) {
+      throw new AgentRuntimeError({
+        code: 'RUNTIME_INCOMPATIBLE',
+        phase: 'turn',
+        message: 'runtime activity does not match the prepared runtime identity',
+        providerId: this.providerId,
+      })
+    }
+    this.agent.appendRuntimeActivity(activity)
   }
 
   private assertOpen(): void {
@@ -260,6 +350,7 @@ class AgentLifecycle {
   private agentValue: RoutedAgent | undefined
   readonly signal: AbortSignal
   private runtime: PreparedAgentRuntime | undefined
+  private initialFacts: AgentRuntimeFacts | undefined
   private detachSession: (() => void) | undefined
   private detachAgent: (() => void) | undefined
   private disposing: Promise<void> | undefined
@@ -320,6 +411,7 @@ class AgentLifecycle {
         session,
         provider.id,
       )
+      this.sink.bind(this.agentValue)
       this.agentReady.resolve()
       this.assertLive()
     } catch (error: unknown) {
@@ -335,35 +427,45 @@ class AgentLifecycle {
     return this.agentValue as RoutedAgent
   }
 
-  async prepare(profile: RuntimeProfileSnapshot): Promise<void> {
+  async prepare(
+    profile: RuntimeProfileSnapshot,
+    source: SessionStartSource,
+    externalSessionId?: AgentRuntimeFacts['externalSessionId'],
+  ): Promise<void> {
     const { runtimeId } = this.sink
-    if (isSynchronousProvider(this.provider)) {
-      this.attachRuntime(runtimeId, this.provider.prepareSync({
-        kind: 'create',
+    const request = source === 'resume'
+      ? {
+        kind: 'resume' as const,
         runtimeId,
         sessionId: this.agent.id,
         profile,
         agentCtx: this.agent.ctx,
         sink: this.sink,
         signal: this.signal,
-      }))
+        ...externalSessionId === undefined ? {} : { externalSessionId },
+      }
+      : {
+        kind: 'create' as const,
+        runtimeId,
+        sessionId: this.agent.id,
+        profile,
+        agentCtx: this.agent.ctx,
+        sink: this.sink,
+        signal: this.signal,
+      }
+    if (isSynchronousProvider(this.provider)) {
+      this.attachRuntime(runtimeId, this.provider.prepareSync(request))
+      this.assertResumeCapability(source)
       return
     }
     const runtime = await raceAbortCall(
-      () => this.provider.prepare({
-        kind: 'create',
-        runtimeId,
-        sessionId: this.agent.id,
-        profile,
-        agentCtx: this.agent.ctx,
-        sink: this.sink,
-        signal: this.signal,
-      }),
+      () => this.provider.prepare(request),
       this.signal,
       this.agent.id,
       abandoned => void abandoned.dispose(),
     )
     this.attachRuntime(runtimeId, runtime)
+    this.assertResumeCapability(source)
   }
 
   prepareSync(profile: RuntimeProfileSnapshot): void {
@@ -393,9 +495,21 @@ class AgentLifecycle {
     runtimeId: ReturnType<typeof AgentRuntimeId>,
     runtime: PreparedAgentRuntime,
   ): void {
-    validatePreparedRuntime(this.provider, runtimeId, runtime)
+    this.initialFacts = validatePreparedRuntime(this.provider, runtimeId, runtime)
     this.runtime = runtime
     this.agent.attachRuntime(runtime)
+  }
+
+  /** Require a resumed Provider to declare the capability before publication. */
+  private assertResumeCapability(source: SessionStartSource): void {
+    if (source !== 'resume'
+      || hasAgentRuntimeCapability(this.agent.capabilities, 'resume')) return
+    throw new AgentRuntimeError({
+      code: 'RESUME_UNSUPPORTED',
+      phase: 'resume',
+      message: `agent runtime provider "${this.provider.id}" does not support resume`,
+      providerId: this.provider.id,
+    })
   }
 
   publish(source: SessionStartSource): AgentHandle {
@@ -403,6 +517,8 @@ class AgentLifecycle {
     this.detachSession = this.agent.ctx.sessions.enter(this.agent.session)
     this.detachAgent = this.router.runtimeContext.agents.enter(this.agent, this.ownerCtx.agent)
     this.agent.ctx.sessions.announce(this.agent.session)
+    this.assertLive()
+    this.agent.appendRuntimeFacts(this.initialFacts as AgentRuntimeFacts)
     this.assertLive()
     this.router.runtimeContext.agents.announce(this.agent)
     this.assertLive()
@@ -418,7 +534,7 @@ class AgentLifecycle {
 
   private async disposeOnce(ownerTriggered: boolean): Promise<void> {
     const id = this.agentValue?.id ?? 'unpublished'
-    this.agentValue?.closeAdmission()
+    const submissionsSettled = this.agentValue?.closeAdmission()
     this.abort.abort(new Error(`agent "${id}" lifecycle disposed`))
     this.removeAbortListeners()
     this.sink.close()
@@ -433,6 +549,7 @@ class AgentLifecycle {
         failure = error
       }
     }
+    await submissionsSettled
     try {
       await agent?.disposeScope()
     } catch (error: unknown) {
@@ -527,17 +644,34 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
    * @returns the published Agent handle.
    */
   async createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle> {
+    const persistedProfile = options.meta?.runtimeProfile
+    const profile = persistedProfile === undefined
+      ? this.resolveProfile(options.meta?.cwd, options.agentOptions ?? {})
+      : this.profiles.restore(persistedProfile)
+    const agentOptions = persistedProfile === undefined
+      ? options.agentOptions ?? {}
+      : restoredAgentOptions(profile, options.agentOptions ?? {}, 'profile')
+    const forkSeed = options.meta?.parentSession === undefined
+      ? undefined
+      : forkSeedWithoutRuntimeFacts(options.seed, options.meta.seedLength)
+    const seed = forkSeed?.events ?? options.seed
     const preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(options.sessionId, {
-      ...options.seed === undefined ? {} : { seed: options.seed },
-      ...options.meta === undefined ? {} : { meta: options.meta },
+      ...seed === undefined ? {} : { seed },
+      meta: {
+        ...options.meta,
+        ...forkSeed === undefined ? {} : { seedLength: forkSeed.seedLength },
+        runtimeProfile: profile as unknown as JsonValue,
+      },
     }))
     const published = this.setupAndPublish(
       ownerCtx,
       preparation,
-      options.agentOptions ?? {},
+      agentOptions,
       options.setup,
       options.signal,
       'startup',
+      profile,
+      undefined,
     )
     this.ownership.trackWrapper(published)
     return published
@@ -558,8 +692,13 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     options: AgentOptions = {},
     meta: Pick<SessionHeader, 'cwd'> = {},
   ): Agent {
-    using preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(id, { meta }))
-    const profile = this.resolveProfile(preparation.session, options)
+    const profile = this.resolveProfile(meta.cwd, options)
+    using preparation = SessionPreparation.create(this.runtime.ctx.sessions.prepare(id, {
+      meta: {
+        ...meta,
+        runtimeProfile: profile as unknown as JsonValue,
+      },
+    }))
     const providerId = profile.provider.id
     const generation = this.requireProviderGeneration(providerId)
     this.assertProfileCompatible(generation.provider, profile)
@@ -609,29 +748,34 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     options: ResumeAgentOptions,
   ): Promise<AgentHandle> {
     const id = options.resumeSessionId
-    const profile = this.profiles.resolve(options.agentOptions?.runtimeProfile, {
-      ...options.agentOptions?.model === undefined ? {} : { model: options.agentOptions.model },
-      ...options.agentOptions?.provider === undefined
-        ? {}
-        : { nativeLlmProvider: options.agentOptions.provider },
-      ...options.agentOptions?.maxTokens === undefined
-        ? {}
-        : { nativeMaxTokens: options.agentOptions.maxTokens },
-    })
-    const generation = this.requireProviderGeneration(profile.provider.id)
-    this.assertProfileCompatible(generation.provider, profile)
     const ownerAbort = new AbortController()
     const unfollowOwner = ownerCtx.effect(() => () => {
       ownerAbort.abort(new Error(`agent "${id}" setup aborted: owner disposed during setup`))
     }, `agentRuntimeRouter.resume-load(${id})`)
-    const fused = AbortSignal.any([
+    const ownerSignal = AbortSignal.any([
       ...options.signal === undefined ? [] : [options.signal],
       ownerAbort.signal,
       this.ownership.signal,
-      generation.signal,
     ])
     let preparation: SessionPreparation | undefined
     try {
+      const listed = await raceAbortCall(
+        () => persistence.listSnapshots(ownerSignal),
+        ownerSignal,
+        id,
+        /* v8 ignore next -- a late snapshot array owns no resources. */
+        () => undefined,
+      )
+      const listedHeader = listed.find(snapshot => snapshot.header.id === id)?.header
+      const listedProfile = listedHeader?.runtimeProfile === undefined
+        ? undefined
+        : this.profiles.restore(listedHeader.runtimeProfile)
+      const listedGeneration = listedProfile === undefined
+        ? undefined
+        : this.requireProviderGeneration(listedProfile.provider.id)
+      const fused = listedGeneration === undefined
+        ? ownerSignal
+        : AbortSignal.any([ownerSignal, listedGeneration.signal])
       try {
         preparation = await raceAbortCall(
           () => persistence.prepare(id, fused),
@@ -644,15 +788,27 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
       }
       ownerCtx.fiber.assertActive()
       this.assertActive()
+      const profile = this.profiles.restore(preparation.session.header.runtimeProfile)
+      if (listedProfile !== undefined && !isDeepStrictEqual(profile, listedProfile)) {
+        throw new AgentRuntimeError({
+          code: 'RUNTIME_INCOMPATIBLE',
+          phase: 'resume',
+          message: `stored Runtime Profile snapshot changed while session "${id}" was loading`,
+          providerId: profile.provider.id,
+        })
+      }
+      const generation = listedGeneration
+        ?? this.requireProviderGeneration(profile.provider.id)
+      this.assertProfileCompatible(generation.provider, profile)
       return await this.setupAndPublish(
         ownerCtx,
         preparation,
-        options.agentOptions ?? {},
+        restoredAgentOptions(profile, options.agentOptions ?? {}, 'resume'),
         options.setup,
         options.signal,
         'resume',
-        generation,
         profile,
+        generation,
       )
     } finally {
       preparation?.[Symbol.dispose]()
@@ -667,8 +823,8 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     setup: AgentSetup | undefined,
     signal: AbortSignal | undefined,
     source: SessionStartSource,
+    profile: RuntimeProfileSnapshot,
     selectedGeneration?: ProviderGeneration,
-    selectedProfile?: RuntimeProfileSnapshot,
   ): Promise<AgentHandle> {
     using ownedPreparation = preparation
     if (signal?.aborted === true) {
@@ -678,7 +834,6 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
           cause: signal.reason,
         })
     }
-    const profile = selectedProfile ?? this.resolveProfile(ownedPreparation.session, options)
     const providerId = profile.provider.id
     const generation = selectedGeneration ?? this.requireProviderGeneration(providerId)
     this.assertProfileCompatible(generation.provider, profile)
@@ -701,7 +856,12 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
         capacityLease,
         signal,
       )
-      await lifecycle.prepare(profile)
+      const previousFacts = source === 'resume'
+        ? ownedPreparation.session.events.findLast(
+          event => event.type === 'agent/runtime/facts',
+        )?.data
+        : undefined
+      await lifecycle.prepare(profile, source, previousFacts?.externalSessionId)
       const setupCommit = await raceAbort(setup?.(lifecycle.agent.ctx), lifecycle.signal, lifecycle.agent.id)
       setupCommit?.commit()
       return lifecycle.publish(source)
@@ -780,14 +940,14 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
 
   /** Resolve one settings-backed profile before runtime resources exist. */
   private resolveProfile(
-    session: Session,
+    cwd: string | undefined,
     options: AgentOptions,
   ): RuntimeProfileSnapshot {
     return this.profiles.resolve(options.runtimeProfile, {
       ...options.model === undefined ? {} : { model: options.model },
       ...options.provider === undefined ? {} : { nativeLlmProvider: options.provider },
       ...options.maxTokens === undefined ? {} : { nativeMaxTokens: options.maxTokens },
-      ...session.header.cwd === undefined ? {} : { cwd: session.header.cwd },
+      ...cwd === undefined ? {} : { cwd },
     })
   }
 

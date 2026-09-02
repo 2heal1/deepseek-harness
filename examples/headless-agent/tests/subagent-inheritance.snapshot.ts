@@ -7,10 +7,11 @@ import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
+import { mountNativeTestRuntimeProfiles } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { normalizeSessionLog, scrubRequestHeaders, type NormalizeContext } from '@deepseek-ai/dsh-acp-snapshot'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@deepseek-ai/dsh-loader-smoke'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SESSION_FORMAT_VERSION, SessionId, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
+import SessionStore, { SESSION_FORMAT_VERSION, SessionId, type JsonValue, type SessionEvent, type SessionHeader } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { describe, expect, it } from 'vitest'
 
@@ -31,12 +32,18 @@ async function seedReadOnlyParent(root: string, cwd: string): Promise<void> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+  const profiles = await mountNativeTestRuntimeProfiles(ctx)
   const meta: SessionHeader = {
     version: SESSION_FORMAT_VERSION,
     id: sessionId,
     createdAt: 1,
     cwd,
     delegationDepth: 0,
+    runtimeProfile: profiles.resolve('native', {
+      cwd,
+      model: 'deepseek-v4-flash',
+      nativeLlmProvider: 'deepseek-official',
+    }) as unknown as JsonValue,
   }
   const events: SessionEvent[] = [
     { type: 'turn/start', seq: 0, time: 10, data: { turn: 1 } },

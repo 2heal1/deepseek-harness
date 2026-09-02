@@ -33,6 +33,8 @@ function stubAgent(ctx: Context, id: string): Agent {
     inbox,
     status: 'idle',
     ctx: new Context(),
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send(_message: UserMessage, _target: InboxTarget, _wakeup: boolean) {},
     runMaintenance: task => task(signal),
     cancel(_cause: AgentCancelCause) {},
