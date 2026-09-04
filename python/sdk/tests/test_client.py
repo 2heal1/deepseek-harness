@@ -110,7 +110,7 @@ for line in sys.stdin:
 
     assert result.final_response == "hello from runtime"
     assert result.finish_reason == "max-tokens"
-    assert result.events[-1]["type"] == "turn/end"
+    assert result.events[-1]["type"] == "agent/submission/settled"
     dumped_env = json.loads(env_dump.read_text())
     assert dumped_env["DEEPSEEK_API_KEY"] == "env-key"
     assert dumped_env["DEEPSEEK_BASE_URL"] == "http://127.0.0.1:4321"
@@ -161,7 +161,7 @@ for line in sys.stdin:
             on_notification=lambda notification: seen.append(notification.method),
         )
 
-    assert seen == ["session.event", "session.status", "subagent.started", "session.status"]
+    assert seen == ["session.event", "session.status", "subagent.started", "session.event"]
     assert result.finish_reason is None
 
 
@@ -277,7 +277,7 @@ for line in sys.stdin:
         "session.status",
         "subagent.started",
         "subagent.finished",
-        "session.status",
+        "session.event",
     ]
 
 
@@ -339,7 +339,7 @@ for line in sys.stdin:
         "subagent.finished",
         "subagent.finished",
         "session.event",
-        "session.status",
+        "session.event",
     ]
     assert seen == [notification.method for notification in result.notifications]
 
