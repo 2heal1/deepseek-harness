@@ -903,7 +903,7 @@ def smoke_sdk_snapshot(base_url: str, executable: Path, update_snapshots: bool) 
         if "WORKFLOW_CHILD_OK" not in render_jsonl(logs[child_ids[1]]):
             raise AssertionError("second advanced child log has no workflow-subagent result")
 
-        files = build_snapshot_files(result, logs, child_ids, root)
+        files = build_snapshot_files(result, logs, child_ids, root, executable)
         compare_snapshot_files(
             files, update_snapshots, ADVANCED_SNAPSHOT_DIRECTORY, ADVANCED_SNAPSHOT_FILENAMES,
         )
@@ -1158,10 +1158,22 @@ def build_snapshot_files(
     logs: dict[str, list[dict[str, object]]],
     child_ids: list[str],
     cwd: Path,
+    executable: Path,
 ) -> dict[str, str]:
     """Render the SDK result and three persisted logs into stable expected outputs."""
-    replacements = [(str(cwd), "{{cwd}}"), (SNAPSHOT_SESSION_ID, "{{parent}}")]
+    replacements = [
+        (str(executable), "{{runtime-executable}}"),
+        (str(cwd), "{{cwd}}"),
+        (SNAPSHOT_SESSION_ID, "{{parent}}"),
+    ]
     replacements.append((snapshot_workflow_run_id(result), "{{workflow-run}}"))
+    session_ids = [SNAPSHOT_SESSION_ID, *child_ids]
+    for index, session_id in enumerate(session_ids):
+        runtime_token = "{{runtime-parent}}" if index == 0 else f"{{{{runtime-child-{index}}}}}"
+        replacements.append((snapshot_runtime_id(logs[session_id]), runtime_token))
+    for index, (submission_id, message_id) in enumerate(snapshot_submissions(result), start=1):
+        replacements.append((submission_id, f"{{{{submission-{index}}}}}"))
+        replacements.append((message_id, "{{messageId}}"))
     for index, child_id in enumerate(child_ids, start=1):
         replacements.append((child_id, f"{{{{child-{index}}}}}"))
         agent_id = snapshot_agent_id(result, child_id)
@@ -1190,6 +1202,39 @@ def build_snapshot_files(
             [normalize_snapshot_value(record, replacements) for record in logs[child_id]]
         )
     return files
+
+
+def snapshot_runtime_id(records: list[dict[str, object]]) -> str:
+    """Return the one runtime id declared by a persisted session."""
+    runtime_ids = {
+        data["runtimeId"]
+        for event in records
+        if event.get("type") == "agent/runtime/facts"
+        and isinstance((data := event.get("data")), dict)
+        and isinstance(data.get("runtimeId"), str)
+    }
+    if len(runtime_ids) != 1:
+        raise AssertionError(f"advanced snapshot expected one runtime id: {sorted(runtime_ids)}")
+    return next(iter(runtime_ids))
+
+
+def snapshot_submissions(result: "RunResult") -> list[tuple[str, str]]:
+    """Return accepted submission and message ids in event order."""
+    submissions: list[tuple[str, str]] = []
+    for event in result.events:
+        if event.get("type") != "agent/submission/accepted":
+            continue
+        data = event.get("data")
+        if not isinstance(data, dict):
+            raise AssertionError(f"advanced snapshot has invalid submission acceptance: {event}")
+        submission_id = data.get("submissionId")
+        message_id = data.get("messageId")
+        if not isinstance(submission_id, str) or not isinstance(message_id, str):
+            raise AssertionError(f"advanced snapshot has invalid submission acceptance: {event}")
+        submissions.append((submission_id, message_id))
+    if not submissions:
+        raise AssertionError("advanced snapshot expected at least one accepted submission")
+    return submissions
 
 
 def snapshot_workflow_run_id(result: "RunResult") -> str:
