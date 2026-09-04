@@ -750,6 +750,20 @@ describe('AgentRuntimeRouter', () => {
       phase: 'profile',
     })
 
+    const unexpected = new Error('unexpected fork projection failure')
+    const throwingSeed = structuredClone(parent.agent.session.events)
+    vi.spyOn(throwingSeed, 'filter').mockImplementationOnce(() => {
+      throw unexpected
+    })
+    await expect(ctx.agents.create({
+      sessionId: SessionId('snapshot-broken-child'),
+      seed: throwingSeed,
+      meta: {
+        parentSession: parent.agent.id,
+        runtimeProfile,
+      },
+    })).rejects.toBe(unexpected)
+
     await child.dispose()
     await parent.dispose()
     await ctx.fiber.dispose()
