@@ -35,7 +35,7 @@ roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idl
 
 `sendMessage()` 校验 peer 成员关系，追加 `team/message/queued` 并 flush，之后才尝试投递。结果始终标识该持久消息；`queued` 表示即时投递被推迟，并不表示需要重发。target 为 live 时，quiet 投递会立即注入、flush 并确认上下文，但绝不会激活 inactive target；inactive target 的 quiet 消息会保持 queued。wakeup 投递成为 target 的下一个 FIFO turn，并在需要时冷恢复它。
 
-目标消息以 `Team message <id> from <name>:` 开头，并在 `TeamMessageSource` 中保留同一 id 与发送者。target Session 在 pending inbox 或已记录的用户消息历史中持久保存该身份后，Lead 日志才追加 `team/message/delivered`。即时准入按 target 和持久 queue 顺序串行化，恢复也按同一顺序重新投递 queued-minus-delivered 记录。重试前会同时折叠 live 与持久 target 的 inbox／历史状态，因此 inbox 已接受但模型尚未 claim 时发生崩溃也不会复制消息。Lead 日志 flush 成功后会唤醒当前 `waitForChange()` 调用方，调用方随后重新列出权威状态。
+目标消息以 `Team message <id> from <name>:` 开头，并在 `TeamMessageSource` 中保留同一 id 与发送者。target Session 在 pending inbox 或已记录的用户消息历史中持久保存该身份后，Lead 日志才追加 `team/message/delivered`。即时准入按 target 和持久 queue 顺序串行化，恢复也按同一顺序重新投递 queued-minus-delivered 记录。同一持久消息的并发进程内投递尝试共享同一个在途投递结果。重试前会同时折叠 live 与持久 target 的 inbox／历史状态，因此 inbox 已接受但模型尚未 claim 时发生崩溃也不会复制消息。Lead 日志 flush 成功后会唤醒当前 `waitForChange()` 调用方，调用方随后重新列出权威状态。
 
 该保证是进程内重试加 target Session 去重，而不是跨进程 exactly-once。本版本没有跨进程共享 mailbox 事务，也没有 mailbox 时间线 UI。
 
