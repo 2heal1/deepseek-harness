@@ -356,7 +356,7 @@ export interface RuntimeProfileExecutableResolution {
 export interface Config {}
 ```
 
-来源：[`packages/core/agent-runtime-router/src/index.ts:65`](../packages/core/agent-runtime-router/src/index.ts)
+来源：[`packages/core/agent-runtime-router/src/index.ts:70`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 

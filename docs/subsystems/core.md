@@ -714,7 +714,7 @@ async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandl
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:583`](../../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:568`](../../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="ctxagentruntimes--agentruntimeregistry"></a>
 

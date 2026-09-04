@@ -345,10 +345,12 @@ export interface SessionsApi {
 
   /**
    * Sends text and temporary image bytes to an ordinary session Agent after durable host admission.
-   * Browser callers attach their current IANA zone;
-   * the Host validates, canonicalizes, and records it on that exact user message. Omission remains
-   * valid for non-browser callers. Session-backed subagents reject with `agent-busy` and use
-   * `subagent.prompt`.
+   * A new idle run returns a submission receipt; a Native Agent with active
+   * work or retained queued input accepts Queue mode through its continuation
+   * inbox and omits the receipt. Browser callers attach their current IANA
+   * zone; the Host validates, canonicalizes, and records it on that exact user
+   * message. Omission remains valid for non-browser callers. Session-backed
+   * subagents reject with `agent-busy` and use `subagent.prompt`.
    */
   prompt(request: RpcRequest<{
     sessionId: SessionId

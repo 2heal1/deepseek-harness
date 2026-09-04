@@ -801,8 +801,12 @@ export class SessionForkError extends Error {
   }
 }
 
-/** Remove runtime identities from a fork seed and preserve every retained reference. */
-function forkSeedWithoutRuntimeFacts(events: readonly SessionEvent[]): SessionEvent[] {
+/**
+ * Remove runtime identities from a fork seed and preserve every retained reference.
+ * @param events - source events selected for the child session.
+ * @returns retained events with contiguous sequence numbers and remapped surface references.
+ */
+export function forkSeedWithoutRuntimeFacts(events: readonly SessionEvent[]): SessionEvent[] {
   const runtimeFactsEventType: string = 'agent/runtime/facts'
   const retained = events.filter(event => event.type !== runtimeFactsEventType)
   const remapped = new Map(retained.map((event, index) => [event.seq, index]))

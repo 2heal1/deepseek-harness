@@ -608,7 +608,9 @@ describe('subagent ownership fence', () => {
       meta: { cwd: '/proj', parentSession: sid('session-source'), seedLength: 1 },
     })
     const submit = vi.fn<Agent['submit']>(receipt)
-    const agent = { id: session.id, session, status: 'idle', ctx, submit } as unknown as Agent
+    const agent = {
+      id: session.id, session, status: 'idle', capabilities: [], ctx, submit,
+    } as unknown as Agent
     ctx.agents.register(agent)
     const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
 
@@ -628,7 +630,9 @@ describe('subagent ownership fence', () => {
     await ctx.plugin(UserQuestionService)
     const session = ctx.sessions.create(sid('session-browser-zone'), { meta: { cwd: '/proj' } })
     const submit = vi.fn<Agent['submit']>(receipt)
-    const agent = { id: session.id, session, status: 'idle', ctx, submit } as unknown as Agent
+    const agent = {
+      id: session.id, session, status: 'idle', capabilities: [], ctx, submit,
+    } as unknown as Agent
     ctx.agents.register(agent)
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ({ provider: 'p', model: 'm' }),
@@ -737,6 +741,46 @@ describe('degenerate composition (no persistence, no factory)', () => {
 })
 
 describe('sessions.prompt synchronous rejection', () => {
+  it.each([
+    { status: 'running' as const, hasPending: false },
+    { status: 'idle' as const, hasPending: true },
+  ])('uses Native continuation for queue input when status is $status and hasPending is $hasPending', async ({
+    status,
+    hasPending,
+  }) => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(AgentRegistry)
+    await ctx.plugin(UserQuestionService)
+    const session = ctx.sessions.create(sid(`session-continuation-${status}`))
+    const submit = vi.fn<Agent['submit']>(receipt)
+    const followup = vi.fn<Agent['followup']>()
+    ctx.agents.register({
+      id: session.id,
+      session,
+      status,
+      capabilities: [{ id: 'continuation' }, { id: 'queuedInputRead' }],
+      inbox: { hasPending },
+      ctx,
+      submit,
+      followup,
+    } as unknown as Agent)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'p', model: 'm' }),
+      cwd: '/tmp',
+    })
+
+    const response = await api.sessions.prompt(request({
+      sessionId: session.id,
+      mode: 'queue',
+      content: [{ type: 'text', text: 'continue' }],
+    }))
+
+    expect(response.result).toEqual({ ok: true, value: { accepted: true } })
+    expect(followup).toHaveBeenCalledOnce()
+    expect(submit).not.toHaveBeenCalled()
+  })
+
   it('maps a synchronous send throw (disposed/invalid input) to agent-busy with the reason attached', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
@@ -749,6 +793,7 @@ describe('sessions.prompt synchronous rejection', () => {
       id: session.id,
       session,
       status: 'idle',
+      capabilities: [],
       ctx,
       submit: () => { throw new Error('agent "session-throwing" lifecycle disposed') },
       followup: () => { throw new Error('agent "session-throwing" lifecycle disposed') },

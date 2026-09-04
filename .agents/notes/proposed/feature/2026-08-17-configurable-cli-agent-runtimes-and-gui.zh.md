@@ -85,7 +85,7 @@ Router 是唯一 `AgentFactory`，并执行一个覆盖回滚的事务：
 
 Code 为 `SUBMISSION_REJECTED`、phase 为 `publication` 的错误专门用于 admission 处于 `publishing` 时调用 `submit`。该拒绝不会创建 receipt 或持久 submission 事件；无论调用方是在 `session/created` 期间通过 `AgentRegistry.get()` 得到 Agent，还是从 `agent/created` payload 得到 Agent，结果都相同。
 
-F1 增加运行时 Service Definition、identifier、receipt、capability、快照和错误类型，但不改变 active factory。F2 安装 Router 与 Native 提供方，并把 Native-only 行为移入能力。F5 将 Web Host、ACP Host、JSON-RPC SDK Server 与 Client 以及 Headless 原子迁移到 receipt，并移除它们对 inbox claim、`followup`、`steer` 或按消息猜测 `whenIdle` 的直接依赖。
+F1 增加运行时 Service Definition、identifier、receipt、capability、快照和错误类型，但不改变 active factory。F2 安装 Router 与 Native 提供方，并把 Native-only 行为移入能力。F5 将 ACP Host、JSON-RPC SDK Server 与 Client、Headless 以及每次新的空闲 Web 运行迁移到 receipt。工作正在运行或已排队时，Web Queue 与 Steer 仍是受能力约束的 Native continuation 控制；它们保留 inbox identity 且不返回 receipt。
 
 #### F1 Service Definition
 
@@ -121,7 +121,7 @@ Router 会把完整、非秘密的有效快照存入每个新 Session Header。J
 
 `RoutedAgent.submit()` 负责 acceptance、串行 start、定向取消与终态 settlement。Router event sink 是外部规范 runtime facts、activity 与 assistant 输出的唯一生产者；其关系 invariant 会拒绝未知或重叠 submission、不匹配的 turn 与 identity、running submission 之外的 activity，以及与当前 Provider 不一致的外部 assistant provenance。Runtime activity 的 UTF-8 JSON 上限为 16 KiB，且要求 `runtimeActivity` capability。
 
-Web Host 把最新 runtime facts 发布为类型化的 `runtimeStatus` Session projection。ACP、Headless、JSON-RPC server 与两个 SDK 使用 submission receipt，不再依赖 inbox 或整个 Agent idle 推断。JSON-RPC version `0.0.2` 返回 `{ messageId, submissionId }`；客户端收集到匹配的持久 settlement。F5 不增加外部协议 Provider、主 agent 垂直切片、activity UI 或 runtime selector。
+Web Host 把最新 runtime facts 发布为类型化的 `runtimeStatus` Session projection。新的空闲 Web prompt 使用 submission receipt。当 Native Agent 正在运行或仍保留 queued 输入时，Queue 使用已声明的 `continuation` 与 `queuedInputRead` 能力，Steer 使用 `steering` 能力，以保持待处理消息可寻址；这些操作不返回 receipt，并通过其 Native 轮次事件完成。ACP、Headless、JSON-RPC server 与两个 SDK 使用 submission receipt，不再依赖 inbox 或整个 Agent idle 推断。JSON-RPC version `0.0.2` 返回 `{ messageId, submissionId }`；客户端收集到匹配的持久 settlement。F5 不增加外部协议 Provider、主 agent 垂直切片、activity UI 或 runtime selector。
 
 #### 安全启动
 

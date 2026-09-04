@@ -118,6 +118,7 @@ async function harness(logged?: {
     id: session.id,
     session,
     status: 'running',
+    capabilities: [],
     ctx,
     inbox: { nextTurn: [], nextStep: [] },
   } as unknown as Agent

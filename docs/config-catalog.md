@@ -354,7 +354,7 @@ Requires: `agents` · `sessions` · `agentRuntimes` · `agentRuntimeProfiles` ·
 export interface Config {}
 ```
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:65`](../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:70`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 

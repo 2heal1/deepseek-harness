@@ -10,6 +10,7 @@ import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
+import { hasAgentRuntimeCapability } from '@deepseek-ai/dsh-agent-runtime'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -2439,6 +2440,16 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             const message: UserMessage = createUserMessage({ content: durable, source })
             if (mode === 'steer') {
               agent.steer(message)
+              return ok(request, { accepted: true as const })
+            }
+            const canContinue = hasAgentRuntimeCapability(agent.capabilities, 'continuation')
+            const hasPendingQueue = canContinue
+              && hasAgentRuntimeCapability(agent.capabilities, 'queuedInputRead')
+              && agent.inbox.hasPending
+            // Native continuation keeps queued messages addressable. A new
+            // receipt is valid only when no earlier inbox message can own its turn.
+            if (canContinue && (agent.status === 'running' || hasPendingQueue)) {
+              agent.followup(message)
               return ok(request, { accepted: true as const })
             }
             const receipt = agent.submit(message)

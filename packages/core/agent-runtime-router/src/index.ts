@@ -43,7 +43,12 @@ import type {
   AgentRuntimeProfiles,
   RuntimeCapacityLease,
 } from '@deepseek-ai/dsh-agent-runtime-profile'
-import { SessionId, SessionPreparation } from '@deepseek-ai/dsh-session'
+import {
+  forkSeedWithoutRuntimeFacts as retainForkHistory,
+  SessionForkError,
+  SessionId,
+  SessionPreparation,
+} from '@deepseek-ai/dsh-session'
 import type { JsonValue, Session, SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import type { SessionPersistence } from '@deepseek-ai/dsh-session-persistence'
 import { RoutedAgent } from './agent.ts'
@@ -239,43 +244,23 @@ function forkSeedWithoutRuntimeFacts(
 ): { readonly events: readonly SessionEvent[]; readonly seedLength: number } | undefined {
   if (events === undefined) return undefined
   const lineageBoundary = seedLength ?? events.length
-  const retained = events.filter(event => event.type !== 'agent/runtime/facts')
-  const remapped = new Map(retained.map((event, index) => [event.seq, index]))
-  const remapSeq = (seq: number): number => {
-    const mapped = remapped.get(seq)
-    if (mapped === undefined) {
-      throw new AgentRuntimeError({
-        code: 'RUNTIME_INCOMPATIBLE',
-        phase: 'profile',
-        message: `fork seed event references excluded runtime fact at seq ${seq}`,
-      })
-    }
-    return mapped
+  let retained: readonly SessionEvent[]
+  try {
+    retained = retainForkHistory(events)
+  } catch (error) {
+    if (!(error instanceof SessionForkError)) throw error
+    throw new AgentRuntimeError({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'profile',
+      message: error.message,
+    })
   }
   return {
-    events: retained.map((event, seq) => {
-      const surface = event as SessionEvent & {
-        sourceEventSeqs?: number[]
-        surfaceOp?: 'append' | { op: 'replace'; start: number; end: number }
-      }
-      return {
-        ...event,
-        seq,
-        ...surface.sourceEventSeqs === undefined
-          ? {}
-          : { sourceEventSeqs: surface.sourceEventSeqs.map(remapSeq) },
-        ...surface.surfaceOp === undefined || surface.surfaceOp === 'append'
-          ? {}
-          : {
-            surfaceOp: {
-              op: 'replace' as const,
-              start: remapSeq(surface.surfaceOp.start),
-              end: remapSeq(surface.surfaceOp.end),
-            },
-          },
-      }
-    }),
-    seedLength: retained.filter(event => event.seq < lineageBoundary).length,
+    events: retained,
+    seedLength: events
+      .slice(0, lineageBoundary)
+      .filter(event => event.type !== 'agent/runtime/facts')
+      .length,
   }
 }
 

@@ -175,13 +175,15 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
 
   const seed = (session: Session): RuntimeTrace => {
     const trace: RuntimeTrace = { openTurn: null, submissions: new Map() }
-    for (const event of session.events) applyChecked(trace, event, fail)
+    session.events.forEach((event) => {
+      applyChecked(trace, event, fail)
+    })
     traces.set(session, trace)
     return trace
   }
   const traceFor = (session: Session): RuntimeTrace => traces.get(session) ?? seed(session)
 
-  for (const session of ctx.sessions.list()) seed(session)
+  ctx.sessions.list().forEach(seed)
   ctx.on('session/created', (session) => { seed(session) }, { global: true })
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
     if (eventName !== 'session/event') return
@@ -190,15 +192,16 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
     applyChecked(trace, event, fail)
     staged.set(event, { session, trace })
   }, { global: true })
-  ctx.on('session/event', (session, event) => {
+  const commit = (session: Session, event: SessionEvent): void => {
     const candidate = staged.get(event)
     /* v8 ignore next 2 -- internal/dispatch stages the exact callback arguments */
     if (candidate === undefined || candidate.session !== session) {
-      return fail('session/event reached publication without matching runtime-event validation')
+      fail('session/event reached publication without matching runtime-event validation')
     }
     staged.delete(event)
     traces.set(session, candidate.trace)
-  }, { global: true })
+  }
+  ctx.on('session/event', commit, { global: true })
 }, { inject: ['sessions'] })
 
 /**

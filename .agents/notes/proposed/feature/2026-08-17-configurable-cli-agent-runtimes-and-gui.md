@@ -85,7 +85,7 @@ Runtime failures use one serializable `AgentRuntimeError` with a stable code, ph
 
 `SUBMISSION_REJECTED` with phase `publication` is reserved for `submit` while admission is `publishing`. This rejection creates no receipt or durable submission event and is identical whether the caller obtained the Agent from `AgentRegistry.get()` during `session/created` or from the `agent/created` payload.
 
-F1 adds the runtime Service Definition, identifiers, receipt, capability, snapshot, and error types without changing the active factory. F2 installs the router and Native provider and moves Native-only behavior behind capabilities. F5 atomically migrates Web Host, ACP Host, JSON-RPC SDK Server and Client, and Headless to receipts and removes their direct dependence on inbox claims, `followup`, `steer`, or message-scoped `whenIdle` guesses.
+F1 adds the runtime Service Definition, identifiers, receipt, capability, snapshot, and error types without changing the active factory. F2 installs the router and Native provider and moves Native-only behavior behind capabilities. F5 migrates ACP Host, JSON-RPC SDK Server and Client, Headless, and each new idle Web run to receipts. Web Queue and Steer remain capability-gated Native continuation controls while work is active or queued; they keep inbox identity and return no receipt.
 
 #### F1 Service Definition
 
@@ -121,7 +121,7 @@ The Router stores the complete non-secret effective snapshot in every new Sessio
 
 `RoutedAgent.submit()` owns acceptance, serial start, targeted cancellation, and terminal settlement. The Router event sink is the only external producer of canonical runtime facts, activity, and assistant output; its relational invariant rejects unknown or overlapping submissions, mismatched turns and identities, activity outside the running submission, and external assistant provenance inconsistent with the current Provider. Runtime activity is bounded to 16 KiB of UTF-8 JSON and requires `runtimeActivity`.
 
-Web Host publishes the latest runtime facts as the typed `runtimeStatus` Session projection. ACP, Headless, the JSON-RPC server and both SDKs use submission receipts instead of inbox or whole-Agent-idle inference. JSON-RPC version `0.0.2` returns `{ messageId, submissionId }`; clients collect through the matching durable settlement. F5 does not add an external protocol Provider, main-agent vertical slice, activity UI, or runtime selector.
+Web Host publishes the latest runtime facts as the typed `runtimeStatus` Session projection. A new idle Web prompt uses a submission receipt. When a Native Agent is running or retains queued input, Queue uses the declared `continuation` and `queuedInputRead` capabilities and Steer uses `steering`, so pending messages remain addressable; these operations return no receipt and complete through their Native turn events. ACP, Headless, the JSON-RPC server, and both SDKs use submission receipts instead of inbox or whole-Agent-idle inference. JSON-RPC version `0.0.2` returns `{ messageId, submissionId }`; clients collect through the matching durable settlement. F5 does not add an external protocol Provider, main-agent vertical slice, activity UI, or runtime selector.
 
 #### Secure launch
 
