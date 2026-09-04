@@ -40,6 +40,8 @@ function liveAgent(ctx: Context, session: Session): Agent {
     inbox,
     ctx,
     get status() { return status },
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),

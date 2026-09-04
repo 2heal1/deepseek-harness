@@ -113,10 +113,14 @@ ProjectionDefinition<'tokenUsage', TokenUsageState> = {
     let turn: number
     let step: number
     let usage: TokenUsage
-    if (event.type === 'assistant/chunk' && event.data.chunk.type === 'usage') {
+    if (event.type === 'assistant/chunk'
+      && event.data.step !== undefined
+      && event.data.chunk.type === 'usage') {
       ;({ turn, step } = event.data)
       usage = event.data.chunk.usage
-    } else if (event.type === 'assistant/message' && event.data.usage !== undefined) {
+    } else if (event.type === 'assistant/message'
+      && event.data.step !== undefined
+      && event.data.usage !== undefined) {
       ;({ turn, step, usage } = event.data)
     } else {
       return state

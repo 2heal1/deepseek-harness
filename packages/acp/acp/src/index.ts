@@ -34,6 +34,7 @@ import {
   type Stream,
 } from '@agentclientprotocol/sdk'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SubmissionReceipt } from '@deepseek-ai/dsh-agent-runtime'
 import { SessionId, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
 // Side-effect type import: declaration-merges the approval waterfall answered below.
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -97,6 +98,7 @@ interface SessionRecord {
     messageId: string | undefined
     /** Whether this prompt has entered the Agent's durable inbox interval. */
     messageQueued: boolean
+    receipt: SubmissionReceipt | undefined
     turn: number | undefined
     /** The correlated turn's ending, set at turn/end and settled at whole-agent idle. */
     endReason: TurnEndReason | undefined
@@ -174,8 +176,12 @@ export function apply(ctx: Context, config: AcpConfig): void {
     inflight.settlementStarted = true
     void (async () => {
       await inflight.admissionDone
-      if (inflight.messageQueued) {
-        await record.agent.whenIdle()
+      if (inflight.receipt !== undefined) {
+        const settlement = await inflight.receipt.settled
+        if (settlement.kind === 'settled') {
+          inflight.turn = settlement.turn
+          inflight.endReason = settlement.reason
+        }
         // session/event enqueues synchronously before the agent becomes idle;
         // reading the live tail here includes every committed output task.
         await record.outputTail
@@ -248,13 +254,12 @@ export function apply(ctx: Context, config: AcpConfig): void {
       if (inflight !== undefined && event.type === 'turn/end' && inflight.turn === event.data.turn) {
         inflight.endReason = event.data.reason
       }
+      if (inflight !== undefined
+        && event.type === 'agent/submission/started'
+        && inflight.messageId === event.data.messageId) {
+        inflight.turn = event.data.turn
+      }
     }
-  })
-
-  ctx.on('agent/inbox/claimed', ({ agent, message, turn }) => {
-    const record = ownedRecord(agent)
-    const inflight = record?.inflight
-    if (inflight !== undefined && inflight.messageId === message.id) inflight.turn = turn
   })
 
   ctx.on('agent/error', ({ agent, turn, error }) => {
@@ -346,6 +351,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
           reject: completion.reject,
           messageId: undefined,
           messageQueued: false,
+          receipt: undefined,
           turn: undefined,
           endReason: undefined,
           admissionDone: admission.promise,
@@ -386,7 +392,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
           inflight.messageId = message.id
           inflight.messageQueued = true
           try {
-            record.agent.followup(message)
+            inflight.receipt = record.agent.submit(message)
           } catch (error: unknown) {
             // The typed same-process seam may fail synchronously before durable
             // inbox receipt; restore the pre-operation boundary for mapping.
@@ -401,6 +407,10 @@ export function apply(ctx: Context, config: AcpConfig): void {
         }
 
         if (inflight.cancelRequested) {
+          /* v8 ignore next -- JSON-RPC cancellation cannot reenter between synchronous submit receipt and this check. */
+          if (inflight.receipt !== undefined) {
+            record.agent.cancelSubmission(inflight.receipt.id, { kind: 'user' })
+          }
           settleAfterQuiescence(record, inflight)
           return { stopReason: await completion.promise }
         }
@@ -434,7 +444,11 @@ export function apply(ctx: Context, config: AcpConfig): void {
         // Admission is not Agent work. Preserve unrelated producers until this
         // prompt has entered the durable inbox; without a prompt, cancellation
         // continues to target autonomous work on the addressed Agent.
-        if (inflight === undefined || inflight.messageQueued) record.agent.cancel({ kind: 'user' })
+        if (inflight?.receipt !== undefined) {
+          record.agent.cancelSubmission(inflight.receipt.id, { kind: 'user' })
+        } else if (inflight === undefined) {
+          record.agent.cancel({ kind: 'user' })
+        }
         return Promise.resolve()
       },
     }
@@ -472,7 +486,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
       // available. session/event enqueues output synchronously before idle.
       await Promise.all(records.map(async (record) => {
         await record.inflight?.admissionDone
-        await record.agent.whenIdle()
+        await record.inflight?.receipt?.settled
         await record.outputTail
       }))
       // Continuable subagents outlive the turn that started them, and their

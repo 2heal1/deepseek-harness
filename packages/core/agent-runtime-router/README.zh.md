@@ -14,19 +14,19 @@
 
 调用方 context、Router service 与所选 Provider generation 都是结构化 owner。任一 owner teardown 都汇聚到同一个 memoized disposal：关闭准入、取消并排空 prepared runtime、释放 Agent scope、detach Agent、detach Session，最后释放 profile 容量租约。即使清理最终报告 `DISPOSE_FAILED`，disposal 也会等待 Provider 完全停稳。
 
-## Native 过渡
+## Submission 与事件
 
-在 Host 于 F5 迁移期间，现有 Native API 仍保持可用。`RoutedAgent` 把 inbox、status、取消、maintenance 与 send 操作委托给 prepared handle 返回的 Native `AgentDriver`。可选操作由 capability 检查保护。发布期间允许不唤醒的 setup injection；waking input 只有在同步发布成功后才开放。
+`RoutedAgent.submit()` 会同步追加 `agent/submission/accepted`，并返回 receipt；其 `started` 和 `settled` Promise 跟随持久生命周期记录。Router 串行执行 Provider submission，以 `SubmissionId` 定向取消，并在所有已接纳 submission 结算前保持 `Agent.status` 为 running。Disposal 会关闭准入、取消未完成工作，并在释放 Provider 前等待持久结算。
 
-`AgentOptions.runtimeProfile` 选择 profile；省略时使用已配置的默认项。既有 `provider`、`model` 与 `maxTokens` option 成为 Native profile 覆盖。外部 profile 拒绝仅适用于 Native 的覆盖；除非 profile 明确允许，否则任何 profile 都拒绝 Session 模型覆盖。在 F5 安装规范持久运行时事件前，event sink 会拒绝 assistant 与 activity 输出，而 Native driver 继续追加既有 Native Session 事件。
+受限 event sink 会追加规范化运行时事实与 activity，以及外部 assistant chunk 和 message。追加前，它会校验 runtime、Provider、submission、turn、capability、provenance 与 JSON 大小关系。Native 执行继续拥有自己的 step、request、inbox、tool 与模型输出事件；精确 turn 关联通过 Native submission request 到达 Router。
 
 ## 配置
 
-Router 没有配置字段。运行时选择属于 [`dsh-agent-runtime-profile`](../agent-runtime-profile/README.md)。Profile 缺失、snapshot schema version 不兼容、Provider 缺失或被移除时都会明确失败；Router 绝不会回退到 Native。
+Router 没有配置字段。运行时选择属于 [`dsh-agent-runtime-profile`](../agent-runtime-profile/README.md)。新 Session 会把完整的已解析快照存入 Header。Resume 只恢复该快照，并拒绝有冲突的调用方覆盖、缺失的 Provider、不兼容的 snapshot version 以及不具备 `resume` 的 runtime；它不会读取当前 Settings 或回退到 Native。Fork 按值复制快照，移除父 runtime facts 与 external identity，重映射保留事件的引用，再准备新的 runtime。
 
 ## 不变量
 
-可选的 `@deepseek-ai/dsh-agent-runtime-router/invariant` companion 有意为空。Session 与 Agent companion 已验证已发布的注册表关系；Router 事务顺序由直接生命周期测试覆盖，而不使用重复的固定样例 invariant。
+可选的 `@deepseek-ai/dsh-agent-runtime-router/invariant` companion 会独立折叠每个 Session。它校验 submission identity 与顺序、至多一个已启动活动 submission、open-turn 关联、runtime activity 所有权，以及外部 assistant provenance 与最新 runtime facts 的一致性。
 
 ## 模型体验
 
@@ -34,7 +34,7 @@ Router 没有配置字段。运行时选择属于 [`dsh-agent-runtime-profile`](
 
 #### 模型看到的内容
 
-F2 不增加模型可见内容。Native 请求保留相同的 system prompt、工具、消息与 Session 事件；Router 的 `agent/runtime/facts` 是持久元数据，不进入提示词。
+Native 请求保留既有 system prompt、工具与消息。外部 assistant message 会成为带 `source.kind: 'runtime'` provenance 的规范对话历史；runtime facts、activity 与 submission 生命周期记录不会进入模型输入。
 
 #### Token 影响
 
@@ -46,6 +46,5 @@ Router 不重写请求前缀。Native cache 行为保持不变。
 
 ## 已知限制和延后工作
 
-- **没有提供方无关的 submission receipt** - F5 会把 Host 与 Agent API 迁移到 receipt，并安装规范运行时事件生产。
-- **尚不接纳外部输出** - 在 F5 可以校验并持久化输出前，通过 event sink 报告 assistant 与 activity 会失败。
-- **已解析快照尚未进入 Session Header** - F5 负责持久 profile 身份以及 resume 或 fork 重建；Router 目前为每次 create 或 resume 事务重新解析快照。
+- **外部协议 Provider 属于后续工作** - Router 已能持久化并投影其规范输出，但 Codex App Server 与 ACP runtime 实现由后续工作包交付。
+- **持久化 flush 仍由调用方负责** - Receipt settlement 跟随同步事件追加与分发；Host 在自己的响应边界 flush 存储与 transport 队列。

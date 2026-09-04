@@ -863,6 +863,9 @@ it('packed ACP fixture retains every chunk row kind without changing the logical
         id?: unknown
         inserted?: Array<{ id?: unknown }>
         message?: { id?: unknown }
+        messageId?: unknown
+        runtimeId?: unknown
+        submissionId?: unknown
       }
     }
     delete cloned.time
@@ -873,6 +876,13 @@ it('packed ACP fixture retains every chunk row kind without changing the logical
     if (cloned.type === 'assistant/message'
       || cloned.type === 'tool/result') {
       delete cloned.data?.message?.id
+    }
+    if (cloned.type === 'agent/runtime/facts') delete cloned.data?.runtimeId
+    if (cloned.type === 'agent/submission/accepted'
+      || cloned.type === 'agent/submission/started'
+      || cloned.type === 'agent/submission/settled') {
+      delete cloned.data?.messageId
+      delete cloned.data?.submissionId
     }
     if (cloned.type === 'hook/result') delete cloned.data?.durationMs
     return cloned

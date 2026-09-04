@@ -29,7 +29,7 @@ interface RetryValue {
 
 interface AssistantState {
   readonly turn: number
-  readonly step: number
+  readonly step: number | undefined
   readonly startSeq: number
   readonly startTime: number
   readonly started: boolean
@@ -46,7 +46,7 @@ interface AssistantState {
 
 function initialState(
   turn: number,
-  step: number,
+  step: number | undefined,
   startSeq: number,
   startTime: number,
   started: boolean,
@@ -211,13 +211,18 @@ function finalNode(
       messageId: event.data.message.id,
       time: event.time,
       turn: state.turn,
-      step: state.step,
+      ...state.step === undefined ? {} : { step: state.step },
       blocks: toAssistantBlocks(event.data.message.content),
       usage: event.data.usage,
-      provenance: {
-        provider: event.data.message.source.provider,
-        model: event.data.message.source.model,
-      },
+      provenance: event.data.message.source.kind === 'model'
+        ? {
+          provider: event.data.message.source.provider,
+          model: event.data.message.source.model,
+        }
+        : {
+          provider: event.data.message.source.provider,
+          source: event.data.message.source.source,
+        },
       timing: {
         stepStartTime: state.started ? state.startTime : null,
         firstTokenTime: state.firstTokenTime ?? null,
@@ -234,7 +239,7 @@ function finalNode(
     seq: boundary.seq - 0.9,
     time: boundary.time,
     turn: state.turn,
-    step: state.step,
+    ...state.step === undefined ? {} : { step: state.step },
     blocks,
     interrupted: true,
   }
@@ -245,7 +250,7 @@ function assistantRequest(
   node: AssistantMessageNode | undefined,
   boundary: { seq: number; time: number } | undefined,
 ): Extract<RequestView, { purpose: 'assistant' }> | undefined {
-  if (!state.started) return undefined
+  if (!state.started || state.step === undefined) return undefined
   const status = node !== undefined && node.interrupted !== true
     ? 'complete'
     : state.retry !== undefined || boundary !== undefined ? 'error' : 'running'
@@ -346,7 +351,11 @@ const trajectoryAssistantDefinition: ConversationNodeDefinition<AssistantState> 
     const node = finalNode(state, context)
     const boundary = closedBoundary(context)
     const partial: PartialAssistant | null = node === undefined && boundary === undefined && state.sawChunk
-      ? { turn: state.turn, step: state.step, blocks: compactBlocks(state.blocks) }
+      ? {
+        turn: state.turn,
+        ...state.step === undefined ? {} : { step: state.step },
+        blocks: compactBlocks(state.blocks),
+      }
       : null
     const request = assistantRequest(state, node, boundary)
     if (node === undefined && partial === null && request === undefined) return null

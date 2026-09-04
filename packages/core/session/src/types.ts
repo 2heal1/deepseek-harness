@@ -96,6 +96,12 @@ export interface SessionHeader {
    * would replay history the model can no longer act on.
    */
   readonly agentPreset?: string
+  /**
+   * Complete non-secret Agent Runtime Profile snapshot selected for this
+   * Session. The runtime-profile Consumer validates its versioned fields
+   * before create or resume; Session persistence retains the JSON verbatim.
+   */
+  readonly runtimeProfile?: JsonValue
 }
 
 /**
@@ -118,6 +124,7 @@ export interface CreateSessionOptions {
     readonly origin?: 'subagent'
     readonly delegationDepth?: number
     readonly agentPreset?: string
+    readonly runtimeProfile?: JsonValue
   }
 }
 
@@ -219,6 +226,23 @@ export interface RequestContext {
   contextWindow?: number
 }
 
+/** Runtime protocol provenance for canonical assistant output without a Harness step. */
+export interface RuntimeAssistantProvenance {
+  readonly kind: 'runtime'
+  readonly provider: string
+  readonly source: 'protocol'
+  readonly submissionId: string
+}
+
+/** Native or external-runtime position for one assistant stream event. */
+export type AssistantEventPosition =
+  | { readonly turn: number; readonly step: number; readonly provenance?: never }
+  | {
+    readonly turn: number
+    readonly step?: never
+    readonly provenance: RuntimeAssistantProvenance
+  }
+
 /**
  * Why a `request/header` snapshot was appended: `'initial'` — the log's first
  * header (a new conversation); `'resume'` — a loop instance's first request
@@ -263,7 +287,7 @@ export interface SessionEventMap {
    */
   'user/message': UserMessage
   /** Raw stream chunk — token-level replay fidelity. */
-  'assistant/chunk': { turn: number; step: number; chunk: StreamChunk }
+  'assistant/chunk': AssistantEventPosition & { chunk: StreamChunk }
   /**
    * Assembled assistant message for one step (derived history uses this).
    * Carries the step's `usage` when the adapter reported token accounting, so
@@ -274,7 +298,11 @@ export interface SessionEventMap {
    * marker distinguishes that prefix without re-deriving interruption from turn
    * boundaries. An aborted turn with no such event streamed no visible content.
    */
-  'assistant/message': { turn: number; step: number; message: AssistantMessage; usage?: TokenUsage; interrupted?: true }
+  'assistant/message': AssistantEventPosition & {
+    message: AssistantMessage
+    usage?: TokenUsage
+    interrupted?: true
+  }
   /**
    * The model requested one tool invocation: `name` with the raw `arguments`
    * JSON string exactly as the model produced it (unparsed). `callId` pairs the

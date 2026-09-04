@@ -99,9 +99,11 @@ describe('dsh-subagent-fork-in-process', () => {
     const run = await start(ctx, 'fork', { prompt: [{ type: 'text', text: 'child q' }], parent })
     await run.result
     const child = ctx.agents.get(run.id)!
-    expect(child.session.header.seedLength).toBe(parentPrefixLen)
-    expect(child.session.events.slice(0, parentPrefixLen).at(-1)?.type).toBe('turn/end')
-    expect(child.session.events.slice(0, parentPrefixLen).filter(e => e.type === 'turn/end')).toHaveLength(2)
+    const seedLength = child.session.header.seedLength!
+    expect(seedLength).toBe(parentPrefixLen - 1)
+    expect(child.session.events.slice(0, seedLength).at(-1)?.type).toBe('turn/end')
+    expect(child.session.events.slice(0, seedLength).filter(e => e.type === 'turn/end')).toHaveLength(2)
+    expect(child.session.events.slice(0, seedLength).some(e => e.type === 'agent/runtime/facts')).toBe(false)
     await run.dispose()
   })
 
@@ -118,16 +120,18 @@ describe('dsh-subagent-fork-in-process', () => {
 
     const child = ctx.agents.get(run.id)!
     // The child's log STARTS with the parent's prefix (seeded), then its own turn.
-    expect(child.session.events.length).toBeGreaterThan(parentPrefixLen)
+    const seedLength = child.session.header.seedLength!
+    expect(child.session.events.length).toBeGreaterThan(seedLength)
     // The seeded prefix carried the parent's user message.
-    const seededUser = child.session.events.slice(0, parentPrefixLen).find(e => e.type === 'user/message')
+    const seededUser = child.session.events.slice(0, seedLength).find(e => e.type === 'user/message')
     expect(seededUser).toBeDefined()
     // Lineage stamped.
     expect(child.session.header.parentSession).toBe(parent.session.header.id)
     // The seed boundary is recorded on the header (= the seeded prefix length),
     // so a reload / replay harness can tell the inherited prefix from the
     // child's own events.
-    expect(child.session.header.seedLength).toBe(parentPrefixLen)
+    expect(seedLength).toBe(parentPrefixLen - 1)
+    expect(child.session.events.slice(0, seedLength).some(e => e.type === 'agent/runtime/facts')).toBe(false)
     await run.dispose()
   })
 

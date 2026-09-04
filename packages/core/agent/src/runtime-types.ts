@@ -6,7 +6,11 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { AgentRuntimeCapabilities } from '@deepseek-ai/dsh-agent-runtime'
+import type {
+  AgentRuntimeCapabilities,
+  SubmissionId,
+  SubmissionReceipt,
+} from '@deepseek-ai/dsh-agent-runtime'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type { LlmCallConfig, LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { AgentCancelCause, Session, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
@@ -112,6 +116,21 @@ export interface Agent {
    * @returns fulfillment after no active driver or maintenance task remains.
    */
   whenIdle(): Promise<void>
+
+  /**
+   * Durably accept one ordinary user submission and return its exact lifecycle receipt.
+   * @param message - identified user input accepted as one submission.
+   * @returns receipt whose promises correlate start and terminal settlement.
+   */
+  submit(message: UserMessage): SubmissionReceipt
+
+  /**
+   * Request cancellation of one accepted submission.
+   * @param submissionId - exact submission to cancel.
+   * @param cause - caller intent recorded if cancellation wins.
+   * @returns whether cancellation won before terminal settlement.
+   */
+  cancelSubmission(submissionId: SubmissionId, cause: AgentCancelCause): boolean
 
   /**
    * Run one non-turn maintenance task from the true idle phase. The task starts

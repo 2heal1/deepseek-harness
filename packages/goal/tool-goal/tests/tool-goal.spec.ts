@@ -33,6 +33,8 @@ function stubAgent(rawId: string, supplied?: Session): StubAgent {
     inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     get status() { return status },
     ctx: new Context(),
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),

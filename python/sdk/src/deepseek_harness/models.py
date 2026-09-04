@@ -8,6 +8,7 @@ from pydantic import BaseModel
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | dict[str, "JsonValue"] | list["JsonValue"]
 JsonObject: TypeAlias = dict[str, JsonValue]
+HARNESS_SDK_PROTOCOL_VERSION = "0.0.2"
 
 
 @dataclass(slots=True)
@@ -30,3 +31,8 @@ class ServerInfo(BaseModel):
 
 class InitializeResponse(BaseModel):
     serverInfo: ServerInfo | None = None
+
+
+class SessionPromptResult(BaseModel):
+    messageId: str
+    submissionId: str

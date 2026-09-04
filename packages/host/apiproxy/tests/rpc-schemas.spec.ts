@@ -10,6 +10,7 @@ import {
   sessionCreateValueSchema, sessionEventSchema, sessionHistoryRequestSchema, sessionHistoryValueSchema,
   sessionIdSchema, sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
   sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
+  sessionRuntimeStatusProjectionSchema,
   sessionSearchRequestSchema, sessionSearchValueSchema, sessionSelectModelRequestSchema,
   sessionSelectModelValueSchema, sessionSummarySchema,
   sessionUpdateQueueRequestSchema, sessionUpdateQueueValueSchema,
@@ -154,6 +155,33 @@ describe('sessions domain schemas', () => {
       seq: -1,
       time: 1,
       data: {},
+    })).toThrow()
+  })
+
+  it('validates the complete non-secret runtime status projection', () => {
+    expect(sessionRuntimeStatusProjectionSchema.parse(null)).toBeNull()
+    expect(sessionRuntimeStatusProjectionSchema.parse({
+      runtimeId: 'runtime-1',
+      providerId: 'external',
+      capabilities: [{ id: 'runtimeActivity', metadata: { fidelity: 'partial' } }],
+      phase: 'ready',
+      product: { value: 'External Product', source: 'protocol' },
+      externalSessionId: 'external-1',
+    })).toMatchObject({
+      runtimeId: 'runtime-1',
+      phase: 'ready',
+    })
+    expect(() => sessionRuntimeStatusProjectionSchema.parse({
+      runtimeId: 'runtime-1',
+      providerId: 'external',
+      capabilities: [{ id: 'unknown' }],
+      phase: 'ready',
+    })).toThrow()
+    expect(() => sessionRuntimeStatusProjectionSchema.parse({
+      runtimeId: 'runtime-1',
+      providerId: 'external',
+      capabilities: [],
+      phase: 'unknown',
     })).toThrow()
   })
 

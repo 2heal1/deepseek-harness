@@ -26,18 +26,18 @@ export interface AgentLoopTestDependenciesOptions {
 }
 
 /**
- * Mount the settings-independent Native Runtime Profile and Router used by tests.
- * @param ctx - test context receiving both services.
+ * Mount the deterministic Native Runtime Profile service used by tests.
+ * @param ctx - test context receiving the service.
+ * @returns the mounted profile service.
  */
-export async function mountNativeTestRuntimeRouter(ctx: Context): Promise<void> {
+export async function mountNativeTestRuntimeProfiles(ctx: Context): Promise<AgentRuntimeProfiles> {
   await ctx.plugin(AgentRuntimeProfiles, {
     defaultMainProfile: 'native',
     profiles: {
       native: {
         provider: 'native',
         launch: {
-          executable: process.execPath,
-          resolution: 'absolute',
+          executable: 'node',
           cwdPolicy: 'session-workspace',
         },
         model: { allowSessionOverride: true },
@@ -56,6 +56,15 @@ export async function mountNativeTestRuntimeRouter(ctx: Context): Promise<void> 
       },
     },
   })
+  return ctx.agentRuntimeProfiles
+}
+
+/**
+ * Mount the settings-independent Native Runtime Profile and Router used by tests.
+ * @param ctx - test context receiving both services.
+ */
+export async function mountNativeTestRuntimeRouter(ctx: Context): Promise<void> {
+  await mountNativeTestRuntimeProfiles(ctx)
   await ctx.plugin(AgentRuntimeRouter, {})
 }
 

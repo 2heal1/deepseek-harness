@@ -10,12 +10,14 @@ import type { DatabaseSync } from 'node:sqlite'
 import { setTimeout as delay } from 'node:timers/promises'
 import {
   SessionId,
+  isJsonValue,
+  type JsonValue,
   type SessionHeader,
 } from '@deepseek-ai/dsh-session'
 import { sql } from './sql.ts'
 
 /** Current physical-record schema with packed and compressed event rows. */
-export const SCHEMA_VERSION = 17
+export const SCHEMA_VERSION = 18
 /** Application id reserved for DeepSeek Harness SQLite session databases. */
 export const SESSION_PERSISTENCE_SQLITE_APPLICATION_ID = 0x44534850
 
@@ -32,6 +34,7 @@ export interface SessionRow {
   readonly revision: number
   readonly delegation_depth: number | null
   readonly agent_preset: string | null
+  readonly runtime_profile: string | null
 }
 
 /** One physical event row; packed rows may represent multiple logical events. */
@@ -206,7 +209,7 @@ function initializeDatabase(db: DatabaseSync): void {
   db.exec(sql('schema'))
   db.prepare(sql('insert-persistence-state')).run(randomUUID())
   db.exec(sql('set-application-id'))
-  db.exec(sql('set-user-version-17'))
+  db.exec(sql('set-user-version-18'))
 }
 
 let canonicalSchema: readonly SchemaObjectRow[] | undefined
@@ -301,6 +304,7 @@ export function decodeSessionRow(value: unknown): SessionRow {
     origin,
     delegation_depth: nullableNonnegativeSafeIntegerField(row, 'delegation_depth'),
     agent_preset: nullableStringField(row, 'agent_preset'),
+    runtime_profile: nullableStringField(row, 'runtime_profile'),
     incarnation,
     revision: nonnegativeSafeIntegerField(row, 'revision'),
   }
@@ -345,6 +349,14 @@ export function decodeStoreIdentity(value: unknown): string {
  * @returns the session header.
  */
 export function rowToMeta(row: SessionRow): SessionHeader {
+  let runtimeProfile: JsonValue | undefined
+  if (row.runtime_profile !== null) {
+    const parsed: unknown = JSON.parse(row.runtime_profile)
+    if (!isJsonValue(parsed)) {
+      throw new Error('stored runtime_profile must encode lossless JSON')
+    }
+    runtimeProfile = parsed as JsonValue
+  }
   return {
     version: row.version,
     id: SessionId(row.id),
@@ -355,6 +367,7 @@ export function rowToMeta(row: SessionRow): SessionHeader {
     ...row.origin === null ? {} : { origin: row.origin },
     ...row.delegation_depth === null ? {} : { delegationDepth: row.delegation_depth },
     ...row.agent_preset === null ? {} : { agentPreset: row.agent_preset },
+    ...runtimeProfile === undefined ? {} : { runtimeProfile },
   }
 }
 

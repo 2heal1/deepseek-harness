@@ -29,7 +29,7 @@ Editing settings affects later resolutions only. A returned snapshot does not ob
 
 Identifiers use lowercase letters, digits, and hyphens and begin with a letter. Environment targets use POSIX environment names. JSON-owned fields must round-trip without loss; allowlists contain unique non-empty values; credential and literal environment targets cannot overlap. Runtime-backed route entries add a profile id, tool name, depth limit, and positive route capacity. The generated [config catalog](../../../docs/config-catalog.md#deepseek-aidsh-agent-runtime-profile) contains the exact schema.
 
-The package validates configuration and resolves policy inputs; it does not execute commands, construct a child environment, enforce a sandbox, or persist snapshots into Session headers. Those responsibilities belong to the [secure launcher](../agent-runtime-launcher/README.md), Provider, and Session integration.
+The package validates configuration and resolves policy inputs; it does not execute commands, construct a child environment, enforce a sandbox, or write Session headers. The [Router](../agent-runtime-router/README.md) persists resolved snapshots, while the [secure launcher](../agent-runtime-launcher/README.md) and Provider own launch and protocol behavior.
 
 ## Failure and ownership
 
@@ -59,6 +59,6 @@ The service does not build requests. A different snapshot can select downstream 
 
 ## Known Limitations and Deferred Work
 
-- **Snapshots are not yet durable Session identity** - F5 persists the complete non-secret snapshot in the Session header and defines resume and fork behavior.
+- **No profile history** - resume uses the Session Header snapshot even when the named Settings profile has changed or disappeared.
 - **Launch policy is data only** - the secure launcher resolves executables, constructs exact environments, protects reserved controls, manages process-tree teardown, and supplies known-value redaction; the selected Provider supplies protocol behavior and any claimed sandbox mechanism.
 - **Credential values are intentionally ephemeral** - callers receive resolved values for one process start; this service does not cache, persist, or redact values after returning them.

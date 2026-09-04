@@ -5,6 +5,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentHandle, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
+import { SubmissionId } from '@deepseek-ai/dsh-agent-runtime'
 import { createAssistantMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore from '@deepseek-ai/dsh-session'
 import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
@@ -72,6 +73,26 @@ async function bench(script: Script): Promise<{
         status: 'idle',
         ctx: agentCtx,
         cancel: () => {},
+        submit: (message: UserMessage) => {
+          const id = SubmissionId(`submission-${message.id}`)
+          session.append('agent/submission/accepted', {
+            submissionId: id,
+            messageId: message.id,
+          })
+          idle = Promise.resolve().then(() => script.afterPrompt(session, message))
+          return {
+            id,
+            messageId: message.id,
+            started: idle.then(() => ({ kind: 'started', turn: 1, eventSeq: 0 })),
+            settled: idle.then(() => ({
+              kind: 'settled',
+              turn: 1,
+              reason: { kind: 'completed' },
+              eventSeq: 0,
+            })),
+          }
+        },
+        cancelSubmission: () => false,
         runMaintenance: () => Promise.reject(new Error('not used')),
         send: () => {},
         followup: (message: UserMessage) => {

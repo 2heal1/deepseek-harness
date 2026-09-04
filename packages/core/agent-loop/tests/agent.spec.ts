@@ -5,6 +5,7 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentRuntimeRegistry from '@deepseek-ai/dsh-agent-runtime'
 import { mountNativeTestRuntimeRouter } from './runtime-router.ts'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { ReactLoopDriver } from '../src/agent.ts'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -37,7 +38,10 @@ describe('Agent', () => {
 
     agent.inject(createUserMessage({ content: [{ type: 'text', text: 'context' }], source: { kind: 'plugin', plugin: 'p' } }))
 
-    expect(agent.session.events.map(event => event.type)).toEqual(['agent/inbox/spliced'])
+    expect(agent.session.events.map(event => event.type)).toEqual([
+      'agent/runtime/facts',
+      'agent/inbox/spliced',
+    ])
     expect(agent.status).toBe('idle')
     expect(adapter.requests).toHaveLength(0)
     await agent.whenIdle()
@@ -99,7 +103,7 @@ describe('Agent', () => {
     expect(() => {
       agent.inject(createUserMessage({ content: [{ type: 'text', text: 'x', bad: 1n } as never], source: { kind: 'plugin', plugin: 'p' } }))
     }).toThrow(/non-JSON-serializable/)
-    expect(agent.session.events).toHaveLength(0)
+    expect(agent.session.events.map(event => event.type)).toEqual(['agent/runtime/facts'])
   })
 
   it('steer() while idle becomes a woken prompt turn', async () => {
@@ -135,6 +139,33 @@ describe('Agent', () => {
     await agent.whenIdle()
 
     expect(agent.status).toBe('idle')
+  })
+
+  it('restores submission admission after enqueue failure and rejects overlapping work', async () => {
+    const ctx = await harness(new MockAdapter([textResponse('ok')]))
+    const agent = ctx.agentLoop.create(SessionId('submission-guard'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+    const driver = Reflect.get(agent, 'driverValue') as ReactLoopDriver
+    const failed = createUserMessage({
+      content: [{ type: 'text', text: 'fails' }],
+      source: { kind: 'user' },
+    })
+    const send = vi.spyOn(driver, 'send').mockImplementationOnce(() => {
+      throw new Error('enqueue failed')
+    })
+
+    expect(() => { driver.submit(failed, () => {}) }).toThrow('enqueue failed')
+    send.mockRestore()
+
+    const accepted = createUserMessage({
+      content: [{ type: 'text', text: 'accepted' }],
+      source: { kind: 'user' },
+    })
+    driver.submit(accepted, () => {})
+    expect(() => { driver.submit(failed, () => {}) }).toThrow('already has active work')
+    await agent.whenIdle()
   })
 
   it('whenIdle() waits for active work until explicit cancellation', async () => {

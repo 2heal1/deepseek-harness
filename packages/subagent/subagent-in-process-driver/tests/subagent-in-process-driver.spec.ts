@@ -204,8 +204,10 @@ describe('startInProcessRun', () => {
     const result = await run.result
     expect(text(result.output)).toBe('child answer')
     const child = ctx.agents.get(run.id)!
-    expect(child.session.header.seedLength).toBe(seed.length)
-    expect(child.session.events.slice(0, seed.length)).toEqual(seed)
+    const seedLength = child.session.header.seedLength!
+    expect(seedLength).toBe(seed.length - 1)
+    expect(child.session.events.slice(0, seedLength).some(event => event.type === 'agent/runtime/facts')).toBe(false)
+    expect(child.session.events.slice(0, seedLength).some(event => event.type === 'user/message')).toBe(true)
     await run.dispose()
   })
 

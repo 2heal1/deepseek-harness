@@ -184,8 +184,12 @@ describe('agent loop', () => {
     expect(order).toEqual(['turn/start', 'step/start', 'step/end', 'turn/end'])
 
     const types = agent.session.events.map(e => e.type)
-    // Durable inbox receipt precedes the turn-owned transcript.
-    expect(types[0]).toBe('agent/inbox/spliced')
+    // Publication facts precede the Native compatibility inbox and turn
+    // transcript.
+    expect(types.slice(0, 2)).toEqual([
+      'agent/runtime/facts',
+      'agent/inbox/spliced',
+    ])
     expect(types).toContain('turn/start')
     expect(types).toContain('user/message')
     expect(types).toContain('assistant/message')

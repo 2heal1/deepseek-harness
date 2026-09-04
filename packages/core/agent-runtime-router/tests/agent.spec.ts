@@ -54,6 +54,8 @@ class Driver implements AgentDriver {
 function runtime(
   driver: AgentDriver | undefined,
   capabilityIds: AgentRuntimeCapabilityId[],
+  submit: PreparedAgentRuntime['submit'] = () =>
+    Promise.resolve({ reason: { kind: 'completed' } }),
 ): PreparedAgentRuntime {
   const runtimeId = AgentRuntimeId('runtime-agent-test')
   const providerId = AgentRuntimeProviderId('fake')
@@ -70,7 +72,7 @@ function runtime(
       phase: 'ready',
     }),
     ...(driver === undefined ? {} : { agentDriver: driver }),
-    submit: () => Promise.resolve({ reason: { kind: 'completed' } }),
+    submit,
     cancel() {},
     dispose: () => Promise.resolve(),
   }
@@ -92,8 +94,8 @@ describe('RoutedAgent', () => {
     await ctx.plugin(AgentRegistry)
   })
 
-  function create() {
-    const session = ctx.sessions.create(SessionId('routed-agent'))
+  function create(id = 'routed-agent') {
+    const session = ctx.sessions.create(SessionId(id))
     return {
       agent: new RoutedAgent(
         ctx,
@@ -106,31 +108,34 @@ describe('RoutedAgent', () => {
     }
   }
 
-  it('rejects missing, duplicate, and capability-incompatible drivers', async () => {
+  it('accepts external runtimes and rejects duplicate or capability-incompatible attachment', async () => {
     const { agent, driver } = create()
     expect(agent.status).toBe('idle')
     expect(() => { agent.cancel({ kind: 'user' }) })
-      .toThrow(expect.objectContaining({ code: 'RUNTIME_UNAVAILABLE' }))
+      .not.toThrow()
+    agent.attachRuntime(runtime(undefined, []))
     expect(() => { agent.attachRuntime(runtime(undefined, [])) })
       .toThrow(expect.objectContaining({ code: 'RUNTIME_INCOMPATIBLE' }))
+    await agent.disposeScope()
 
-    agent.attachRuntime(runtime(driver, []))
-    expect(() => { agent.attachRuntime(runtime(driver, [])) })
+    const native = create('native-agent').agent
+    native.attachRuntime(runtime(driver, []))
+    expect(() => { native.attachRuntime(runtime(driver, [])) })
       .toThrow(expect.objectContaining({ code: 'RUNTIME_INCOMPATIBLE' }))
-    expect(() => agent.inbox)
+    expect(() => native.inbox)
       .toThrow(expect.objectContaining({ code: 'AGENT_CAPABILITY_UNSUPPORTED' }))
-    expect(() => { void agent.runMaintenance(() => Promise.resolve()) })
+    expect(() => { void native.runMaintenance(() => Promise.resolve()) })
       .toThrow(expect.objectContaining({ code: 'SUBMISSION_REJECTED', phase: 'publication' }))
 
-    agent.openAdmission()
-    agent.openAdmission()
-    expect(() => { void agent.runMaintenance(() => Promise.resolve()) })
+    native.openAdmission()
+    native.openAdmission()
+    expect(() => { void native.runMaintenance(() => Promise.resolve()) })
       .toThrow(expect.objectContaining({ code: 'AGENT_CAPABILITY_UNSUPPORTED' }))
-    expect(() => { agent.steer(input()) })
+    expect(() => { native.steer(input()) })
       .toThrow(expect.objectContaining({ code: 'AGENT_CAPABILITY_UNSUPPORTED' }))
-    expect(() => { agent.inject(input()) })
+    expect(() => { native.inject(input()) })
       .toThrow(expect.objectContaining({ code: 'AGENT_CAPABILITY_UNSUPPORTED' }))
-    await agent.disposeScope()
+    await native.disposeScope()
   })
 
   it('delegates every supported operation and closes admission permanently', async () => {
@@ -161,12 +166,101 @@ describe('RoutedAgent', () => {
     ])
     expect(driver.cancelled).toEqual([[{ kind: 'user' }, { keepInbox: true }]])
 
-    agent.closeAdmission()
+    await agent.closeAdmission()
     agent.openAdmission()
     expect(() => { agent.followup(input()) })
       .toThrow(expect.objectContaining({ code: 'SUBMISSION_REJECTED', phase: 'submission' }))
     expect(() => { agent.inject(input()) })
       .toThrow(expect.objectContaining({ code: 'SUBMISSION_REJECTED', phase: 'submission' }))
     await agent.disposeScope()
+  })
+
+  it('settles a submission cancelled while a Native driver is busy', async () => {
+    const { agent, driver } = create()
+    const idle = Promise.withResolvers<undefined>()
+    driver.status = 'running'
+    driver.whenIdle = () => idle.promise
+    agent.attachRuntime(runtime(driver, []))
+    agent.openAdmission()
+
+    const receipt = agent.submit(input())
+    expect(agent.cancelSubmission(receipt.id, { kind: 'user' })).toBe(true)
+    await expect(receipt.started).resolves.toMatchObject({
+      kind: 'not-started',
+      reason: { kind: 'cancelled', cause: { kind: 'user' } },
+    })
+    idle.resolve(undefined)
+    await expect(receipt.settled).resolves.toMatchObject({ kind: 'not-started' })
+
+    const available = Promise.withResolvers<undefined>()
+    driver.whenIdle = () => available.promise
+    const admitted = agent.submit(input())
+    available.resolve(undefined)
+    await expect(admitted.settled).resolves.toMatchObject({ kind: 'not-started' })
+
+    const rejected = Promise.withResolvers<undefined>()
+    driver.whenIdle = () => rejected.promise
+    const cancelled = agent.submit(input())
+    expect(agent.cancelSubmission(cancelled.id, { kind: 'user' })).toBe(true)
+    rejected.reject(new Error('idle wait failed after cancellation'))
+    await expect(cancelled.settled).resolves.toMatchObject({ kind: 'not-started' })
+    await agent.disposeScope()
+  })
+
+  it('reports missing prepared runtime and Native driver through receipts and capabilities', async () => {
+    const missingRuntime = create('missing-runtime').agent
+    missingRuntime.openAdmission()
+    const receipt = missingRuntime.submit(input())
+    await expect(receipt.settled).resolves.toMatchObject({
+      kind: 'not-started',
+      reason: {
+        kind: 'rejected',
+        failure: { code: 'RUNTIME_UNAVAILABLE', phase: 'prepare' },
+      },
+    })
+    await missingRuntime.disposeScope()
+
+    const missingDriver = create('missing-driver').agent
+    missingDriver.attachRuntime(runtime(undefined, ['queuedInputRead']))
+    expect(() => missingDriver.inbox)
+      .toThrow(expect.objectContaining({ code: 'RUNTIME_UNAVAILABLE' }))
+    await missingDriver.disposeScope()
+
+    const started = create('native-started').agent
+    started.attachRuntime(runtime(new Driver(started.session), [], (request) => {
+      started.session.append('turn/start', { turn: 1 })
+      request.started(1)
+      started.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+      return Promise.resolve({ reason: { kind: 'completed' } })
+    }))
+    started.openAdmission()
+    await expect(started.submit(input()).settled).resolves.toMatchObject({
+      kind: 'settled',
+      turn: 1,
+    })
+    await started.disposeScope()
+
+    const failed = create('native-started-failure').agent
+    failed.attachRuntime(runtime(new Driver(failed.session), [], (request) => {
+      failed.session.append('turn/start', { turn: 1 })
+      request.started(1)
+      failed.session.append('turn/end', {
+        turn: 1,
+        reason: {
+          kind: 'error',
+          error: { code: 'RUNTIME_FAILED', message: 'started submission failed' },
+        },
+      })
+      return Promise.reject(new Error('started submission failed'))
+    }))
+    failed.openAdmission()
+    await expect(failed.submit(input()).settled).resolves.toMatchObject({
+      kind: 'settled',
+      reason: {
+        kind: 'error',
+        error: { code: 'RUNTIME_FAILED', message: 'started submission failed' },
+      },
+    })
+    await failed.disposeScope()
   })
 })

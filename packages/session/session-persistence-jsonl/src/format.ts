@@ -9,8 +9,8 @@
  */
 
 import { join } from 'node:path'
-import { decodeStorageRecord, packChunkRuns, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
-import type { SessionEvent, SessionHeader, SessionId, StorageRecord } from '@deepseek-ai/dsh-session'
+import { decodeStorageRecord, isJsonValue, packChunkRuns, SESSION_FORMAT_VERSION } from '@deepseek-ai/dsh-session'
+import type { JsonValue, SessionEvent, SessionHeader, SessionId, StorageRecord } from '@deepseek-ai/dsh-session'
 import { SessionFormatUnsupportedError, sessionFormatVersionRefusal } from '@deepseek-ai/dsh-session-persistence'
 
 /** Physical encoding selected for JSONL session artifacts. */
@@ -41,6 +41,7 @@ export interface HeaderLine {
   origin?: 'subagent'
   delegationDepth: number
   agentPreset?: string
+  runtimeProfile?: JsonValue
 }
 
 /**
@@ -60,6 +61,7 @@ export function toHeaderLine(header: SessionHeader): HeaderLine {
     ...header.origin !== undefined ? { origin: header.origin } : {},
     delegationDepth: header.delegationDepth ?? 0,
     ...header.agentPreset !== undefined ? { agentPreset: header.agentPreset } : {},
+    ...header.runtimeProfile !== undefined ? { runtimeProfile: header.runtimeProfile } : {},
   }
 }
 
@@ -82,6 +84,7 @@ export function fromHeaderLine(line: HeaderLine): SessionHeader {
     ...line.origin !== undefined ? { origin: line.origin } : {},
     delegationDepth: line.delegationDepth,
     ...line.agentPreset !== undefined ? { agentPreset: line.agentPreset } : {},
+    ...line.runtimeProfile !== undefined ? { runtimeProfile: line.runtimeProfile } : {},
   }
 }
 
@@ -104,6 +107,8 @@ function isHeaderLine(value: unknown): value is HeaderLine {
       || (value as { origin?: unknown }).origin === 'subagent')
     && ((value as { agentPreset?: unknown }).agentPreset === undefined
       || typeof (value as { agentPreset?: unknown }).agentPreset === 'string')
+    && ((value as { runtimeProfile?: unknown }).runtimeProfile === undefined
+      || isJsonValue((value as { runtimeProfile?: unknown }).runtimeProfile))
   )
 }
 

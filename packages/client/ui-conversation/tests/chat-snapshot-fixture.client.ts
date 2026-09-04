@@ -96,7 +96,7 @@ function assistantData(node: AssistantMessageNode) {
   return {
     status: node.interrupted === true ? 'interrupted' as const : 'settled' as const,
     turn: node.turn,
-    step: node.step,
+    ...node.step === undefined ? {} : { step: node.step },
     blocks: node.blocks,
     time: node.time,
     finalNode: node,

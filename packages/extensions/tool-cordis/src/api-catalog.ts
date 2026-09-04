@@ -258,6 +258,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{AgentRuntimeError} when the profile is absent or invalid.'],
       },
       {
+        signature: 'restore(value: JsonValue | undefined): RuntimeProfileSnapshot',
+        description: 'Validate and detach the Runtime Profile snapshot stored in a Session Header.',
+        parameters: [{ name: 'value', description: 'persisted non-secret JSON snapshot.' }],
+        returns: 'complete immutable snapshot independent of current Settings.',
+      },
+      {
         signature: 'resolveRoute(id: string): ResolvedRuntimeSubagentRoute',
         description: 'Resolve one configured one-shot subagent route.',
         parameters: [{ name: 'id', description: 'route id.' }],
@@ -2892,7 +2898,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Agent',
-    declaration: 'export interface Agent {\n    readonly id: SessionId;\n    readonly options: AgentOptions;\n    readonly capabilities: AgentRuntimeCapabilities;\n    readonly session: Session;\n    readonly inbox: Inbox;\n    readonly status: AgentStatus;\n    readonly ctx: Context;\n    cancel(cause: AgentCancelCause, options?: CancelOptions): void;\n    whenIdle(): Promise<void>;\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void;\n    followup(message: UserMessage): void;\n    steer(message: UserMessage): void;\n    inject(message: UserMessage): void;\n}',
+    declaration: 'export interface Agent {\n    readonly id: SessionId;\n    readonly options: AgentOptions;\n    readonly capabilities: AgentRuntimeCapabilities;\n    readonly session: Session;\n    readonly inbox: Inbox;\n    readonly status: AgentStatus;\n    readonly ctx: Context;\n    cancel(cause: AgentCancelCause, options?: CancelOptions): void;\n    whenIdle(): Promise<void>;\n    submit(message: UserMessage): SubmissionReceipt;\n    cancelSubmission(submissionId: SubmissionId, cause: AgentCancelCause): boolean;\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void;\n    followup(message: UserMessage): void;\n    steer(message: UserMessage): void;\n    inject(message: UserMessage): void;\n}',
   },
   {
     name: 'AgentCancelCause',
@@ -2947,6 +2953,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AgentRuntimeCreateRequest extends AgentRuntimePrepareBase {\n    readonly kind: \'create\';\n}',
   },
   {
+    name: 'AgentRuntimeErrorCode',
+    declaration: 'export type AgentRuntimeErrorCode = \'PROFILE_NOT_FOUND\' | \'PROFILE_INVALID\' | \'RUNTIME_UNAVAILABLE\' | \'RUNTIME_INCOMPATIBLE\' | \'AGENT_CAPABILITY_UNSUPPORTED\' | \'AGENT_BUSY\' | \'SUBMISSION_REJECTED\' | \'RESUME_UNSUPPORTED\' | \'EXTERNAL_STATE_MISSING\' | \'SECURITY_POLICY_UNSATISFIED\' | \'START_TIMEOUT\' | \'TURN_TIMEOUT\' | \'RUNTIME_FAILED\' | \'DISPOSE_FAILED\';',
+  },
+  {
+    name: 'AgentRuntimeErrorPhase',
+    declaration: 'export type AgentRuntimeErrorPhase = \'registration\' | \'profile\' | \'probe\' | \'prepare\' | \'publication\' | \'submission\' | \'turn\' | \'resume\' | \'dispose\';',
+  },
+  {
     name: 'AgentRuntimeEventSink',
     declaration: 'export interface AgentRuntimeEventSink {\n    facts(facts: AgentRuntimeFacts): void;\n    assistantChunk(submissionId: SubmissionId, chunk: AgentRuntimeAssistantChunk): void;\n    assistantMessage(submissionId: SubmissionId, output: AgentRuntimeAssistantOutput): void;\n    activity(activity: AgentRuntimeActivity): void;\n}',
   },
@@ -2957,6 +2971,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AgentRuntimeFactSource',
     declaration: 'export type AgentRuntimeFactSource = \'profile\' | \'protocol\';',
+  },
+  {
+    name: 'AgentRuntimeFailure',
+    declaration: 'export interface AgentRuntimeFailure {\n    readonly code: AgentRuntimeErrorCode;\n    readonly phase: AgentRuntimeErrorPhase;\n    readonly message: string;\n    readonly providerId?: AgentRuntimeProviderId;\n    readonly details?: JsonValue;\n}',
   },
   {
     name: 'AgentRuntimeLaunchHandle',
@@ -2992,11 +3010,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentRuntimeResumeRequest',
-    declaration: 'export interface AgentRuntimeResumeRequest extends AgentRuntimePrepareBase {\n    readonly kind: \'resume\';\n    readonly externalSessionId: ExternalSessionId;\n}',
+    declaration: 'export interface AgentRuntimeResumeRequest extends AgentRuntimePrepareBase {\n    readonly kind: \'resume\';\n    readonly externalSessionId?: ExternalSessionId;\n}',
   },
   {
     name: 'AgentRuntimeSubmissionRequest',
-    declaration: 'export interface AgentRuntimeSubmissionRequest {\n    readonly submissionId: SubmissionId;\n    readonly message: UserMessage;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface AgentRuntimeSubmissionRequest {\n    readonly submissionId: SubmissionId;\n    readonly message: UserMessage;\n    readonly signal: AbortSignal;\n    started(turn: number): void;\n}',
   },
   {
     name: 'AgentRuntimeSubmissionResult',
@@ -3067,8 +3085,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n}',
   },
   {
+    name: 'AssistantEventPosition',
+    declaration: 'export type AssistantEventPosition = {\n    readonly turn: number;\n    readonly step: number;\n    readonly provenance?: never;\n} | {\n    readonly turn: number;\n    readonly step?: never;\n    readonly provenance: RuntimeAssistantProvenance;\n};',
+  },
+  {
     name: 'AssistantMessage',
-    declaration: 'export interface AssistantMessage extends Message {\n    readonly role: \'assistant\';\n    readonly source: ModelMessageSource;\n}',
+    declaration: 'export interface AssistantMessage extends Message {\n    readonly role: \'assistant\';\n    readonly source: ModelMessageSource | RuntimeMessageSource;\n}',
   },
   {
     name: 'AssistantProvenance',
@@ -3264,7 +3286,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CreateAgentOptions',
-    declaration: 'export interface CreateAgentOptions {\n    readonly sessionId: SessionId;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly seedLength?: number;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n    readonly seed?: readonly SessionEvent[];\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+    declaration: 'export interface CreateAgentOptions {\n    readonly sessionId: SessionId;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly seedLength?: number;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n        readonly runtimeProfile?: JsonValue;\n    };\n    readonly seed?: readonly SessionEvent[];\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
   },
   {
     name: 'CreateGoalRequest',
@@ -3276,7 +3298,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CreateSessionOptions',
-    declaration: 'export interface CreateSessionOptions {\n    readonly seed?: readonly SessionEvent[];\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly createdAt?: number;\n        readonly seedLength?: number;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n}',
+    declaration: 'export interface CreateSessionOptions {\n    readonly seed?: readonly SessionEvent[];\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly createdAt?: number;\n        readonly seedLength?: number;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n        readonly runtimeProfile?: JsonValue;\n    };\n}',
   },
   {
     name: 'CreateTeamTaskRequest',
@@ -3828,7 +3850,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'MessageSourceMap',
-    declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    plugin: {\n        kind: \'plugin\';\n        plugin: string;\n    } & ContextFormed;\n    model: ModelMessageSource;\n    tool: ToolMessageSource;\n}',
+    declaration: 'export interface MessageSourceMap {\n    user: {\n        kind: \'user\';\n    };\n    plugin: {\n        kind: \'plugin\';\n        plugin: string;\n    } & ContextFormed;\n    model: ModelMessageSource;\n    runtime: RuntimeMessageSource;\n    tool: ToolMessageSource;\n}',
   },
   {
     name: 'ModelMessageSource',
@@ -4047,6 +4069,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RunnerFailureRule {\n    allowedExitCodes?: readonly number[];\n    fatalSignatures: readonly string[];\n    informationalLines?: readonly string[];\n}',
   },
   {
+    name: 'RuntimeAssistantProvenance',
+    declaration: 'export interface RuntimeAssistantProvenance {\n    readonly kind: \'runtime\';\n    readonly provider: string;\n    readonly source: \'protocol\';\n    readonly submissionId: string;\n}',
+  },
+  {
     name: 'RuntimeCapacityLease',
     declaration: 'export interface RuntimeCapacityLease {\n    release(): void;\n}',
   },
@@ -4077,6 +4103,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RuntimeLaunchStdio',
     declaration: 'export interface RuntimeLaunchStdio {\n    readonly stdin: SubprocessStdinMode;\n    readonly stdout: SubprocessOutputMode;\n    readonly stderr: SubprocessOutputMode;\n}',
+  },
+  {
+    name: 'RuntimeMessageSource',
+    declaration: 'export interface RuntimeMessageSource {\n    kind: \'runtime\';\n    provider: string;\n    source: \'protocol\';\n}',
   },
   {
     name: 'RuntimeModelSnapshot',
@@ -4208,7 +4238,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': AssistantEventPosition & {\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': AssistantEventPosition & {\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -4272,7 +4302,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionHeader',
-    declaration: 'export interface SessionHeader {\n    readonly version: number;\n    readonly id: SessionId;\n    readonly createdAt: number;\n    readonly cwd?: string;\n    readonly parentSession?: SessionId;\n    readonly seedLength?: number;\n    readonly origin?: \'subagent\';\n    readonly delegationDepth?: number;\n    readonly agentPreset?: string;\n}',
+    declaration: 'export interface SessionHeader {\n    readonly version: number;\n    readonly id: SessionId;\n    readonly createdAt: number;\n    readonly cwd?: string;\n    readonly parentSession?: SessionId;\n    readonly seedLength?: number;\n    readonly origin?: \'subagent\';\n    readonly delegationDepth?: number;\n    readonly agentPreset?: string;\n    readonly runtimeProfile?: JsonValue;\n}',
   },
   {
     name: 'SessionId',
@@ -4653,6 +4683,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SubagentStopReasonMap',
     declaration: 'export interface SubagentStopReasonMap {\n    completed: \'completed\';\n    aborted: \'aborted\';\n    error: \'error\';\n    \'max-tokens\': \'max-tokens\';\n    refusal: \'refusal\';\n}',
+  },
+  {
+    name: 'SubmissionNotStartedReason',
+    declaration: 'export type SubmissionNotStartedReason = {\n    readonly kind: \'cancelled\';\n    readonly cause: AgentCancelCause;\n} | {\n    readonly kind: \'rejected\';\n    readonly failure: AgentRuntimeFailure;\n};',
+  },
+  {
+    name: 'SubmissionReceipt',
+    declaration: 'export interface SubmissionReceipt {\n    readonly id: SubmissionId;\n    readonly messageId: MessageId;\n    readonly started: Promise<SubmissionStart>;\n    readonly settled: Promise<SubmissionSettlement>;\n}',
+  },
+  {
+    name: 'SubmissionSettlement',
+    declaration: 'export type SubmissionSettlement = {\n    readonly kind: \'settled\';\n    readonly turn: number;\n    readonly reason: TurnEndReason;\n    readonly eventSeq: number;\n} | {\n    readonly kind: \'not-started\';\n    readonly reason: SubmissionNotStartedReason;\n    readonly eventSeq: number;\n};',
+  },
+  {
+    name: 'SubmissionStart',
+    declaration: 'export type SubmissionStart = {\n    readonly kind: \'started\';\n    readonly turn: number;\n    readonly eventSeq: number;\n} | {\n    readonly kind: \'not-started\';\n    readonly reason: SubmissionNotStartedReason;\n    readonly eventSeq: number;\n};',
   },
   {
     name: 'SubprocessCollect',
