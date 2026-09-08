@@ -206,11 +206,14 @@ Source: [`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/ag
 Requires: `agentRuntimes` · `agentRuntimeLauncher`
 
 ```ts config-catalog
-/** This Provider has no deployment-varying configuration. */
-export interface Config {}
+/** Launcher-independent Codex protocol limits. */
+export interface Config {
+  /** Maximum UTF-8 bytes accepted for one JSONL frame from Codex. */
+  maxFrameBytes: number
+}
 ```
 
-Source: [`packages/core/agent-runtime-codex/src/index.ts:53`](../packages/core/agent-runtime-codex/src/index.ts)
+Source: [`packages/core/agent-runtime-codex/src/index.ts:54`](../packages/core/agent-runtime-codex/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-launcher"></a>
 

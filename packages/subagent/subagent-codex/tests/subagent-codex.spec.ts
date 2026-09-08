@@ -676,6 +676,26 @@ describe('task admission and package contracts', () => {
 })
 
 describe('CodexAppServerWire', () => {
+  it('fails the active protocol operation and pauses stdout when a frame exceeds the configured byte limit', async () => {
+    const child = fakeChild()
+    const wire = new CodexAppServerWire(
+      child.handle.stdout as NonNullable<SubprocessHandle['stdout']>,
+      child.handle.stdin as NonNullable<SubprocessHandle['stdin']>,
+      DEFAULT_CODEX_PERMISSION_MODE,
+      undefined,
+      undefined,
+      { maxFrameBytes: 8 },
+    )
+    wire.start()
+
+    const initializing = wire.initialize(new AbortController().signal)
+    child.fromChild.write('012345678')
+
+    await expect(initializing).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
+    expect(child.fromChild.isPaused()).toBe(true)
+    wire.close()
+  })
+
   it('sends the fixed handshake, thread, and turn payloads and keeps final_answer', async () => {
     const child = fakeChild()
     const wire = defaultWire(child)

@@ -250,6 +250,8 @@ Settings revision 是并发与审计标记，不是 profile 历史。创建会�
 
 V1 包含两个外部协议目标：供主 agent 垂直切片使用的 Codex App Server，以及供一次性子 agent 使用的 ACP。每个提供方固定经过测试的兼容范围，并负责握手、codec、流、错误、取消和关闭 fixture（测试前置数据）。名为 `app-server` 的命令或方法不能证明兼容性。系统绝不把终端文案解析成自动化协议。
 
+按换行分隔的 JSON transport 按 UTF-8 字节数限制每个输入 frame。超限时，transport 暂停并移除输入监听器、拒绝未完成请求、报告一次终态输入失败，并拒绝后续协议写入。Codex Provider 提供经过校验的 `maxFrameBytes` 限制，默认值为 1 MiB；协议 adapter 决定该 transport 失败如何进入其生命周期状态机。
+
 运行时 Launcher 不经 Shell 解析可执行文件，校验保留参数和环境键，并根据 Driver 必需的操作系统条目、显式允许的非秘密条目、profile 值和刚解析的凭据，构造精确子进程环境。现有宽泛清理后的父环境无法满足该保证。Windows 可执行文件和 `.cmd` 的解析与引用属于这项启动约定，不能留到最后加固。
 
 `CredentialRef` 使用 credentials 服务允许的 POSIX 环境标识符语法。Harness 绝不把已解析值写入参数、profile 快照、事件、API 响应或 Harness 自有诊断字段。持久化或向 API 发送数据前，系统从提供方错误和有界诊断输出中脱敏已知解析值。该保证覆盖 Harness 自有数据路径，但无法撤销可信外部 CLI 执行的任意文件、网络或终端副作用。

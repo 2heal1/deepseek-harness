@@ -208,11 +208,14 @@ export type PresetTrust = 'system' | 'user'
 依赖：`agentRuntimes` · `agentRuntimeLauncher`
 
 ```ts config-catalog
-/** This Provider has no deployment-varying configuration. */
-export interface Config {}
+/** Launcher-independent Codex protocol limits. */
+export interface Config {
+  /** Maximum UTF-8 bytes accepted for one JSONL frame from Codex. */
+  maxFrameBytes: number
+}
 ```
 
-来源：[`packages/core/agent-runtime-codex/src/index.ts:53`](../packages/core/agent-runtime-codex/src/index.ts)
+来源：[`packages/core/agent-runtime-codex/src/index.ts:54`](../packages/core/agent-runtime-codex/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-launcher"></a>
 

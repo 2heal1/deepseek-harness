@@ -14,6 +14,15 @@ type JsonRpcId = string | number
 type RequestHandler = (method: string, params: Record<string, unknown>) => Promise<unknown>
 type NotificationHandler = (method: string, params: Record<string, unknown>) => void
 
+/** Input framing limits for {@link JsonRpcLineTransport}. */
+export interface JsonRpcLineTransportOptions {
+  /**
+   * Maximum UTF-8 bytes retained for one newline-delimited frame.
+   * @defaultValue `undefined`, which leaves the caller responsible for bounds.
+   */
+  maxFrameBytes?: number
+}
+
 /** A JSON-RPC error response, preserving the wire `code` and optional `data`. */
 export class JsonRpcResponseError extends Error {
   /**
@@ -65,11 +74,14 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
   private started = false
   private requestHandler: RequestHandler | undefined
   private notificationHandler: NotificationHandler | undefined
+  private inputFailureHandler: ((error: Error) => void) | undefined
   private readonly pending = new Map<JsonRpcId, PendingRequest>()
+  private failure: Error | undefined
 
   constructor(
     private readonly input: Readable,
     private readonly output: Writable,
+    private readonly options: JsonRpcLineTransportOptions = {},
   ) {}
 
   /** Attach the input listeners and begin reading frames. Idempotent. */
@@ -110,6 +122,14 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
   }
 
   /**
+   * Install the terminal input-failure observer, replacing any prior observer.
+   * @param handler - receives a stream error, EOF, or bounded-frame overflow.
+   */
+  onInputFailure(handler: (error: Error) => void): void {
+    this.inputFailureHandler = handler
+  }
+
+  /**
    * Send a request and await its response.
    * @param method - the JSON-RPC method name.
    * @param params - the request parameters object.
@@ -119,6 +139,7 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
    * @returns the result; rejects per {@link JsonRpcTransportPeer.request}.
    */
   request(method: string, params: object, signal?: AbortSignal): Promise<unknown> {
+    if (this.failure !== undefined) return Promise.reject(this.failure)
     const id = `req_${randomUUID().replaceAll('-', '')}`
     const message = { jsonrpc: '2.0', id, method, params }
     return new Promise((resolve, reject) => {
@@ -156,6 +177,7 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
   }
 
   notify(method: string, params?: object): void {
+    if (this.failure !== undefined) throw this.failure
     this.write(params === undefined ? { jsonrpc: '2.0', method } : { jsonrpc: '2.0', method, params })
   }
 
@@ -174,6 +196,12 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
 
   private readonly onData = (chunk: Buffer | string): void => {
     this.buffer += typeof chunk === 'string' ? chunk : this.decoder.write(chunk)
+    if (this.options.maxFrameBytes !== undefined
+      && Buffer.byteLength(this.buffer) > this.options.maxFrameBytes
+      && this.buffer.indexOf('\n') < 0) {
+      this.failInput(new Error(`JSON-RPC input frame exceeds ${this.options.maxFrameBytes} bytes`))
+      return
+    }
     this.drainLines()
   }
 
@@ -183,19 +211,24 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
       if (newline < 0) break
       const line = this.buffer.slice(0, newline).trim()
       this.buffer = this.buffer.slice(newline + 1)
+      if (this.options.maxFrameBytes !== undefined
+        && Buffer.byteLength(line) > this.options.maxFrameBytes) {
+        this.failInput(new Error(`JSON-RPC input frame exceeds ${this.options.maxFrameBytes} bytes`))
+        return
+      }
       if (!line) continue
       void this.handleLine(line)
     }
   }
 
   private readonly onInputError = (error: Error): void => {
-    this.failPending(error)
+    this.failInput(error)
   }
 
   private readonly onInputEnd = (): void => {
     this.buffer += this.decoder.end()
     this.drainLines()
-    this.failPending(new Error('JSON-RPC input closed'))
+    this.failInput(new Error('JSON-RPC input closed'))
   }
 
   private async handleLine(line: string): Promise<void> {
@@ -258,7 +291,17 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
   }
 
   private write(message: Record<string, unknown>): void {
+    if (this.failure !== undefined) throw this.failure
     this.output.write(`${JSON.stringify(message)}\n`)
+  }
+
+  private failInput(error: Error): void {
+    if (this.failure !== undefined) return
+    this.failure = error
+    this.input.pause()
+    this.input.off('data', this.onData)
+    this.failPending(error)
+    this.inputFailureHandler?.(error)
   }
 
   private failPending(error: Error): void {

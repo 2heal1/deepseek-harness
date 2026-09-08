@@ -34,6 +34,7 @@ export const inject = ['agentRuntimes', 'agentRuntimeLauncher']
 const CODEX_PROVIDER_ID = AgentRuntimeProviderId('codex-app-server')
 const CODEX_PROTOCOL_VERSION = '0.147.0'
 const CODEX_CAPABILITIES: AgentRuntimeCapabilities = []
+const DEFAULT_MAX_FRAME_BYTES = 1_048_576
 
 /** Codex Driver-owned launch controls. */
 export const CODEX_APP_SERVER_DRIVER: RuntimeDriverLaunch = {
@@ -49,10 +50,15 @@ export const CODEX_APP_SERVER_DRIVER: RuntimeDriverLaunch = {
   permissionEnforcement: 'full',
 }
 
-/** This Provider has no deployment-varying configuration. */
-export interface Config {}
+/** Launcher-independent Codex protocol limits. */
+export interface Config {
+  /** Maximum UTF-8 bytes accepted for one JSONL frame from Codex. */
+  maxFrameBytes: number
+}
 
-export const Config: z<Config> = z.object({})
+export const Config: z<Config> = z.object({
+  maxFrameBytes: z.number().step(1).min(1).default(DEFAULT_MAX_FRAME_BYTES),
+})
 
 function permissionMode(value: unknown): CodexPermissionMode {
   if (value !== null
@@ -171,6 +177,8 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
   readonly id = CODEX_PROVIDER_ID
   readonly profileSnapshotVersions = [1]
 
+  constructor(private readonly config: Config) {}
+
   async probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult> {
     permissionMode(request.profile.permissions.policy)
     return {
@@ -210,6 +218,7 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
         }
       },
       { approvalPolicy: 'never', sandbox: 'workspace-write' },
+      { maxFrameBytes: this.config.maxFrameBytes },
     )
     wire.start()
     await launch.waitUntilReady(
@@ -235,5 +244,5 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
 
 /** Register the Codex App Server runtime Provider. */
 export function apply(ctx: Context, _config: Config): void {
-  ctx.agentRuntimes.registerProvider(new CodexAppServerProvider())
+  ctx.agentRuntimes.registerProvider(new CodexAppServerProvider(_config))
 }

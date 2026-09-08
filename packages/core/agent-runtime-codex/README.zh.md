@@ -12,6 +12,8 @@ Codex App Server 0.147.0 的 `ctx.agentRuntimes` Provider。它通过 `ctx.agent
 
 Provider 使用 Launcher 的精确环境、凭据解析、脱敏、deadline、进程树释放和必需权限执行。V1 不报告可选 runtime capability。
 
+`maxFrameBytes` 限制 Codex 单个 UTF-8 JSONL frame，默认值为 1 MiB。超限 frame 会暂停协议流、拒绝活动操作，并由 Launcher 执行常规关闭与进程树清理。
+
 ## 模型体验
 
 ### Codex 对话

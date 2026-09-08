@@ -12,6 +12,8 @@ Select provider `codex-app-server` in a Runtime Profile. Its permission policy m
 
 The Provider uses the launcher's exact environment, credential resolution, redaction, deadlines, process-tree disposal, and required-permission enforcement. It reports no optional runtime capabilities in V1.
 
+`maxFrameBytes` bounds a single UTF-8 JSONL frame from Codex; its default is 1 MiB. An oversized frame pauses the protocol stream, rejects the active operation, and lets Launcher perform the normal shutdown and process-tree cleanup.
+
 ## Model Experience
 
 ### Codex conversation
