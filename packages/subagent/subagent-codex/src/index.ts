@@ -27,6 +27,13 @@ import {
   type CodexRunSpec,
 } from './run.ts'
 
+export { CodexAppServerWire } from './wire.ts'
+export type {
+  CodexAssistantDeltaObserver,
+  CodexPermissionMode,
+  CodexWireFailureFacts,
+} from './wire.ts'
+
 export const name = 'subagent-codex'
 export const inject = ['subagents', 'subprocess']
 

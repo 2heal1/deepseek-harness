@@ -13,6 +13,8 @@ import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { CodexPermissionMode } from './run.ts'
 
+export type { CodexPermissionMode } from './run.ts'
+
 type JsonObject = Record<string, unknown>
 
 /** Product facts owned by the Codex wire after publication. */
@@ -21,6 +23,9 @@ export interface CodexWireFailureFacts {
   readonly category: string
   readonly httpStatus?: number | undefined
 }
+
+/** Optional observer for one app-server assistant text delta. */
+export type CodexAssistantDeltaObserver = (text: string) => void
 
 const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexPermissionMode, JsonObject>> = {
   never: { approvalPolicy: 'never' },
@@ -245,6 +250,8 @@ export class CodexAppServerWire {
     private readonly input: Readable,
     output: Writable,
     private readonly permissionMode: CodexPermissionMode,
+    private readonly onAssistantDelta?: CodexAssistantDeltaObserver,
+    private readonly threadPermission?: JsonObject,
   ) {
     this.transport = new JsonRpcLineTransport(input, output)
     // Fatal protocol state can arrive after the current guarded operation has
@@ -309,7 +316,7 @@ export class CodexAppServerWire {
     const response = object(await this.guarded(this.transport.request('thread/start', {
       cwd,
       ephemeral: true,
-      ...THREAD_PERMISSION_PARAMS[this.permissionMode],
+      ...(this.threadPermission ?? THREAD_PERMISSION_PARAMS[this.permissionMode]),
     }, signal), signal), 'thread/start response')
     const thread = object(response.thread, 'thread/start thread')
     const id = string(thread.id, 'thread/start thread id')
@@ -713,6 +720,18 @@ export class CodexAppServerWire {
       } else if (item.phase !== 'commentary') {
         throw new Error(`subagent-codex: app-server returned an unknown agent message phase ${JSON.stringify(item.phase)}`)
       }
+      return
+    }
+    if (method === 'item/agentMessage/delta') {
+      const threadId = string(params.threadId, 'item/agentMessage/delta thread id')
+      if (threadId !== this.threadId) return
+      const id = string(params.turnId, 'item/agentMessage/delta turn id')
+      if (id !== this.turnId) return
+      const delta = params.delta
+      if (typeof delta !== 'string') {
+        throw new Error('subagent-codex: app-server returned an invalid agent message delta')
+      }
+      if (delta.length > 0) this.onAssistantDelta?.(delta)
       return
     }
     if (method !== 'turn/completed') return

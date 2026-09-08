@@ -199,6 +199,19 @@ export type PresetTrust = 'system' | 'user'
 
 Source: [`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/agent-presets/src/preset.ts)
 
+<a id="deepseek-aidsh-agent-runtime-codex"></a>
+
+## `@deepseek-ai/dsh-agent-runtime-codex`
+
+Requires: `agentRuntimes` · `agentRuntimeLauncher`
+
+```ts config-catalog
+/** This Provider has no deployment-varying configuration. */
+export interface Config {}
+```
+
+Source: [`packages/core/agent-runtime-codex/src/index.ts:53`](../packages/core/agent-runtime-codex/src/index.ts)
+
 <a id="deepseek-aidsh-agent-runtime-launcher"></a>
 
 ## `@deepseek-ai/dsh-agent-runtime-launcher`
@@ -2400,7 +2413,7 @@ export type CodexPermissionMode =
   | 'dangerously-bypass-approvals-and-sandbox'
 ```
 
-Source: [`packages/subagent/subagent-codex/src/index.ts:36`](../packages/subagent/subagent-codex/src/index.ts)
+Source: [`packages/subagent/subagent-codex/src/index.ts:43`](../packages/subagent/subagent-codex/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-dsh-sdk"></a>
 

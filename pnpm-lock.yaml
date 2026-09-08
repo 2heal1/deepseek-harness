@@ -3736,6 +3736,34 @@ importers:
         specifier: workspace:^
         version: link:../session
 
+  packages/core/agent-runtime-codex:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent-runtime':
+        specifier: workspace:^
+        version: link:../agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-launcher':
+        specifier: workspace:^
+        version: link:../agent-runtime-launcher
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-subagent-codex':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-codex
+      '@deepseek-ai/dsh-subprocess':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess
+
   packages/core/agent-runtime-launcher:
     dependencies:
       '@deepseek-ai/schemastery':
