@@ -12,7 +12,7 @@ Select provider `codex-app-server` in a Runtime Profile. Its permission policy m
 
 The Provider uses the launcher's exact environment, credential resolution, redaction, deadlines, process-tree disposal, and required-permission enforcement. It reports no optional runtime capabilities in V1.
 
-`maxFrameBytes` bounds a single UTF-8 JSONL frame from Codex; its default is 1 MiB. An oversized frame pauses the protocol stream, rejects the active operation, and lets Launcher perform the normal shutdown and process-tree cleanup.
+`maxFrameBytes` bounds a single UTF-8 JSONL frame from Codex; its default is 1 MiB. An oversized frame pauses the protocol stream and rejects the active operation. Cancellation sends one best-effort `turn/interrupt`. Cancellation, oversized frames, and protocol failures close stdin and wait for Launcher process-tree quiescence and temporary-material cleanup before settlement.
 
 ## Model Experience
 
@@ -33,4 +33,4 @@ The Provider does not contribute to Harness LLM request caching.
 ## Known Limitations and Deferred Work
 
 - Codex V1 does not expose resume or Harness tool transport.
-- Cancellation, output backpressure, and failure-cleanup state transitions require the D1 advanced state-machine review before release.
+- Cancellation, output backpressure, and failure-cleanup state transitions have protocol and real-process fixtures but still require the D1 advanced state-machine review before release.

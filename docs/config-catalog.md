@@ -213,7 +213,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-runtime-codex/src/index.ts:54`](../packages/core/agent-runtime-codex/src/index.ts)
+Source: [`packages/core/agent-runtime-codex/src/index.ts:56`](../packages/core/agent-runtime-codex/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-launcher"></a>
 

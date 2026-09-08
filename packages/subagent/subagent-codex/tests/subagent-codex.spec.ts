@@ -235,11 +235,14 @@ function fakeChild(options: FakeChildOptions = {}): FakeChild {
   }
 }
 
-function defaultWire(child: FakeChild): CodexAppServerWire {
+function defaultWire(child: FakeChild, maxFrameBytes?: number): CodexAppServerWire {
   return new CodexAppServerWire(
     child.handle.stdout!,
     child.handle.stdin!,
     DEFAULT_CODEX_PERMISSION_MODE,
+    undefined,
+    undefined,
+    maxFrameBytes === undefined ? undefined : { maxFrameBytes },
   )
 }
 
@@ -257,12 +260,12 @@ function runSpec(
   }
 }
 
-async function initializeWire(): Promise<{
+async function initializeWire(maxFrameBytes?: number): Promise<{
   readonly child: FakeChild
   readonly wire: CodexAppServerWire
 }> {
   const child = fakeChild()
-  const wire = defaultWire(child)
+  const wire = defaultWire(child, maxFrameBytes)
   wire.start()
   const initializing = wire.initialize(new AbortController().signal)
   const initialize = await child.peer.nextMethod('initialize')
@@ -693,6 +696,20 @@ describe('CodexAppServerWire', () => {
 
     await expect(initializing).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
     expect(child.fromChild.isPaused()).toBe(true)
+    wire.close()
+  })
+
+  it('fails an active turn when an oversized frame has no terminal notification', async () => {
+    const { child, wire } = await initializeWire(128)
+    const running = wire.runTurn(['task'], new AbortController().signal)
+    void running.catch(() => {})
+    const turnStart = await child.peer.nextMethod('turn/start')
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+
+    child.fromChild.write('x'.repeat(129))
+
+    await expect(running).rejects.toThrow('JSON-RPC input frame exceeds 128 bytes')
     wire.close()
   })
 

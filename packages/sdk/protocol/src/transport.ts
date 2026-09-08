@@ -23,6 +23,21 @@ export interface JsonRpcLineTransportOptions {
   maxFrameBytes?: number
 }
 
+/** Terminal input failure raised when one UTF-8 JSONL frame exceeds its limit. */
+export class JsonRpcInputFrameTooLargeError extends Error {
+  /** Configured maximum accepted frame size. */
+  readonly maxFrameBytes: number
+
+  /**
+   * @param maxFrameBytes - configured maximum accepted frame size.
+   */
+  constructor(maxFrameBytes: number) {
+    super(`JSON-RPC input frame exceeds ${maxFrameBytes} bytes`)
+    this.name = 'JsonRpcInputFrameTooLargeError'
+    this.maxFrameBytes = maxFrameBytes
+  }
+}
+
 /** A JSON-RPC error response, preserving the wire `code` and optional `data`. */
 export class JsonRpcResponseError extends Error {
   /**
@@ -199,7 +214,7 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
     if (this.options.maxFrameBytes !== undefined
       && Buffer.byteLength(this.buffer) > this.options.maxFrameBytes
       && this.buffer.indexOf('\n') < 0) {
-      this.failInput(new Error(`JSON-RPC input frame exceeds ${this.options.maxFrameBytes} bytes`))
+      this.failInput(new JsonRpcInputFrameTooLargeError(this.options.maxFrameBytes))
       return
     }
     this.drainLines()
@@ -213,7 +228,7 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
       this.buffer = this.buffer.slice(newline + 1)
       if (this.options.maxFrameBytes !== undefined
         && Buffer.byteLength(line) > this.options.maxFrameBytes) {
-        this.failInput(new Error(`JSON-RPC input frame exceeds ${this.options.maxFrameBytes} bytes`))
+        this.failInput(new JsonRpcInputFrameTooLargeError(this.options.maxFrameBytes))
         return
       }
       if (!line) continue

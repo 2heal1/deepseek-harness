@@ -11,6 +11,7 @@ import type { Readable, Writable } from 'node:stream'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
 import {
+  JsonRpcInputFrameTooLargeError,
   JsonRpcLineTransport,
   type JsonRpcLineTransportOptions,
 } from '@deepseek-ai/dsh-sdk-protocol'
@@ -222,6 +223,7 @@ export class CodexAppServerWire {
   private readonly fatal = Promise.withResolvers<never>()
   private threadId: string | undefined
   private turnId: string | undefined
+  private interruptedTurnId: string | undefined
   private pendingTurnId: string | undefined
   private turnCompleted: PromiseWithResolvers<{
     readonly params: JsonObject
@@ -259,6 +261,9 @@ export class CodexAppServerWire {
   ) {
     this.transport = new JsonRpcLineTransport(input, output, transportOptions)
     void this.fatal.promise.catch(() => {})
+    this.transport.onInputFailure((error) => {
+      if (error instanceof JsonRpcInputFrameTooLargeError) this.fail(error)
+    })
     this.transport.onRequest((method, params) => this.handleServerRequest(method, params))
     this.transport.onNotification((method, params) => {
       try {
@@ -406,6 +411,8 @@ export class CodexAppServerWire {
    */
   interrupt(): void {
     if (this.threadId === undefined || this.turnId === undefined || this.closed) return
+    if (this.interruptedTurnId === this.turnId) return
+    this.interruptedTurnId = this.turnId
     void this.transport.request('turn/interrupt', {
       threadId: this.threadId,
       turnId: this.turnId,
