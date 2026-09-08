@@ -24,6 +24,8 @@ const owner: Agent = {
   inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
   status: 'idle',
   ctx: ownerFiber.ctx,
+  submit() { throw new Error('unexpected submission') },
+  cancelSubmission() { return false },
   send() {},
   followup() {},
   steer() {},

@@ -23,6 +23,15 @@ export interface ModelMessageSource extends AssistantProvenance {
   kind: 'model'
 }
 
+/** Protocol-observed assistant output produced by an Agent Runtime Provider. */
+export interface RuntimeMessageSource {
+  kind: 'runtime'
+  /** Stable Agent Runtime Provider identity. */
+  provider: string
+  /** Authority from which the provider observed this output. */
+  source: 'protocol'
+}
+
 /** Required source of a user-role message carrying one tool result. */
 export interface ToolMessageSource {
   kind: 'tool'
@@ -101,6 +110,7 @@ export interface MessageSourceMap {
   user: { kind: 'user' }
   plugin: { kind: 'plugin'; plugin: string } & ContextFormed
   model: ModelMessageSource
+  runtime: RuntimeMessageSource
   tool: ToolMessageSource
 }
 
@@ -145,7 +155,7 @@ export interface UserMessage extends Message {
 /** A model-produced assistant specialization of the shared message representation. */
 export interface AssistantMessage extends Message {
   readonly role: 'assistant'
-  readonly source: ModelMessageSource
+  readonly source: ModelMessageSource | RuntimeMessageSource
 }
 
 /** A tool-result specialization whose model-facing block retains call correlation. */

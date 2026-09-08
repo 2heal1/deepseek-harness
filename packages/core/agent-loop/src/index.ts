@@ -282,7 +282,7 @@ class NativePreparedRuntime implements PreparedAgentRuntime {
     }
     request.signal.addEventListener('abort', cancel, { once: true })
     try {
-      this.agentDriver.send(request.message, 'next-turn', true)
+      this.agentDriver.submit(request.message, (turn) =>{  request.started(turn) })
       await this.agentDriver.whenIdle()
     } finally {
       request.signal.removeEventListener('abort', cancel)

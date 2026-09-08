@@ -1,5 +1,5 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -17,12 +17,9 @@ import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { MockAdapter, textResponse } from './mock-adapter.ts'
 
-const dirs: string[] = []
-afterEach(async () => { for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true }) })
-
 async function persistentHarness(adapter: MockAdapter): Promise<{ ctx: Context; root: string }> {
   const root = await mkdtemp(join(tmpdir(), 'dsh-resume-'))
-  dirs.push(root)
+  onTestFinished(() => rm(root, { recursive: true, force: true }))
   return { ctx: await mountPersistentHarness(root, adapter), root }
 }
 
@@ -46,12 +43,16 @@ async function persistSession(sessionId: SessionId): Promise<string> {
   // Persistence deliberately has no artifact for a truly empty session. A
   // balanced completed turn is the smallest resumable log and avoids running
   // the model merely to construct this lifecycle fixture.
-  const seed: SessionEvent[] = [
-    { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
-    { type: 'turn/end', seq: 1, time: 2, data: { turn: 1, reason: { kind: 'completed' } } },
-  ]
-  const session = ctx.sessions.create(sessionId, { seed })
-  await ctx.sessions.flush(session)
+  const handle = await ctx.agents.create({
+    sessionId,
+    agentOptions: { provider: 'mock', model: 'mock' },
+  })
+  handle.agent.session.append('turn/start', { turn: 1 })
+  handle.agent.session.append('turn/end', {
+    turn: 1,
+    reason: { kind: 'completed' },
+  })
+  await ctx.sessions.flush(handle.agent.session)
   await ctx.fiber.dispose()
   return root
 }
@@ -93,7 +94,7 @@ function throwUnknown(value: unknown): never {
 }
 
 describe('the session-persistence Agent Note: AgentLoop factory create/resume', () => {
-  it('resumes a pre-react-loop session including pre-identity message events', async () => {
+  it('rejects a pre-runtime-profile session without compatibility inference', async () => {
     const sessionId = SessionId('pre-identity-resume')
     const first = await persistentHarness(new MockAdapter([]))
     await first.ctx.sessionPersistence.create({
@@ -143,29 +144,13 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     await first.ctx.fiber.dispose()
 
     const ctx = await mountPersistentHarness(first.root, new MockAdapter([textResponse('new answer')]))
-    const handle = await ctx.agents.resume({
+    await expect(ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: { provider: 'mock', model: 'mock' },
+    })).rejects.toMatchObject({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'resume',
     })
-    expect(handle.agent.session.deriveMessages()).toMatchObject([
-      { id: `legacy-message:${sessionId}:1`, role: 'user' },
-      { id: `legacy-message:${sessionId}:3`, role: 'assistant' },
-      { id: `legacy-message:${sessionId}:4`, role: 'user' },
-    ])
-    expect(handle.agent.inbox.nextTurn).toEqual([])
-    expect(handle.agent.inbox.nextStep).toEqual([])
-
-    handle.agent.followup(createUserMessage({
-      content: [{ type: 'text', text: 'new question' }],
-      source: { kind: 'user' },
-    }))
-    await waitForIdle(ctx, handle.agent)
-    expect(handle.agent.session.deriveMessages()).toHaveLength(5)
-    expect(handle.agent.session.events.at(-1)).toMatchObject({
-      type: 'turn/end',
-      data: { reason: { kind: 'completed' } },
-    })
-    await handle.dispose()
     await ctx.fiber.dispose()
   })
 
@@ -217,7 +202,11 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     first.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
     await ctx.sessions.flush(first.session)
     const loaded = await ctx.sessionPersistence.load(sessionId)
-    expect(loaded.events.map(event => event.type)).toEqual(['turn/start', 'turn/end'])
+    expect(loaded.events.map(event => event.type)).toEqual([
+      'agent/runtime/facts',
+      'turn/start',
+      'turn/end',
+    ])
     expect(loaded.events.at(-1)).toMatchObject({
       type: 'turn/end',
       data: { reason: { kind: 'completed' } },
@@ -320,8 +309,8 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
       agentOptions: { provider: 'mock', model: 'mock' },
       setup: async (agentCtx) => {
         expect(agentCtx.agent?.id).toBe(sessionId)
-        // The two persisted events plus the end-seed marker.
-        expect(agentCtx.agent?.session.events).toHaveLength(3)
+        // Runtime facts plus the two persisted turn events and end-seed marker.
+        expect(agentCtx.agent?.session.events).toHaveLength(4)
         agentCtx.on('session/created', () => void order.push('setup-listener:session/created'))
         agentCtx.on('agent/created', () => void order.push('setup-listener:agent/created'))
         order.push('setup:start')
@@ -495,7 +484,7 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const owner = await ctx.plugin(Object.assign((inner: Context) => {
       resuming = inner.agents.resume({
         resumeSessionId: sessionId,
-        agentOptions: { provider: 'mock', model: 'mock', maxTokens: 4096 },
+        agentOptions: { provider: 'mock', model: 'mock' },
       })
     }, { inject: ['agents'] }))
     await preparationStarted.promise
@@ -584,10 +573,12 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     ]
     const adapter1 = new MockAdapter([textResponse('a')])
     const { ctx: ctx1, root } = await persistentHarness(adapter1)
-    const forked = ctx1.sessions.create(SessionId('forked-sess'), {
+    const forked = (await ctx1.agents.create({
+      sessionId: SessionId('forked-sess'),
       seed,
       meta: { cwd: '/w', parentSession: SessionId('parent-sess'), seedLength: seed.length, delegationDepth: 1 },
-    })
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })).agent.session
     await ctx1.sessions.flush(forked)
     await ctx1.fiber.dispose()
 
@@ -684,10 +675,11 @@ describe('the session-persistence Agent Note: AgentLoop factory create/resume', 
     const a2 = (await ctx2.agents.resume({ resumeSessionId: SessionId('sess-resume') })).agent
     // The resumed session carries the prior history…
     expect(a2.session.id).toBe('sess-resume')
-    // …followed by one end-seed event marking the constructor seed.
-    expect(a2.session.events.length).toBe(events1.length + 1)
+    // …followed by one end-seed marker and the resumed runtime's fresh facts.
+    expect(a2.session.events.length).toBe(events1.length + 2)
     expect(a2.session.firstLiveSeq).toBe(events1.length)
-    expect(a2.session.events.at(-1)?.type).toBe('session/end-seed')
+    expect(a2.session.events.at(-2)?.type).toBe('session/end-seed')
+    expect(a2.session.events.at(-1)?.type).toBe('agent/runtime/facts')
     const replay = Session.create(SessionId('replay'), events1)
     expect(a2.session.deriveMessages()).toEqual(replay.deriveMessages())
 

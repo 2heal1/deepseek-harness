@@ -10,7 +10,9 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 /* jscpd:ignore-start -- schema 17 deliberately owns a frozen physical codec;
  * importing or sharing the JSONL codec would let that format mutate this database interpreter. */
 type DeltaKind = 'text-delta' | 'reasoning-delta' | 'tool-call-delta'
-type DeltaEvent = SessionEvent<'assistant/chunk'>
+type DeltaEvent = SessionEvent<'assistant/chunk'> & {
+  data: { turn: number; step: number; chunk: StreamChunk }
+}
 
 interface RunDataBase {
   readonly turn: number

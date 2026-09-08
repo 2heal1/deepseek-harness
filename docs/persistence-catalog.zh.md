@@ -92,7 +92,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-来源：[`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:368`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:375`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:404`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:436`](../packages/core/session/src/types.ts)
 
 ## 事件
 
@@ -118,6 +118,76 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types.ts)
+
+<a id="agentruntimeactivity--log-only"></a>
+
+#### `agent/runtime/activity` — log-only
+
+```ts persistence-catalog
+/** Bounded redacted product-native activity that never enters model history. */
+'agent/runtime/activity': AgentRuntimeActivity
+```
+
+来源：[`packages/core/agent-runtime/src/types.ts:458`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentruntimefacts--log-only"></a>
+
+#### `agent/runtime/facts` — log-only
+
+```ts persistence-catalog
+/** Complete current non-secret facts for one prepared runtime. */
+'agent/runtime/facts': AgentRuntimeFacts
+```
+
+来源：[`packages/core/agent-runtime/src/types.ts:456`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentsubmissionaccepted--log-only"></a>
+
+#### `agent/submission/accepted` — log-only
+
+```ts persistence-catalog
+/** Router acceptance of one identified submission before Provider work starts. */
+'agent/submission/accepted': {
+  submissionId: SubmissionId
+  messageId: MessageId
+}
+```
+
+来源：[`packages/core/agent-runtime/src/types.ts:437`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentsubmissionsettled--log-only"></a>
+
+#### `agent/submission/settled` — log-only
+
+```ts persistence-catalog
+/** Router-owned terminal result for one accepted submission. */
+'agent/submission/settled': {
+  submissionId: SubmissionId
+  messageId: MessageId
+  settlement:
+    | { kind: 'settled'; turn: number; reason: TurnEndReason }
+    | { kind: 'not-started'; reason: SubmissionNotStartedReason }
+}
+```
+
+类型：[TurnEndReason](subsystems/session.md)
+
+来源：[`packages/core/agent-runtime/src/types.ts:448`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentsubmissionstarted--log-only"></a>
+
+#### `agent/submission/started` — log-only
+
+```ts persistence-catalog
+/** Router correlation of one accepted submission to its canonical turn. */
+'agent/submission/started': {
+  submissionId: SubmissionId
+  messageId: MessageId
+  turn: number
+}
+```
+
+来源：[`packages/core/agent-runtime/src/types.ts:442`](../packages/core/agent-runtime/src/types.ts)
 
 ### `agent-preset/*`
 
@@ -212,12 +282,12 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ```ts persistence-catalog
 /** Raw stream chunk — token-level replay fidelity. */
-'assistant/chunk': { turn: number; step: number; chunk: StreamChunk }
+'assistant/chunk': AssistantEventPosition & { chunk: StreamChunk }
 ```
 
 类型：[StreamChunk](subsystems/llm-streaming.md)
 
-来源：[`packages/core/session/src/types.ts:266`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:290`](../packages/core/session/src/types.ts)
 
 <a id="assistantmessage--surface"></a>
 
@@ -234,12 +304,16 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
  * marker distinguishes that prefix without re-deriving interruption from turn
  * boundaries. An aborted turn with no such event streamed no visible content.
  */
-'assistant/message': { turn: number; step: number; message: AssistantMessage; usage?: TokenUsage; interrupted?: true }
+'assistant/message': AssistantEventPosition & {
+  message: AssistantMessage
+  usage?: TokenUsage
+  interrupted?: true
+}
 ```
 
 类型：[TokenUsage](subsystems/llm-streaming.md)
 
-来源：[`packages/core/session/src/types.ts:277`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:301`](../packages/core/session/src/types.ts)
 
 ### `command/*`
 
@@ -549,7 +623,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/context': RequestContext
 ```
 
-来源：[`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:341`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -563,7 +637,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'request/header': { header: EpochHeader; reason: RequestHeaderReason }
 ```
 
-来源：[`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -638,7 +712,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'session/end-seed': Record<string, never>
 ```
 
-来源：[`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:364`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -680,7 +754,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'step/end': { turn: number; step: number }
 ```
 
-来源：[`packages/core/session/src/types.ts:256`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:280`](../packages/core/session/src/types.ts)
 
 <a id="stepstart--log-only"></a>
 
@@ -691,7 +765,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'step/start': { turn: number; step: number }
 ```
 
-来源：[`packages/core/session/src/types.ts:254`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:278`](../packages/core/session/src/types.ts)
 
 ### `subagent/*`
 
@@ -784,7 +858,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TodoItem](subsystems/session.md)
 
-来源：[`packages/core/session/src/types.ts:303`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:331`](../packages/core/session/src/types.ts)
 
 ### `tool/*`
 
@@ -803,7 +877,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[CallId](subsystems/core.md)
 
-来源：[`packages/core/session/src/types.ts:283`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:311`](../packages/core/session/src/types.ts)
 
 <a id="toolcode-dispatch--log-only"></a>
 
@@ -878,7 +952,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/core/session/src/types.ts:295`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:323`](../packages/core/session/src/types.ts)
 
 ### `tool-workflow/*`
 
@@ -958,7 +1032,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TurnEndReason](subsystems/session.md)
 
-来源：[`packages/core/session/src/types.ts:252`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:276`](../packages/core/session/src/types.ts)
 
 <a id="turnstart--log-only"></a>
 
@@ -974,7 +1048,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'turn/start': { turn: number }
 ```
 
-来源：[`packages/core/session/src/types.ts:243`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:267`](../packages/core/session/src/types.ts)
 
 ### `user/*`
 
@@ -993,7 +1067,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'user/message': UserMessage
 ```
 
-来源：[`packages/core/session/src/types.ts:264`](../packages/core/session/src/types.ts)
+来源：[`packages/core/session/src/types.ts:288`](../packages/core/session/src/types.ts)
 
 ### `web/*`
 

@@ -152,7 +152,7 @@ class Session:
                     events.append(event)
 
         with self.harness.client.subscribe_session_notifications(self.id) as subscription:
-            message_id = self.harness.client.session_prompt(
+            receipt = self.harness.client.session_prompt(
                 self.id,
                 content_blocks,
                 notification_subscription=subscription,
@@ -162,14 +162,20 @@ class Session:
             while True:
                 notification = subscription.next()
                 if not received:
-                    if not _is_inbox_receipt(notification, self.id, message_id):
+                    if not _is_submission_event(
+                        notification,
+                        self.id,
+                        "agent/submission/accepted",
+                        receipt.submissionId,
+                    ):
                         continue
                     received = True
                 collect(notification)
-                if (
-                    notification.method == "session.status"
-                    and notification.payload.get("sessionId") == self.id
-                    and notification.payload.get("status") == "idle"
+                if _is_submission_event(
+                    notification,
+                    self.id,
+                    "agent/submission/settled",
+                    receipt.submissionId,
                 ):
                     break
 
@@ -183,17 +189,19 @@ class Session:
         )
 
 
-def _is_inbox_receipt(notification: Notification, session_id: str, message_id: str) -> bool:
+def _is_submission_event(
+    notification: Notification,
+    session_id: str,
+    event_type: str,
+    submission_id: str,
+) -> bool:
     if notification.method != "session.event" or notification.payload.get("sessionId") != session_id:
         return False
     event = notification.payload.get("event")
-    if not isinstance(event, dict) or event.get("type") != "agent/inbox/spliced":
+    if not isinstance(event, dict) or event.get("type") != event_type:
         return False
     data = event.get("data")
-    inserted = data.get("inserted") if isinstance(data, dict) else None
-    return isinstance(inserted, list) and any(
-        isinstance(message, dict) and message.get("id") == message_id for message in inserted
-    )
+    return isinstance(data, dict) and data.get("submissionId") == submission_id
 
 
 def normalize_input(input: str | list[JsonObject]) -> list[JsonObject]:

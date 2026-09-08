@@ -39,6 +39,10 @@ function turnEndReasons(events: readonly SessionEvent[]): string[] {
   return events.flatMap(event => event.type === 'turn/end' ? [event.data.reason.kind] : [])
 }
 
+function withoutTransientActionTooltip(snapshot: string): string {
+  return snapshot.replace(/^(\s*)- tooltip "(?:Save|Edit) queued message"\n/gm, '')
+}
+
 describe('web e2e: queue row actions', () => {
   let scaffold: WebScaffold | undefined
   let browser: Browser | undefined
@@ -135,7 +139,9 @@ describe('web e2e: queue row actions', () => {
     await editRow.getByRole('button', { name: 'Edit queued message' }).click()
     const editor = page.getByRole('textbox', { name: 'Edit queued message' })
     await editor.fill(EDITED)
-    const editingSnapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
+    const editingSnapshot = withoutTransientActionTooltip(
+      await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd),
+    )
     await compareOrRefreshGolden(EDITING_EXPECTED, editingSnapshot, MODE)
     await page.getByRole('button', { name: 'Save queued message' }).click()
     await page.getByText(EDITED, { exact: true }).waitFor()
@@ -144,7 +150,9 @@ describe('web e2e: queue row actions', () => {
     await removeRow.getByRole('button', { name: 'Remove queued message' }).click()
     await expect.poll(() => page.getByText(REMOVE, { exact: true }).count()).toBe(0)
 
-    const snapshot = await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd)
+    const snapshot = withoutTransientActionTooltip(
+      await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd),
+    )
     await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
     expect(sessionEvents.filter(event => event.type === 'user/message' && event.data.source.kind === 'user')).toHaveLength(1)
     expect(tripwire.pageErrors).toEqual([])

@@ -12,7 +12,8 @@ import type { RequestPayload, ResponseValue } from './rpc-map.ts'
 import type { Wire } from './rpc.schema.ts'
 import type {
   HistoryEntry, ModelCatalogFailure, ModelCatalogModel, ModelProviderGroup, ModelReasoning,
-  ModelReasoningEffort, ModelSelection, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem, SessionSummary,
+  ModelReasoningEffort, ModelSelection, SessionListMetadata, SessionProjectionsBlock,
+  SessionRuntimeStatus, SessionSearchItem, SessionSummary,
 } from './sessions.ts'
 import type { ToolEventView } from './events.ts'
 import type { AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -221,6 +222,46 @@ export const sessionListMetadataProjectionSchema: z.ZodType<SessionListMetadata>
   lastPromptAt: z.number().nullable(),
 })
 
+const runtimeCapabilitySchema = z.object({
+  id: z.enum([
+    'continuation',
+    'steering',
+    'queuedInputRead',
+    'queuedInputMutation',
+    'injection',
+    'maintenance',
+    'imageInput',
+    'modelOverride',
+    'approvals',
+    'runtimeActivity',
+    'harnessTools',
+    'resume',
+    'coldResume',
+  ]),
+  metadata: z.json().optional(),
+})
+
+const sourcedRuntimeFactSchema = z.object({
+  value: z.string(),
+  source: z.enum(['profile', 'protocol']),
+})
+
+/** Host-side validation for the latest durable runtime-facts projection. */
+export const sessionRuntimeStatusProjectionSchema: z.ZodType<SessionRuntimeStatus> = z.union([
+  z.object({
+    runtimeId: z.string().min(1),
+    providerId: z.string().min(1),
+    capabilities: z.array(runtimeCapabilitySchema),
+    phase: z.enum(['starting', 'ready', 'running', 'stopping', 'stopped', 'failed']),
+    product: sourcedRuntimeFactSchema.optional(),
+    productVersion: sourcedRuntimeFactSchema.optional(),
+    protocol: sourcedRuntimeFactSchema.optional(),
+    protocolVersion: sourcedRuntimeFactSchema.optional(),
+    externalSessionId: z.string().min(1).optional(),
+  }),
+  z.null(),
+]) as z.ZodType<SessionRuntimeStatus>
+
 /**
  * imageLimits projection unit schema (host-side view validation). zod widens
  * `readonly ImageMediaType[]` to `string[]`; on the JSON wire the two
@@ -296,6 +337,10 @@ export const sessionPromptRequestSchema = z.object({
 /** session.prompt response value (the command slot appears only when the prompt dispatched a slash command). */
 export const sessionPromptValueSchema = z.object({
   accepted: z.literal(true),
+  receipt: z.object({
+    submissionId: z.string(),
+    messageId: messageIdSchema,
+  }).optional(),
   command: z.object({
     kind: z.literal('success'),
     text: z.string().optional(),

@@ -212,8 +212,8 @@ describe('ACP prompt lifecycle', () => {
     const prompt = harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'go' }] })
       .finally(() => { settled = true })
     await vi.waitFor(() => {
-      expect(agent.session.events.filter(event => event.type === 'agent/inbox/spliced'
-        && event.data.inserted.length > 0)).toHaveLength(2)
+      expect(agent.session.events.filter(event =>
+        event.type === 'agent/submission/accepted')).toHaveLength(1)
     })
     expect(settled).toBe(false)
     await harness.client.cancel({ sessionId })
@@ -246,6 +246,28 @@ describe('ACP prompt lifecycle', () => {
     // The failed prompt must not wedge the session's single prompt slot.
     await expect(harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'two' }] }))
       .rejects.toThrow(/prompt was not queued/)
+  })
+
+  it('maps a submission settled before turn start to cancelled', async () => {
+    harness = await makeBridgeHarness({ script: [] })
+    const sessionId = await newSession(harness)
+    const agent = harness.ctx.agents.get(SessionId(sessionId))!
+    const settlement = {
+      kind: 'not-started' as const,
+      reason: { kind: 'cancelled' as const, cause: { kind: 'disposed' as const } },
+      eventSeq: 1,
+    }
+    vi.spyOn(agent, 'submit').mockReturnValueOnce({
+      id: 'not-started',
+      messageId: 'not-started-message',
+      started: Promise.resolve(settlement),
+      settled: Promise.resolve(settlement),
+    } as never)
+
+    await expect(harness.client.prompt({
+      sessionId,
+      prompt: [{ type: 'text', text: 'one' }],
+    })).resolves.toEqual({ stopReason: 'cancelled' })
   })
 
   it('permits only one in-flight prompt per session', async () => {
@@ -391,14 +413,14 @@ describe('ACP prompt lifecycle', () => {
     expect(harness.adapter.requests).toEqual([])
   })
 
-  it('wraps an unexpected same-process followup failure and frees the prompt slot', async () => {
+  it('wraps an unexpected same-process submission failure and frees the prompt slot', async () => {
     harness = await makeBridgeHarness({ script: [] })
     const sessionId = await newSession(harness)
     const agent = harness.ctx.agents.get(SessionId(sessionId))!
-    vi.spyOn(agent, 'followup').mockImplementationOnce(() => { throw new Error('synthetic followup failure') })
+    vi.spyOn(agent, 'submit').mockImplementationOnce(() => { throw new Error('synthetic submission failure') })
 
     await expect(harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'go' }] }))
-      .rejects.toThrow(/prompt was not queued: synthetic followup failure/)
+      .rejects.toThrow(/prompt was not queued: synthetic submission failure/)
   })
 
   it('cancels a running turn and records the aborted outcome', async () => {
@@ -507,7 +529,7 @@ describe('ACP prompt lifecycle', () => {
     expect(messageText(harness)).toBe('')
   })
 
-  it('cancels a prompt removed before its turn claims it', async () => {
+  it('settles a started prompt removed before its turn claims it', async () => {
     harness = await makeBridgeHarness({ script: [] })
     const sessionId = await newSession(harness)
     const dispose = harness.ctx.on('agent/inbox/inserted', ({ agent, message }) => {
@@ -515,7 +537,7 @@ describe('ACP prompt lifecycle', () => {
     })
 
     await expect(harness.client.prompt({ sessionId, prompt: [{ type: 'text', text: 'go' }] }))
-      .resolves.toEqual({ stopReason: 'cancelled' })
+      .resolves.toEqual({ stopReason: 'end_turn' })
     dispose()
   })
 

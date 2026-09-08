@@ -39,6 +39,8 @@ function agent(ctx: Context): Agent {
     inbox,
     ctx: scope.ctx,
     get status() { return status },
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send: () => {},
     followup: () => {},
     steer: () => {},

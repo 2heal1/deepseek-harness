@@ -12,6 +12,7 @@ const SYSTEM = '{{system}}'
 const TOOLS = '{{tools}}'
 const EVENT_TIME = '{{eventTime}}'
 const EVENT_OMITTED_BYTES = '{{eventOmittedBytes}}'
+const NODE_EXECUTABLE = '{{nodeExecutable}}'
 
 /** A cwd-rooted path after volatile cwd replacement, through its last separator-delimited segment. */
 const CWD_ROOTED_PATH_RE = /\{\{cwd\}\}(?:[\\/][^\s<>"'`]+)+/g
@@ -217,11 +218,24 @@ function tokenizeFixtureValue(
   return value
 }
 
+/** Replace a machine-specific absolute Node executable in a Session Header. */
+function tokenizeRuntimeProfileExecutable(record: Record<string, unknown>): void {
+  if (record.type !== 'session') return
+  const runtimeProfile = record.runtimeProfile
+  if (runtimeProfile === null || typeof runtimeProfile !== 'object') return
+  const launch = (runtimeProfile as { launch?: unknown }).launch
+  if (launch === null || typeof launch !== 'object') return
+  const executable = (launch as { executable?: unknown }).executable
+  if (typeof executable === 'string' && /[\\/]node(?:\.exe)?$/i.test(executable)) {
+    (launch as { executable: string }).executable = NODE_EXECUTABLE
+  }
+}
+
 /**
  * Store one generated workspace as `{{cwd}}` while retaining every other
- * session value. The caller opts in only for workspaces created under a
- * platform temporary root; explicitly relocated workspaces keep their real
- * path.
+ * session value except an absolute Node executable in the Runtime Profile.
+ * The caller opts in only for workspaces created under a platform temporary
+ * root; explicitly relocated workspaces keep their real path.
  *
  * @param rawLog The raw or refresh-stabilized session JSONL fixture.
  * @returns Compact JSONL whose known cwd spellings become `{{cwd}}`.
@@ -239,7 +253,9 @@ export function tokenizeSessionFixtureCwd(rawLog: string): string {
   const ctx: NormalizeContext = { sessionIds: [], cwd }
   return lines.map((line) => {
     if (line.trim().length === 0) return line
-    return JSON.stringify(tokenizeFixtureValue(JSON.parse(line), ctx, basename))
+    const record = tokenizeFixtureValue(JSON.parse(line), ctx, basename) as Record<string, unknown>
+    tokenizeRuntimeProfileExecutable(record)
+    return JSON.stringify(record)
   }).join('\n')
 }
 
@@ -282,8 +298,8 @@ export function normalizeStdout(
 
 /**
  * Normalize a session JSONL log into a stable expected output: the header line's
- * volatile fields (`createdAt`, `id`, `cwd`) and every event's `time` are
- * zeroed/scrubbed, all volatile strings scrubbed, and `seq` is LEFT INTACT
+ * volatile fields (`createdAt`, `id`, `cwd`, and an absolute Node executable)
+ * and every event's `time` are zeroed/scrubbed, all volatile strings scrubbed, and `seq` is LEFT INTACT
  * (deterministic by contract). A packed chunk row's timing (`time0`, the `dt`
  * gaps) zeroes just like an event `time`; its `seq0` stays, like `seq`.
  * Output is JSONL in the same shape as the input — one compact record per
@@ -306,6 +322,7 @@ export function normalizeSessionLog(
     // Header line: { type: 'session', createdAt, id, cwd, … }.
     if (record.type === 'session') {
       if ('createdAt' in record) record.createdAt = 0
+      tokenizeRuntimeProfileExecutable(record)
     } else if ('time0' in record) {
       // Packed chunk row: zero the anchor timestamp and every member gap.
       record.time0 = 0

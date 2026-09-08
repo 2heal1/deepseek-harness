@@ -39,7 +39,9 @@ export function indexAssistantStepTiming(steps: Map<string, AssistantStepMetadat
       assistantStepKey(event.data.turn, event.data.step),
       { stepStartTime: event.time, firstTokenTime: null },
     )
-  } else if (event.type === 'assistant/chunk' && isTokenDelta(event.data.chunk)) {
+  } else if (event.type === 'assistant/chunk'
+    && event.data.step !== undefined
+    && isTokenDelta(event.data.chunk)) {
     const key = assistantStepKey(event.data.turn, event.data.step)
     const current = steps.get(key) ?? { stepStartTime: null, firstTokenTime: null }
     if (current.firstTokenTime === null) {

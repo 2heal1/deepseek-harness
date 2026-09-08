@@ -75,6 +75,7 @@ interface MessageSourceMap {
   user: { kind: 'user' }
   plugin: { kind: 'plugin'; plugin: string } & ContextFormed
   model: ModelMessageSource
+  runtime: RuntimeMessageSource
   tool: ToolMessageSource
 }
 ```

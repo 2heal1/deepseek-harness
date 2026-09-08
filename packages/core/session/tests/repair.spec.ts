@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SubmissionId } from '@deepseek-ai/dsh-agent-runtime'
 import { CallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import { interruptedTurnClosers, TOOL_NOT_STARTED, TOOL_OUTCOME_UNKNOWN } from '../src/index.ts'
 import type { SessionEvent, SurfaceEvent } from '../src/index.ts'
@@ -35,6 +36,34 @@ describe('interruptedTurnClosers', () => {
     const end = closers[0]!
     expect(end.seq).toBe(1)
     expect(end.type === 'turn/end' && end.data.reason).toEqual({ kind: 'interrupted' })
+  })
+
+  it('does not infer a Native step from external assistant output', () => {
+    const events: SessionEvent[] = [
+      userTurnStart(1, 0),
+      {
+        type: 'assistant/message',
+        seq: 1,
+        time: 1,
+        data: {
+          turn: 1,
+          provenance: {
+            kind: 'runtime',
+            provider: 'external',
+            source: 'protocol',
+            submissionId: SubmissionId('submission-1'),
+          },
+          message: createMessage({
+            role: 'assistant',
+            content: [{ type: 'text', text: 'partial' }],
+            source: { kind: 'runtime', provider: 'external', source: 'protocol' },
+          }),
+        },
+      },
+    ]
+
+    expect(interruptedTurnClosers(events).map(event => event.type))
+      .toEqual(['turn/end'])
   })
 
   it('closes an open step before the turn (step/end then turn/end)', () => {

@@ -12,6 +12,9 @@ import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { SubagentStopReason } from '@deepseek-ai/dsh-subagent'
 
+/** Exact pre-release protocol version shared by the server and clients. */
+export const HARNESS_SDK_PROTOCOL_VERSION = '0.0.2'
+
 /** Parameters for the process-wide SDK handshake. */
 export interface InitializeParams {
   /** Working directory recorded on every SDK-created session's header. */
@@ -42,7 +45,10 @@ export interface SessionPromptParams {
 export interface SessionPromptResult {
   /** Identity of the queued user message. */
   messageId: string
+  /** Identity correlating this prompt through start and settlement. */
+  submissionId: string
 }
+
 
 /** Deployment-mapped SDK outcome: `ok` for an accepted result, `error` otherwise. */
 export type SdkRunStatus = 'ok' | 'error'

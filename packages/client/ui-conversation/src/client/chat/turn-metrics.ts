@@ -70,7 +70,7 @@ interface TurnFold {
 export function deriveTurnMetrics(nodes: readonly ConversationNode[]): Map<number, TurnMetrics> {
   const folds = new Map<number, TurnFold>()
   for (const node of nodes) {
-    if (node.kind !== 'assistant') continue
+    if (node.kind !== 'assistant' || node.step === undefined) continue
     const reading = assistantStepReading(node)
     let fold = folds.get(node.turn)
     if (fold === undefined) {

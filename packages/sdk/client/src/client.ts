@@ -14,11 +14,13 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import {
+  HARNESS_SDK_PROTOCOL_VERSION,
   JsonRpcLineTransport,
   JsonRpcResponseError,
   type InitializeParams,
   type InitializeResult,
   type SessionPromptParams,
+  type SessionPromptResult,
 } from '@deepseek-ai/dsh-sdk-protocol'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { disposeRuntimeProcess } from './dispose.ts'
@@ -271,6 +273,11 @@ export class HarnessClient {
       || typeof result.serverInfo.name !== 'string' || typeof result.serverInfo.version !== 'string') {
       throw new SdkProtocolError(`initialize returned no server identity: ${JSON.stringify(result)}`)
     }
+    if (result.serverInfo.version !== HARNESS_SDK_PROTOCOL_VERSION) {
+      throw new SdkProtocolError(
+        `unsupported DeepSeek Harness SDK protocol version "${result.serverInfo.version}" (expected "${HARNESS_SDK_PROTOCOL_VERSION}")`,
+      )
+    }
     return { serverInfo: { name: result.serverInfo.name, version: result.serverInfo.version } }
   }
 
@@ -278,15 +285,25 @@ export class HarnessClient {
    * Queue one prompt and return its durable inbox identity.
    * @param sessionId - target session; an unknown id creates it.
    * @param contentBlocks - the user message, sent verbatim.
-   * @returns the queued message id.
+   * @returns the durable message and submission identities.
    */
-  async prompt(sessionId: string, contentBlocks: ContentBlock[]): Promise<string> {
+  async prompt(
+    sessionId: string,
+    contentBlocks: ContentBlock[],
+  ): Promise<SessionPromptResult> {
     const params: SessionPromptParams = { sessionId, contentBlocks }
     const result = await this.request('session/prompt', { ...params })
-    if (!isRecord(result) || typeof result.messageId !== 'string') {
-      throw new SdkProtocolError(`session/prompt returned no message id: ${JSON.stringify(result)}`)
+    if (!isRecord(result)
+      || typeof result.messageId !== 'string'
+      || typeof result.submissionId !== 'string') {
+      throw new SdkProtocolError(
+        `session/prompt returned no message/submission ids: ${JSON.stringify(result)}`,
+      )
     }
-    return result.messageId
+    return {
+      messageId: result.messageId,
+      submissionId: result.submissionId,
+    }
   }
 
   /**

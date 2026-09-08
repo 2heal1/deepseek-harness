@@ -1,7 +1,7 @@
 /**
  * High-level run API over {@link HarnessClient}: `DeepSeekHarness` owns one
  * runtime subprocess across many sessions; `HarnessSession.run` sends a
- * prompt and settles when the whole agent next becomes idle.
+ * prompt and settles from that submission's durable terminal event.
  * Mirrors the Python SDK's `DeepSeekHarness`/`Session` pair.
  *
  * @module @deepseek-ai/dsh-sdk-client/api
@@ -137,7 +137,7 @@ export class HarnessSession {
   constructor(readonly harness: DeepSeekHarness, readonly id: string) {}
 
   /**
-   * Queue one prompt, then observe the whole session through its next idle.
+   * Submit one prompt, then observe its exact durable event interval.
    * @param input - prompt text, or content blocks sent verbatim.
    * @param options - optional per-notification observer.
    * @returns the owned activity interval; rejects on transport loss, timeout,
@@ -166,20 +166,28 @@ export class HarnessSession {
       options?.onNotification?.(notification)
     }
     try {
-      const messageId = await client.prompt(this.id, contentBlocks)
+      const receipt = await client.prompt(this.id, contentBlocks)
       let received = false
       while (true) {
         const notification = await subscription.next()
         if (!received) {
           if (notification.method !== 'session.event'
             || notification.params.sessionId !== this.id
-            || !isInboxReceipt(notification.params.event, messageId)) continue
+            || !isSubmissionEvent(
+              notification.params.event,
+              'agent/submission/accepted',
+              receipt.submissionId,
+            )) continue
           received = true
         }
         collect(notification)
-        if (notification.method === 'session.status'
+        if (notification.method === 'session.event'
           && notification.params.sessionId === this.id
-          && notification.params.status === 'idle') break
+          && isSubmissionEvent(
+            notification.params.event,
+            'agent/submission/settled',
+            receipt.submissionId,
+          )) break
       }
     } finally {
       subscription.close()
@@ -221,11 +229,16 @@ function validatedSessionEvent(value: unknown): SessionEvent {
   return value as unknown as SessionEvent
 }
 
-/** Whether a raw session event is the durable enqueue receipt for `messageId`. */
-function isInboxReceipt(value: unknown, messageId: string): boolean {
-  if (!isRecord(value) || value.type !== 'agent/inbox/spliced' || !isRecord(value.data)) return false
-  const inserted = value.data.inserted
-  return Array.isArray(inserted) && inserted.some(message => isRecord(message) && message.id === messageId)
+/** Whether a raw session event is one submission lifecycle event. */
+function isSubmissionEvent(
+  value: unknown,
+  type: 'agent/submission/accepted' | 'agent/submission/settled',
+  submissionId: string,
+): boolean {
+  return isRecord(value)
+    && value.type === type
+    && isRecord(value.data)
+    && value.data.submissionId === submissionId
 }
 
 /**

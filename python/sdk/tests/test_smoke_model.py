@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import runpy
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -71,3 +72,73 @@ def test_mcp_smoke_accepts_the_external_server_result() -> None:
         for chunk in chunks
         for choice in chunk.get("choices", [])
     )
+
+
+def test_advanced_snapshot_normalizes_runtime_and_submission_ids() -> None:
+    result = SimpleNamespace(
+        session_id="advanced-executable",
+        final_response="done",
+        events=[
+            {
+                "type": "agent/submission/accepted",
+                "data": {
+                    "submissionId": "submission-random",
+                    "messageId": "message-random",
+                },
+            },
+            {
+                "type": "tool-workflow/run-start",
+                "data": {"runId": "workflow-random"},
+            },
+        ],
+        notifications=[
+            SimpleNamespace(
+                method="subagent.finished",
+                payload={
+                    "childSessionId": "child-random",
+                    "provider": "spawn",
+                    "status": "ok",
+                    "agentId": "agent-random",
+                },
+            ),
+        ],
+        session_root="/temporary/sessions",
+    )
+    logs = {
+        "advanced-executable": [
+            {
+                "type": "session",
+                "runtimeProfile": {
+                    "launch": {"executable": "/build/runtime"},
+                },
+            },
+            {
+                "type": "agent/runtime/facts",
+                "data": {"runtimeId": "runtime-parent-random"},
+            },
+            *result.events,
+        ],
+        "child-random": [
+            {"type": "session", "parentSession": "advanced-executable"},
+            {
+                "type": "agent/runtime/facts",
+                "data": {"runtimeId": "runtime-child-random"},
+            },
+        ],
+    }
+
+    files = SMOKE["build_snapshot_files"](
+        result,
+        logs,
+        ["child-random"],
+        Path("/temporary"),
+        Path("/build/runtime"),
+    )
+
+    rendered = "\n".join(files.values())
+    assert "random" not in rendered
+    assert "{{runtime-executable}}" in rendered
+    assert "{{runtime-parent}}" in rendered
+    assert "{{runtime-child-1}}" in rendered
+    assert "{{submission-1}}" in rendered
+    assert "{{messageId}}" in rendered

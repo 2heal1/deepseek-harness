@@ -269,7 +269,11 @@ function legacyContribution(raw: ChatConversationViewNode): LegacyContribution {
         return {
           anchorSeq: node.anchorSeq,
           nodes: EMPTY_LIST,
-          partial: { turn: data.turn, step: data.step, blocks: data.blocks },
+          partial: {
+            turn: data.turn,
+            ...data.step === undefined ? {} : { step: data.step },
+            blocks: data.blocks,
+          },
           running: null,
         }
       }

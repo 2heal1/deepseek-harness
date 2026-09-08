@@ -785,7 +785,14 @@ describe('agent scope lifecycle', () => {
     expect(statuses).toEqual([])
     expect(observerSawLive).toBe(true)
     expect(scopeDisposed).toBe(true)
-    expect(announced.session.events).toEqual([])
+    expect(announced.session.events).toMatchObject([{
+      type: 'agent/runtime/facts',
+      seq: 0,
+      data: {
+        providerId: 'native',
+        phase: 'ready',
+      },
+    }])
     expect(ctx.agents.get(SessionId('session-start-dispose-s'))).toBeUndefined()
     expect(ctx.sessions.get(SessionId('session-start-dispose-s'))).toBeUndefined()
     await ctx.fiber.dispose()

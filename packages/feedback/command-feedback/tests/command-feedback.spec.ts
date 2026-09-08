@@ -53,6 +53,8 @@ function stubAgent(ctx: Context, id: string): { agent: Agent; session: Session }
     inbox,
     ctx: new Context(),
     get status() { return status },
+    submit() { throw new Error('unexpected submission') },
+    cancelSubmission() { return false },
     send: () => {},
     followup: () => {},
     steer: () => {},

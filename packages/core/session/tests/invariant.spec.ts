@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { createScope, scopeTarget } from '@deepseek-ai/dsh-scope'
 import { createUserMessage, CallId, createMessage, createToolResultMessage, freezeMessage } from '@deepseek-ai/dsh-llm'
+import { SubmissionId } from '@deepseek-ai/dsh-agent-runtime'
 import SessionStore, { SessionId, TOOL_NOT_STARTED } from '@deepseek-ai/dsh-session'
 import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
 import InvariantRegistry, { InvariantError } from '@deepseek-ai/dsh-invariants'
@@ -228,6 +229,52 @@ describe('session-log invariants', () => {
         isError: false,
       }),
     }, { surfaceOp: 'append' })).toThrow(/no prior tool\/call/)
+  })
+
+  it('accepts external assistant output only in its open turn without a Native step', async () => {
+    const valid = (await setup()).ctx.sessions.create()
+    valid.append('turn/start', { turn: 1 })
+    expect(() => valid.append('assistant/chunk', {
+      turn: 1,
+      provenance: {
+        kind: 'runtime',
+        provider: 'external',
+        source: 'protocol',
+        submissionId: SubmissionId('submission-1'),
+      },
+      chunk: { type: 'text-delta', index: 0, text: 'external' },
+    })).not.toThrow()
+
+    const wrongTurn = (await setup()).ctx.sessions.create()
+    wrongTurn.append('turn/start', { turn: 1 })
+    expect(() => wrongTurn.append('assistant/chunk', {
+      turn: 2,
+      provenance: {
+        kind: 'runtime',
+        provider: 'external',
+        source: 'protocol',
+        submissionId: SubmissionId('submission-2'),
+      },
+      chunk: { type: 'text-delta', index: 0, text: 'late' },
+    })).toThrow(/names external turn 2/)
+
+    const nativeStep = (await setup()).ctx.sessions.create()
+    nativeStep.append('turn/start', { turn: 1 })
+    nativeStep.append('step/start', { turn: 1, step: 1 })
+    expect(() => nativeStep.append('assistant/message', {
+      turn: 1,
+      provenance: {
+        kind: 'runtime',
+        provider: 'external',
+        source: 'protocol',
+        submissionId: SubmissionId('submission-3'),
+      },
+      message: createMessage({
+        role: 'assistant',
+        content: [],
+        source: { kind: 'runtime', provider: 'external', source: 'protocol' },
+      }),
+    }, { surfaceOp: 'append' })).toThrow(/open is turn 1\/step 1/)
   })
 
   it('keeps fresh tool-result appends open-step checked', async () => {

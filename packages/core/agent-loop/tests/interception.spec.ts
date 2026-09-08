@@ -473,7 +473,7 @@ describe('agent/pre-step', () => {
     expect(() => {
       send(agent, 'blocked prompt')
     }).toThrow('append unavailable')
-    expect(events(agent)).toEqual([])
+    expect(events(agent).map(event => event.type)).toEqual(['agent/runtime/facts'])
     expect(agent.inbox.hasPending).toBe(false)
     expect(agent.status).toBe('idle')
   })

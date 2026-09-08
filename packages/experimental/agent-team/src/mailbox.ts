@@ -24,7 +24,7 @@ import type {
 export class TeamMailbox {
   private readonly dispatchTails = new Map<SessionId, Promise<void>>()
   private readonly activeDispatches = new Map<SessionId, TeamMessageSnapshot>()
-  private readonly inFlightMessages = new Set<TeamMessageId>()
+  private readonly inFlightMessages = new Map<TeamMessageId, Promise<boolean>>()
   private readonly inFlightDispatches = new Set<Promise<unknown>>()
 
   /**
@@ -154,8 +154,8 @@ export class TeamMailbox {
   /** Attempt one queued message exactly once in this process at a time. */
   private tryDispatch(root: Agent, message: TeamMessageSnapshot, signal: AbortSignal): Promise<boolean> {
     if (this.lifecycle.disposed) return Promise.resolve(false)
-    if (this.inFlightMessages.has(message.id)) return Promise.resolve(false)
-    this.inFlightMessages.add(message.id)
+    const active = this.inFlightMessages.get(message.id)
+    if (active !== undefined) return active
     const operation = this.trackDispatch(
       this.tryDispatchAdmitted(
         root,
@@ -163,6 +163,7 @@ export class TeamMailbox {
         AbortSignal.any([signal, this.lifecycle.signal]),
       ),
     )
+    this.inFlightMessages.set(message.id, operation)
     const forget = (): void => {
       this.inFlightMessages.delete(message.id)
     }

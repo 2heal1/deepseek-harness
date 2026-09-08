@@ -50,6 +50,7 @@ export function interruptedTurnClosers(events: readonly SessionEvent[]): Session
         openStep = null
         break
       case 'assistant/message':
+        if (event.data.step === undefined) break
         // The assistant message carries the tool-call blocks; each is pending
         // until a tool/result event with the same callId is logged.
         for (const block of event.data.message.content) {

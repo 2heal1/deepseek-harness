@@ -86,6 +86,12 @@ interface SessionHeader {
    * would replay history the model can no longer act on.
    */
   readonly agentPreset?: string
+  /**
+   * Complete non-secret Agent Runtime Profile snapshot selected for this
+   * Session. The runtime-profile Consumer validates its versioned fields
+   * before create or resume; Session persistence retains the JSON verbatim.
+   */
+  readonly runtimeProfile?: JsonValue
 }
 ```
 
@@ -118,6 +124,7 @@ interface CreateSessionOptions {
     readonly origin?: 'subagent'
     readonly delegationDepth?: number
     readonly agentPreset?: string
+    readonly runtimeProfile?: JsonValue
   }
 }
 ```

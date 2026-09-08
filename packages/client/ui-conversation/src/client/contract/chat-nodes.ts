@@ -21,7 +21,7 @@ export type ChatNode<Kind extends ChatNodeKind = ChatNodeKind> = {
 export interface AssistantChatData {
   readonly status: 'running' | 'settled' | 'interrupted'
   readonly turn: number
-  readonly step: number
+  readonly step?: number
   readonly blocks: readonly AssistantBlock[]
   readonly time: number
   readonly usage?: unknown

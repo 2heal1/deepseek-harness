@@ -90,7 +90,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }[T]
 ```
 
-Sources: [`packages/core/session/src/types.ts:340`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:347`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:376`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:408`](../packages/core/session/src/types.ts)
+Sources: [`packages/core/session/src/types.ts:368`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:375`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:404`](../packages/core/session/src/types.ts) · [`packages/core/session/src/types.ts:436`](../packages/core/session/src/types.ts)
 
 ## Events
 
@@ -116,6 +116,76 @@ Sources: [`packages/core/session/src/types.ts:340`](../packages/core/session/src
 ```
 
 Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types.ts)
+
+<a id="agentruntimeactivity--log-only"></a>
+
+#### `agent/runtime/activity` — log-only
+
+```ts persistence-catalog
+/** Bounded redacted product-native activity that never enters model history. */
+'agent/runtime/activity': AgentRuntimeActivity
+```
+
+Source: [`packages/core/agent-runtime/src/types.ts:458`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentruntimefacts--log-only"></a>
+
+#### `agent/runtime/facts` — log-only
+
+```ts persistence-catalog
+/** Complete current non-secret facts for one prepared runtime. */
+'agent/runtime/facts': AgentRuntimeFacts
+```
+
+Source: [`packages/core/agent-runtime/src/types.ts:456`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentsubmissionaccepted--log-only"></a>
+
+#### `agent/submission/accepted` — log-only
+
+```ts persistence-catalog
+/** Router acceptance of one identified submission before Provider work starts. */
+'agent/submission/accepted': {
+  submissionId: SubmissionId
+  messageId: MessageId
+}
+```
+
+Source: [`packages/core/agent-runtime/src/types.ts:437`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentsubmissionsettled--log-only"></a>
+
+#### `agent/submission/settled` — log-only
+
+```ts persistence-catalog
+/** Router-owned terminal result for one accepted submission. */
+'agent/submission/settled': {
+  submissionId: SubmissionId
+  messageId: MessageId
+  settlement:
+    | { kind: 'settled'; turn: number; reason: TurnEndReason }
+    | { kind: 'not-started'; reason: SubmissionNotStartedReason }
+}
+```
+
+Types: [TurnEndReason](subsystems/session.md)
+
+Source: [`packages/core/agent-runtime/src/types.ts:448`](../packages/core/agent-runtime/src/types.ts)
+
+<a id="agentsubmissionstarted--log-only"></a>
+
+#### `agent/submission/started` — log-only
+
+```ts persistence-catalog
+/** Router correlation of one accepted submission to its canonical turn. */
+'agent/submission/started': {
+  submissionId: SubmissionId
+  messageId: MessageId
+  turn: number
+}
+```
+
+Source: [`packages/core/agent-runtime/src/types.ts:442`](../packages/core/agent-runtime/src/types.ts)
 
 ### `agent-preset/*`
 
@@ -210,12 +280,12 @@ Source: [`packages/interaction/user-approval/src/index.ts:67`](../packages/inter
 
 ```ts persistence-catalog
 /** Raw stream chunk — token-level replay fidelity. */
-'assistant/chunk': { turn: number; step: number; chunk: StreamChunk }
+'assistant/chunk': AssistantEventPosition & { chunk: StreamChunk }
 ```
 
 Types: [StreamChunk](subsystems/llm-streaming.md)
 
-Source: [`packages/core/session/src/types.ts:266`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:290`](../packages/core/session/src/types.ts)
 
 <a id="assistantmessage--surface"></a>
 
@@ -232,12 +302,16 @@ Source: [`packages/core/session/src/types.ts:266`](../packages/core/session/src/
  * marker distinguishes that prefix without re-deriving interruption from turn
  * boundaries. An aborted turn with no such event streamed no visible content.
  */
-'assistant/message': { turn: number; step: number; message: AssistantMessage; usage?: TokenUsage; interrupted?: true }
+'assistant/message': AssistantEventPosition & {
+  message: AssistantMessage
+  usage?: TokenUsage
+  interrupted?: true
+}
 ```
 
 Types: [TokenUsage](subsystems/llm-streaming.md)
 
-Source: [`packages/core/session/src/types.ts:277`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:301`](../packages/core/session/src/types.ts)
 
 ### `command/*`
 
@@ -547,7 +621,7 @@ Source: [`packages/plan/plan-mode/src/index.ts:54`](../packages/plan/plan-mode/s
 'request/context': RequestContext
 ```
 
-Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:341`](../packages/core/session/src/types.ts)
 
 <a id="requestheader--log-only"></a>
 
@@ -561,7 +635,7 @@ Source: [`packages/core/session/src/types.ts:313`](../packages/core/session/src/
 'request/header': { header: EpochHeader; reason: RequestHeaderReason }
 ```
 
-Source: [`packages/core/session/src/types.ts:308`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
 
 ### `sandbox/*`
 
@@ -636,7 +710,7 @@ Source: [`packages/schedule/schedule/src/types.ts:219`](../packages/schedule/sch
 'session/end-seed': Record<string, never>
 ```
 
-Source: [`packages/core/session/src/types.ts:336`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:364`](../packages/core/session/src/types.ts)
 
 <a id="sessiontitle--log-only"></a>
 
@@ -678,7 +752,7 @@ Source: [`packages/session/session-title-llm/src/index.ts:43`](../packages/sessi
 'step/end': { turn: number; step: number }
 ```
 
-Source: [`packages/core/session/src/types.ts:256`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:280`](../packages/core/session/src/types.ts)
 
 <a id="stepstart--log-only"></a>
 
@@ -689,7 +763,7 @@ Source: [`packages/core/session/src/types.ts:256`](../packages/core/session/src/
 'step/start': { turn: number; step: number }
 ```
 
-Source: [`packages/core/session/src/types.ts:254`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:278`](../packages/core/session/src/types.ts)
 
 ### `subagent/*`
 
@@ -782,7 +856,7 @@ Source: [`packages/experimental/agent-team/src/types.ts:208`](../packages/experi
 
 Types: [TodoItem](subsystems/session.md)
 
-Source: [`packages/core/session/src/types.ts:303`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:331`](../packages/core/session/src/types.ts)
 
 ### `tool/*`
 
@@ -801,7 +875,7 @@ Source: [`packages/core/session/src/types.ts:303`](../packages/core/session/src/
 
 Types: [CallId](subsystems/core.md)
 
-Source: [`packages/core/session/src/types.ts:283`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:311`](../packages/core/session/src/types.ts)
 
 <a id="toolcode-dispatch--log-only"></a>
 
@@ -876,7 +950,7 @@ Source: [`packages/core/tools/src/types.ts:40`](../packages/core/tools/src/types
 }
 ```
 
-Source: [`packages/core/session/src/types.ts:295`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:323`](../packages/core/session/src/types.ts)
 
 ### `tool-workflow/*`
 
@@ -956,7 +1030,7 @@ Source: [`packages/workflow/tool-workflow/src/types.ts:47`](../packages/workflow
 
 Types: [TurnEndReason](subsystems/session.md)
 
-Source: [`packages/core/session/src/types.ts:252`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:276`](../packages/core/session/src/types.ts)
 
 <a id="turnstart--log-only"></a>
 
@@ -972,7 +1046,7 @@ Source: [`packages/core/session/src/types.ts:252`](../packages/core/session/src/
 'turn/start': { turn: number }
 ```
 
-Source: [`packages/core/session/src/types.ts:243`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:267`](../packages/core/session/src/types.ts)
 
 ### `user/*`
 
@@ -991,7 +1065,7 @@ Source: [`packages/core/session/src/types.ts:243`](../packages/core/session/src/
 'user/message': UserMessage
 ```
 
-Source: [`packages/core/session/src/types.ts:264`](../packages/core/session/src/types.ts)
+Source: [`packages/core/session/src/types.ts:288`](../packages/core/session/src/types.ts)
 
 ### `web/*`
 

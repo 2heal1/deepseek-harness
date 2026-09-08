@@ -7,9 +7,10 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
-import type { ContentBlock, MessageId, UserMessage } from '@deepseek-ai/dsh-llm'
-import type { AgentCancelCause, JsonValue, SessionId, TurnEndReason } from '@deepseek-ai/dsh-session'
+import type { CredentialRef } from '@deepseek-ai/dsh-credentials/types'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { ContentBlock, UserMessage } from '@deepseek-ai/dsh-llm/types'
+import type { AgentCancelCause, JsonValue, SessionId, TurnEndReason } from '@deepseek-ai/dsh-session/types'
 
 /** Identifies one registered runtime provider. */
 export type AgentRuntimeProviderId = Branded<'AgentRuntimeProviderId'>
@@ -296,8 +297,8 @@ export interface AgentRuntimeCreateRequest extends AgentRuntimePrepareBase {
 /** Prepare a runtime against an existing external product session. */
 export interface AgentRuntimeResumeRequest extends AgentRuntimePrepareBase {
   readonly kind: 'resume'
-  /** External identity recovered from durable runtime facts. */
-  readonly externalSessionId: ExternalSessionId
+  /** External identity recovered from durable runtime facts, absent for in-process runtimes. */
+  readonly externalSessionId?: ExternalSessionId
 }
 
 /** Provider preparation request selected by the Router. */
@@ -333,6 +334,12 @@ export interface AgentRuntimeSubmissionRequest {
   readonly message: UserMessage
   /** Cancels only this submission. */
   readonly signal: AbortSignal
+  /**
+   * Commit Router-owned start correlation after the Provider opens the
+   * canonical turn and before it appends model-visible input.
+   * @param turn - allocated Harness turn.
+   */
+  started(turn: number): void
 }
 
 /** Terminal provider result for one started submission. */
@@ -422,6 +429,34 @@ export interface SubmissionReceipt {
   readonly started: Promise<SubmissionStart>
   /** Resolves exactly once after the durable settlement event is dispatched. */
   readonly settled: Promise<SubmissionSettlement>
+}
+
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** Router acceptance of one identified submission before Provider work starts. */
+    'agent/submission/accepted': {
+      submissionId: SubmissionId
+      messageId: MessageId
+    }
+    /** Router correlation of one accepted submission to its canonical turn. */
+    'agent/submission/started': {
+      submissionId: SubmissionId
+      messageId: MessageId
+      turn: number
+    }
+    /** Router-owned terminal result for one accepted submission. */
+    'agent/submission/settled': {
+      submissionId: SubmissionId
+      messageId: MessageId
+      settlement:
+        | { kind: 'settled'; turn: number; reason: TurnEndReason }
+        | { kind: 'not-started'; reason: SubmissionNotStartedReason }
+    }
+    /** Complete current non-secret facts for one prepared runtime. */
+    'agent/runtime/facts': AgentRuntimeFacts
+    /** Bounded redacted product-native activity that never enters model history. */
+    'agent/runtime/activity': AgentRuntimeActivity
+  }
 }
 
 /** Stable runtime failure codes shared by creation, probing, submission, and disposal. */

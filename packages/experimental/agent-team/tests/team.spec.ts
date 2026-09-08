@@ -1050,6 +1050,40 @@ describe('Team mailbox and waiting', () => {
     expect(admitted).toEqual(['first waking', 'second waking'])
   })
 
+  it('shares one in-flight result when recovery and sending dispatch the same message', async () => {
+    const { ctx, lead } = await setup([textResponse('target initial')])
+    const target = await spawn(ctx, lead, 'shared-target')
+    await waitNoAgent(ctx, target.member.id)
+    const message: TeamMessageSnapshot = {
+      id: TeamMessageId('shared-dispatch'),
+      senderId: lead.id,
+      senderName: 'lead',
+      targetId: target.member.id,
+      delivery: 'wakeup',
+      content: content('shared delivery'),
+    }
+    lead.session.append('team/message/queued', {
+      version: 1, teamId: TeamId(lead.id), message,
+    })
+    await ctx.sessions.flush(lead.session)
+
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const followup = vi.spyOn(ctx.subagents, 'followup').mockImplementation(async () => {
+      entered.resolve(undefined)
+      await release.promise
+      return createUserMessage({ content: message.content, source: { kind: 'user' } }).id
+    })
+    const internal = teamInternals(ctx).mailbox
+    const first = internal.tryDispatch(lead, message, SIGNAL)
+    await entered.promise
+    const duplicate = internal.tryDispatch(lead, message, SIGNAL)
+    release.resolve(undefined)
+
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([true, true])
+    expect(followup).toHaveBeenCalledOnce()
+  })
+
   it('deduplicates live target history and contains inspection and delivery failures', async () => {
     const { ctx, lead } = await setup(['hang', textResponse('inactive target initial')])
     const liveStarted = await spawn(ctx, lead, 'live-target')
@@ -1134,6 +1168,24 @@ describe('Team mailbox and waiting', () => {
 
     const inactiveStarted = await spawn(ctx, lead, 'inactive-target')
     await waitNoAgent(ctx, inactiveStarted.member.id)
+    const stored = await ctx.sessionPersistence.inspect(inactiveStarted.member.id)
+    const metaWithoutSeedLength = { ...stored.meta }
+    delete metaWithoutSeedLength.seedLength
+    vi.spyOn(ctx.sessionPersistence, 'inspect').mockResolvedValueOnce({
+      ...stored,
+      meta: metaWithoutSeedLength,
+    })
+    const persistedTargetRecorded = Reflect.get(internal, 'persistedTargetRecorded') as (
+      targetId: SessionId,
+      messageId: TeamMessageId,
+      signal: AbortSignal,
+    ) => Promise<boolean | undefined>
+    await expect(persistedTargetRecorded.call(
+      internal,
+      inactiveStarted.member.id,
+      TeamMessageId('absent-message'),
+      SIGNAL,
+    )).resolves.toBe(false)
     const inspect = vi.spyOn(ctx.sessionPersistence, 'inspect').mockRejectedValueOnce(new Error('inspect unavailable'))
     const uncertain = await ctx.agentTeams.sendMessage(lead, {
       target: 'inactive-target', content: content('inspection failure'), delivery: 'wakeup', signal: SIGNAL,

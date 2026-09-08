@@ -30,6 +30,15 @@ class FakeTransport implements JsonRpcTransportPeer {
 
 const servers: Server[] = []
 
+function receipt(message: ReturnType<typeof createUserMessage>): ReturnType<Agent['submit']> {
+  return {
+    id: `submission-${message.id}` as never,
+    messageId: message.id,
+    started: Promise.resolve({} as never),
+    settled: Promise.resolve({} as never),
+  }
+}
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => new Promise(resolve => server.close(resolve))))
   vi.unstubAllEnvs()
@@ -172,16 +181,16 @@ describe('HarnessSdkJsonRpcServer', () => {
   })
 
   it('queues overlapping prompts for one session without blocking other sessions', async () => {
-    const mainFollowup = vi.fn<Agent['followup']>()
+    const mainSubmit = vi.fn<Agent['submit']>(receipt)
     const mainAgent = ({
       id: SessionId('main'),
-      followup: mainFollowup,
-    } satisfies Pick<Agent, 'id' | 'followup'>) as unknown as Agent
-    const otherFollowup = vi.fn<Agent['followup']>()
+      submit: mainSubmit,
+    } satisfies Pick<Agent, 'id' | 'submit'>) as unknown as Agent
+    const otherSubmit = vi.fn<Agent['submit']>(receipt)
     const otherAgent = ({
       id: SessionId('other'),
-      followup: otherFollowup,
-    } satisfies Pick<Agent, 'id' | 'followup'>) as unknown as Agent
+      submit: otherSubmit,
+    } satisfies Pick<Agent, 'id' | 'submit'>) as unknown as Agent
     const mainHandle = { agent: mainAgent, dispose: vi.fn(() => Promise.resolve()) }
     const otherHandle = { agent: otherAgent, dispose: vi.fn(() => Promise.resolve()) }
     const create = vi.fn(async (options: { sessionId: SessionId }) =>
@@ -202,20 +211,20 @@ describe('HarnessSdkJsonRpcServer', () => {
     expect((await prompt('main', 'overlap')).messageId).toBeTypeOf('string')
     expect((await prompt('other', 'independent')).messageId).toBeTypeOf('string')
 
-    expect(mainFollowup).toHaveBeenCalledTimes(2)
-    expect(otherFollowup).toHaveBeenCalledOnce()
+    expect(mainSubmit).toHaveBeenCalledTimes(2)
+    expect(otherSubmit).toHaveBeenCalledOnce()
     await server.shutdown()
     expect(mainHandle.dispose).toHaveBeenCalledOnce()
     expect(otherHandle.dispose).toHaveBeenCalledOnce()
   })
 
   it('rejects a prompt for a session whose agent was disposed outside the server', async () => {
-    const followup = vi.fn<Agent['followup']>()
+    const submit = vi.fn<Agent['submit']>(receipt)
     const agent = ({
       id: SessionId('zombie'),
-      followup,
+      submit,
       whenIdle: vi.fn(() => Promise.resolve()),
-    } satisfies Pick<Agent, 'id' | 'followup' | 'whenIdle'>) as unknown as Agent
+    } satisfies Pick<Agent, 'id' | 'submit' | 'whenIdle'>) as unknown as Agent
     const handle = { agent, dispose: vi.fn(() => Promise.resolve()) }
     // The registry drops the agent after creation, modelling an agent-loop-only
     // reload that leaves the server's SessionRecord pointing at a detached agent.
@@ -238,7 +247,7 @@ describe('HarnessSdkJsonRpcServer', () => {
     live = false
     await expect(prompt('after detach')).rejects.toThrow('session agent was disposed outside the server: zombie')
     // The detached agent was never driven by the rejected prompt.
-    expect(followup).toHaveBeenCalledOnce()
+    expect(submit).toHaveBeenCalledOnce()
     await server.shutdown()
   })
 

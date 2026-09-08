@@ -51,6 +51,23 @@ function requireOpenStep(
   }
 }
 
+/** Assert that assistant output belongs either to the open Native step or the open external turn. */
+function requireAssistantPosition(
+  trace: SessionTrace,
+  kind: string,
+  event: Extract<SessionEvent, { type: 'assistant/chunk' | 'assistant/message' }>,
+  fail: InvariantFailure,
+): void {
+  if (event.data.step !== undefined) {
+    requireOpenStep(trace, kind, event.data.turn, event.data.step, fail)
+    return
+  }
+  if (trace.openTurn !== event.data.turn
+    || trace.openStep !== null) {
+    fail(`${kind} names external turn ${event.data.turn} but open is turn ${trace.openTurn}/step ${trace.openStep}`)
+  }
+}
+
 /** Validate one candidate event without mutating the committed trace. */
 function validateEvent(
   trace: SessionTrace,
@@ -112,11 +129,11 @@ function validateEvent(
       break
     }
     case 'assistant/chunk': {
-      requireOpenStep(trace, 'assistant/chunk', event.data.turn, event.data.step, fail)
+      requireAssistantPosition(trace, 'assistant/chunk', event, fail)
       break
     }
     case 'assistant/message': {
-      requireOpenStep(trace, 'assistant/message', event.data.turn, event.data.step, fail)
+      requireAssistantPosition(trace, 'assistant/message', event, fail)
       break
     }
     case 'tool/call': {

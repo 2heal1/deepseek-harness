@@ -75,6 +75,7 @@ export class ReactLoopDriver implements AgentDriver {
   /** Whether this loop instance has appended its initial/resume request anchor. */
   private requestHeaderLogged = false
   private readonly runtimeContext: RuntimeContextProjection
+  private submissionStarted: ((turn: number) => void) | undefined
 
   constructor(
     private loopCtx: Context,
@@ -116,6 +117,25 @@ export class ReactLoopDriver implements AgentDriver {
     const resolvedTarget = wakingAfterAbort ? 'next-turn' : target
     this.inbox.splice(resolvedTarget, Infinity, 0, [message])
     if (wakeup) this.wakeDriver(wakingAfterAbort)
+  }
+
+  /**
+   * Start one Router-owned ordinary submission and report its exact turn
+   * after `turn/start` commits but before input enters the first step.
+   * @param message - accepted identified user input.
+   * @param started - Router correlation callback.
+   */
+  submit(message: UserMessage, started: (turn: number) => void): void {
+    if (this.phase.kind !== 'idle' || this.submissionStarted !== undefined) {
+      throw new Error(`agent "${this.id}" already has active work`)
+    }
+    this.submissionStarted = started
+    try {
+      this.send(message, 'next-turn', true)
+    } catch (error: unknown) {
+      this.submissionStarted = undefined
+      throw error
+    }
   }
 
   cancel(cause: AgentCancelCause, options: CancelOptions = {}): void {
@@ -240,6 +260,9 @@ export class ReactLoopDriver implements AgentDriver {
     const turn = phase.turn + 1
     try {
       this.session.append('turn/start', { turn })
+      const submissionStarted = this.submissionStarted
+      this.submissionStarted = undefined
+      submissionStarted?.(turn)
     } catch (error: unknown) {
       this.throwError(error)
     }

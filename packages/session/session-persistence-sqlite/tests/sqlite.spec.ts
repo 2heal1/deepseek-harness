@@ -539,7 +539,7 @@ describe('SessionPersistenceSqlite schema ownership', () => {
 
     const foreignPath = await freshDbPath('dsh-sqlite-foreign-')
     const foreign = new DatabaseSync(foreignPath)
-    foreign.exec(testSql('set-user-version-17'))
+    foreign.exec(testSql('set-user-version-18'))
     foreign.exec(testSql('set-application-id-12345'))
     foreign.close()
     await expect(openDatabase(DatabaseSync, foreignPath, 'wal', DEFAULT_BUSY_TIMEOUT_MS)).rejects.toThrow(/has application id 12345/)
@@ -594,6 +594,7 @@ describe('SessionPersistenceSqlite schema ownership', () => {
       revision: 1,
       delegation_depth: 2,
       agent_preset: 'minimal',
+      runtime_profile: '{"profileId":"main"}',
     }
     expect(rowToMeta(decodeSessionRow(base))).toMatchObject({
       cwd: '/project',
@@ -602,10 +603,15 @@ describe('SessionPersistenceSqlite schema ownership', () => {
       origin: 'subagent',
       delegationDepth: 2,
       agentPreset: 'minimal',
+      runtimeProfile: { profileId: 'main' },
     })
     expect(() => decodeSessionRow({ ...base, created_at: -1 })).toThrow(/created_at/)
     expect(() => decodeSessionRow({ ...base, origin: 'external' })).toThrow(/origin/)
     expect(() => decodeSessionRow({ ...base, delegation_depth: -1 })).toThrow(/delegation_depth/)
+    expect(() => rowToMeta({
+      ...base,
+      runtime_profile: '{"negativeZero":-0}',
+    })).toThrow(/runtime_profile.*lossless JSON/)
   })
 
   it('rejects malformed SQLite row primitives generically', () => {
@@ -621,6 +627,7 @@ describe('SessionPersistenceSqlite schema ownership', () => {
       revision: 1,
       delegation_depth: null,
       agent_preset: null,
+      runtime_profile: null,
     }
     for (const [value, message] of [
       [null, /object/],
@@ -632,6 +639,7 @@ describe('SessionPersistenceSqlite schema ownership', () => {
       [{ ...base, incarnation: 'invalid' }, /incarnation.*UUID/],
       [{ ...base, seed_length: '1' }, /seed_length.*safe integer or null/],
       [{ ...base, agent_preset: 1 }, /agent_preset.*string or null/],
+      [{ ...base, runtime_profile: 1 }, /runtime_profile.*string or null/],
     ] as const) {
       expect(() => decodeSessionRow(value)).toThrow(message)
     }

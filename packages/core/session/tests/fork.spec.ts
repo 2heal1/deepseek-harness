@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, CallId , createMessage } from '@deepseek-ai/dsh-llm'
+import { AgentRuntimeId, AgentRuntimeProviderId } from '@deepseek-ai/dsh-agent-runtime'
 import SessionStore, { Session, SessionForkError, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, TurnEndReason } from '@deepseek-ai/dsh-session'
 
@@ -112,6 +113,85 @@ describe('SessionStore.fork', () => {
       type: 'test/log-only',
       data: { value: 'after execution' },
     })
+  })
+
+  it('inherits the runtime profile by value without the parent runtime identity', async () => {
+    const { ctx, sessions } = await setup()
+    const source = ctx.sessions.create(SessionId('runtime-parent'), {
+      meta: { runtimeProfile: { profileId: 'native', options: { model: 'test' } } },
+    })
+    source.append('agent/runtime/facts', {
+      runtimeId: AgentRuntimeId('parent-runtime'),
+      providerId: AgentRuntimeProviderId('native'),
+      capabilities: [],
+      phase: 'ready',
+    })
+    appendClosedTurn(source, 1, 'hello')
+
+    const child = sessions.fork(source, undefined, SessionId('runtime-child'))
+    const seed = inherited(child)
+
+    expect(seed.some(event => event.type === 'agent/runtime/facts')).toBe(false)
+    expect(seed.map(event => event.seq)).toEqual(seed.map((_, index) => index))
+    expect(child.header.runtimeProfile).toEqual(source.header.runtimeProfile)
+    expect(child.header.runtimeProfile).not.toBe(source.header.runtimeProfile)
+    expect(child.header.seedLength).toBe(source.events.length - 1)
+  })
+
+  it('remaps retained surface references after removing runtime facts', async () => {
+    const { ctx, sessions } = await setup()
+    const source = ctx.sessions.create(SessionId('runtime-reference-parent'))
+    source.append('agent/runtime/facts', {
+      runtimeId: AgentRuntimeId('parent-runtime'),
+      providerId: AgentRuntimeProviderId('native'),
+      capabilities: [],
+      phase: 'ready',
+    })
+    source.append('turn/start', { turn: 1 })
+    const original = source.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'original' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    source.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    source.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'replacement' }],
+      source: { kind: 'plugin', plugin: 'test' },
+    }), {
+      surfaceOp: { op: 'replace', start: original.seq, end: original.seq },
+      sourceEventSeqs: [original.seq],
+    })
+
+    const child = sessions.fork(source, undefined, SessionId('runtime-reference-child'))
+    const replacement = inherited(child).at(-1)
+    expect(replacement).toMatchObject({
+      seq: 3,
+      sourceEventSeqs: [1],
+      surfaceOp: { op: 'replace', start: 1, end: 1 },
+    })
+  })
+
+  it('rejects a fork reference to excluded runtime facts', async () => {
+    const { ctx, sessions } = await setup()
+    const source = ctx.sessions.create(SessionId('runtime-reference-invalid'))
+    const runtimeFacts = source.append('agent/runtime/facts', {
+      runtimeId: AgentRuntimeId('parent-runtime'),
+      providerId: AgentRuntimeProviderId('native'),
+      capabilities: [],
+      phase: 'ready',
+    })
+    source.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'derived from runtime identity' }],
+      source: { kind: 'plugin', plugin: 'test' },
+    }), {
+      surfaceOp: 'append',
+      sourceEventSeqs: [runtimeFacts.seq],
+    })
+
+    expect(() => sessions.fork(
+      source,
+      undefined,
+      SessionId('runtime-reference-invalid-child'),
+    )).toThrow(/references excluded runtime fact/)
   })
 
   it('forks from an earlier turn boundary even when the source currently has an open tail', async () => {

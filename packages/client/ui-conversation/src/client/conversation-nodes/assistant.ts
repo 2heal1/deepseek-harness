@@ -26,7 +26,7 @@ declare module '@deepseek-ai/dsh-client-runtime/client' {
 
 interface AssistantState {
   readonly turn: number
-  readonly step: number
+  readonly step: number | undefined
   readonly blocks: readonly (AssistantBlock | undefined)[]
   readonly firstVisibleSeq: number | undefined
   readonly firstVisibleTime: number | undefined
@@ -36,7 +36,7 @@ interface AssistantState {
   readonly usage: unknown
 }
 
-function initialState(turn: number, step: number): AssistantState {
+function initialState(turn: number, step: number | undefined): AssistantState {
   return {
     turn,
     step,
@@ -155,7 +155,7 @@ function finalNode(
       messageId: event.data.message.id,
       time: event.time,
       turn: state.turn,
-      step: state.step,
+      ...state.step === undefined ? {} : { step: state.step },
       blocks: toAssistantBlocks(event.data.message.content),
       usage: event.data.usage,
       timing: {
@@ -175,7 +175,7 @@ function finalNode(
     seq: boundary.seq + CHAT_SYNTHETIC_SEQ_OFFSETS.interruptedAssistant,
     time: boundary.time,
     turn: state.turn,
-    step: state.step,
+    ...state.step === undefined ? {} : { step: state.step },
     blocks,
     interrupted: true,
   }
@@ -232,7 +232,7 @@ function projectAssistant(context: ConversationNodeContext<AssistantState>): Ass
     data: {
       status,
       turn: state.turn,
-      step: state.step,
+      ...state.step === undefined ? {} : { step: state.step },
       blocks,
       time,
       ...state.usage === undefined ? {} : { usage: state.usage },
@@ -285,7 +285,7 @@ export const assistantDefinition: ConversationNodeDefinition<AssistantState> = {
   buildLocationData: (context, scope) => {
     if (scope !== 'step') return null
     const projected = projectAssistant(context)
-    if (projected === undefined) return null
+    if (projected === undefined || projected.data.step === undefined) return null
     return {
       kind: 'step',
       turn: projected.data.turn,

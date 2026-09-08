@@ -31,6 +31,7 @@ export type {
   MessageSource,
   MessageSourceMap,
   ModelMessageSource,
+  RuntimeMessageSource,
   ToolMessageSource,
   ToolResultMessage,
   UserMessage,

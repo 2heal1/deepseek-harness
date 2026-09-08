@@ -459,7 +459,14 @@ export class SubagentContinuationManager {
         childId,
         provider: spec.provider,
         parent,
-        create: { seed, meta: childSessionMeta(parent, childDepth, lineageSeedLength), delegatedPolicies },
+        create: {
+          seed,
+          meta: {
+            ...childSessionMeta(parent, childDepth, lineageSeedLength),
+            seedLength: lineageSeedLength,
+          },
+          delegatedPolicies,
+        },
         agentOptions: resolveChildAgentOptions(parent, request.agentOptions, childDepth),
         composition: { persona: request.persona, toolFilter: request.toolFilter },
         signal: spec.signal,

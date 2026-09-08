@@ -52,6 +52,7 @@ import SessionStore, {
   packChunkRuns,
   SESSION_FORMAT_VERSION,
   SessionId,
+  type JsonValue,
   type Session,
   type SessionEvent,
   type SessionHeader,
@@ -632,17 +633,27 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     ctx,
     workspaceCwd,
     persistenceRoot,
-    // Barrier stack: the in-process turn/end identifies the session, its
-    // explicit flush makes the transcript durable, and the caller's browser
-    // settled-poll comes last because host completion strictly precedes render.
+    // A fresh root prompt owns a durable receipt; Native continuation input
+    // retains its inbox lifecycle and closes at turn/end without a receipt.
+    // Flush after the matching terminal event before callers inspect output.
     whenTurnSettled(timeoutMs = mode === 'record' ? 180_000 : 30_000): Promise<SessionId> {
       return new Promise<SessionId>((resolveSettled, reject) => {
+        let receipt: { sessionId: SessionId; submissionId: string } | undefined
         const timer = setTimeout(() => {
           off()
-          reject(new Error(`no turn/end within ${timeoutMs}ms`))
+          reject(new Error(`no submission settlement or continuation turn/end within ${timeoutMs}ms`))
         }, timeoutMs)
         const off = ctx.on('session/event', (session: Session, event: SessionEvent) => {
-          if (event.type !== 'turn/end') return
+          if (event.type === 'agent/submission/accepted') {
+            receipt ??= { sessionId: session.id, submissionId: event.data.submissionId }
+            return
+          }
+          const receiptSettled = event.type === 'agent/submission/settled'
+            && receipt?.sessionId === session.id
+            && receipt.submissionId === event.data.submissionId
+          const continuationSettled = event.type === 'turn/end'
+            && receipt === undefined
+          if (!receiptSettled && !continuationSettled) return
           clearTimeout(timer)
           off()
           ctx.sessions.flush(session)
@@ -768,15 +779,20 @@ export async function seedSession(
   const events = parseSessionLog(realizeSeedFixture(scaffold, fixtureText, id))
   if (events.length === 0) throw new Error('seed fixture has no events')
   const last = events[events.length - 1]!
-  // An open final turn would be mutated by resume's crash repair on first
-  // open; a committed seed must be a closed recording.
-  if (last.type !== 'turn/end') throw new Error(`seed fixture must end in turn/end, got ${last.type}`)
+  // Root submissions end with their durable settlement; internal child runs
+  // have no receipt and end with turn/end. Both represent a closed recording.
+  if (last.type !== 'turn/end' && last.type !== 'agent/submission/settled') {
+    throw new Error(`seed fixture must end in turn/end or agent/submission/settled, got ${last.type}`)
+  }
   const meta: SessionHeader = {
     version: SESSION_FORMAT_VERSION,
     id: SessionId(id),
     createdAt: Date.now() - 60_000,
     cwd: scaffold.workspaceCwd,
     delegationDepth: 0,
+    runtimeProfile: scaffold.ctx.agentRuntimeProfiles.resolve(undefined, {
+      cwd: scaffold.workspaceCwd,
+    }) as unknown as JsonValue,
     ...agentPreset === undefined ? {} : { agentPreset },
   }
   await persistSeedSession(scaffold, meta, events)

@@ -198,6 +198,20 @@ describe('Session', () => {
       content: [{ type: 'text', text: 'content' }],
       source: { kind: 'model', provider: 'mock', model: 'mock' },
     }
+    const runtimeAssistant = {
+      ...assistant,
+      source: { kind: 'runtime', provider: 'external', source: 'protocol' },
+    }
+    const runtimePosition = {
+      turn: 1,
+      provenance: {
+        kind: 'runtime',
+        provider: 'external',
+        source: 'protocol',
+        submissionId: 'submission-1',
+      },
+      message: runtimeAssistant,
+    }
     const tool = {
       id: 'tool',
       role: 'user',
@@ -251,7 +265,89 @@ describe('Session', () => {
             message: { ...assistant, source: { kind: 'user' } },
           },
         },
-        message: 'message must have model source',
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime provider',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: {
+            ...runtimePosition,
+            message: { ...runtimeAssistant, source: { ...runtimeAssistant.source, provider: '' } },
+          },
+        },
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime source protocol',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: {
+            ...runtimePosition,
+            message: { ...runtimeAssistant, source: { ...runtimeAssistant.source, source: 'stdio' } },
+          },
+        },
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime step',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: { ...runtimePosition, step: 1 },
+        },
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime provenance',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: { ...runtimePosition, provenance: null },
+        },
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime provenance kind',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: {
+            ...runtimePosition,
+            provenance: { ...runtimePosition.provenance, kind: 'model' },
+          },
+        },
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime provenance provider',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: {
+            ...runtimePosition,
+            provenance: { ...runtimePosition.provenance, provider: 'other' },
+          },
+        },
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime provenance protocol',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: {
+            ...runtimePosition,
+            provenance: { ...runtimePosition.provenance, source: 'stdio' },
+          },
+        },
+        message: 'message must have model or runtime protocol source',
+      },
+      {
+        name: 'runtime provenance submission',
+        event: {
+          type: 'assistant/message', seq: 0, time: 1, surfaceOp: 'append',
+          data: {
+            ...runtimePosition,
+            provenance: { ...runtimePosition.provenance, submissionId: '' },
+          },
+        },
+        message: 'message must have model or runtime protocol source',
       },
       {
         name: 'tool source',
@@ -300,6 +396,16 @@ describe('Session', () => {
         name,
       ).toThrow(message)
     }
+
+    const runtimeEvent = {
+      type: 'assistant/message',
+      seq: 0,
+      time: 1,
+      surfaceOp: 'append',
+      data: runtimePosition,
+    } as unknown as SessionEvent
+    expect(() => Session.create(SessionId('runtime-assistant'), [runtimeEvent]))
+      .not.toThrow()
   })
 
   it('snapshots message events without validating plugin-owned block details', () => {
@@ -982,6 +1088,7 @@ describe('Session', () => {
       cwd: '/accepted',
       parentSession: SessionId('parent'),
       seedLength: 2,
+      runtimeProfile: { profileId: 'external' },
     }
 
     const session = Session.create(SessionId('header-owned'), undefined, input)
@@ -994,6 +1101,7 @@ describe('Session', () => {
       cwd: '/accepted',
       parentSession: 'parent',
       seedLength: 2,
+      runtimeProfile: { profileId: 'external' },
     })
     expect(session.header).not.toBe(input)
     expect(Object.isFrozen(session.header)).toBe(true)
@@ -1031,6 +1139,12 @@ describe('Session', () => {
       id: SessionId('other'),
       createdAt: 123,
     })).toThrow(/does not match session id/)
+    expect(() => Session.fromRestore(SessionId('header-invalid'), [], {
+      version: SESSION_FORMAT_VERSION,
+      id: SessionId('header-invalid'),
+      createdAt: 123,
+      runtimeProfile: 1n,
+    } as unknown as SessionHeader)).toThrow(/runtimeProfile must be lossless JSON/)
   })
 
   it('rejects invalid scalar fields in an explicitly supplied header', () => {
@@ -1299,6 +1413,7 @@ describe('SessionStore', () => {
       { meta: { parentSession: 1n }, error: /header is not losslessly JSON-serializable/ },
       { meta: { cwd: 1 }, error: /header cwd must be a string/ },
       { meta: { parentSession: 1 }, error: /header parentSession must be a string/ },
+      { meta: { runtimeProfile: 1n }, error: /header is not losslessly JSON-serializable/ },
       { meta: { createdAt: '123' }, error: /header createdAt must be a non-negative safe integer/ },
       { meta: { createdAt: 1.5 }, error: /header createdAt must be a non-negative safe integer/ },
       { meta: { createdAt: -1 }, error: /header createdAt must be a non-negative safe integer/ },

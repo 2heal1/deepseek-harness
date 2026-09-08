@@ -117,13 +117,12 @@ async function run(ctx: Context, task: string, io: HeadlessIo): Promise<void> {
       installModelSelection(agentCtx, selected)
     },
   })
-  await agent.whenIdle()
   const firstSeq = agent.session.seq
-  agent.followup(createUserMessage({
+  const receipt = agent.submit(createUserMessage({
     content: [{ type: 'text', text: task }],
     source: { kind: 'user' },
   }))
-  await agent.whenIdle()
+  await receipt.settled
   await sessions.flush(agent.session)
   const outcome = summarize(agent.session.events, firstSeq)
   io.stdout.write(outcome.text + '\n')

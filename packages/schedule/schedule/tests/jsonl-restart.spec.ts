@@ -6,9 +6,12 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
+import {
+  mountAgentLoopTestDependencies,
+  mountNativeTestRuntimeProfiles,
+} from '@deepseek-ai/dsh-agent-loop-testkit'
 import { LlmAdapter, type GenerateOptions, type StreamChunk } from '@deepseek-ai/dsh-llm'
-import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId, type JsonValue } from '@deepseek-ai/dsh-session'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import * as toolSchedule from '../src/index.ts'
 import {
@@ -44,6 +47,7 @@ async function mountPersistence(root: string): Promise<Context> {
   contexts.push(ctx)
   await ctx.plugin(SessionStore)
   await ctx.plugin(JsonlSessionPersistence, { root, compression: 'none' })
+  await mountNativeTestRuntimeProfiles(ctx)
   return ctx
 }
 
@@ -87,7 +91,16 @@ describe('Schedule production JSONL restart', () => {
     const sessionId = SessionId('schedule-jsonl-restart')
     const first = await mountPersistence(root)
 
-    const pending = first.sessions.create(sessionId, { meta: { cwd: '/tmp' } })
+    const pending = first.sessions.create(sessionId, {
+      meta: {
+        cwd: '/tmp',
+        runtimeProfile: first.agentRuntimeProfiles.resolve('native', {
+          cwd: '/tmp',
+          model: 'mock',
+          nativeLlmProvider: 'mock',
+        }) as unknown as JsonValue,
+      },
+    })
     const pendingRecord = createAfterScheduleRecord(
       ScheduleId('schedule-1'), 'restart reminder', 1, Date.now() - 60_000,
     )

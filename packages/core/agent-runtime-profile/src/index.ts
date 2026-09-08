@@ -424,6 +424,172 @@ function validateProfile(id: string, profile: RuntimeProfileConfig): void {
   json(`Runtime Profile "${id}" permission policy`, profile.permissions.policy)
 }
 
+/** Require one plain JSON record while restoring a durable snapshot. */
+function snapshotRecord(
+  value: unknown,
+  label: string,
+): Record<string, JsonValue> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${label} must be a JSON object`)
+  }
+  return value as Record<string, JsonValue>
+}
+
+/** Require one persisted Runtime Profile string field. */
+function snapshotString(value: JsonValue | undefined, label: string): string {
+  if (typeof value !== 'string') {
+    throw new TypeError(`${label} must be a string`)
+  }
+  return value
+}
+
+/** Validate one complete persisted Runtime Profile snapshot. */
+function restoreSnapshot(value: JsonValue | undefined): RuntimeProfileSnapshot {
+  if (value === undefined) {
+    throw new AgentRuntimeError({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'resume',
+      message: 'session header has no Runtime Profile snapshot',
+    })
+  }
+  try {
+    const root = snapshotRecord(value, 'Runtime Profile snapshot')
+    const profileId = snapshotString(root['profileId'], 'Runtime Profile id')
+    const provider = snapshotRecord(root['provider'], 'Runtime Profile provider')
+    profileIdentifier('Runtime Profile id', profileId)
+    profileIdentifier(
+      'runtime provider id',
+      snapshotString(provider['id'], 'runtime provider id'),
+    )
+    nonNegativeInteger('Runtime Profile schemaVersion', Number(root['schemaVersion']))
+    nonNegativeInteger('Runtime Profile settingsRevision', Number(root['settingsRevision']))
+    nonNegativeInteger(
+      'Runtime Profile provider optionsVersion',
+      Number(provider['optionsVersion']),
+    )
+
+    const launch = snapshotRecord(root['launch'], 'Runtime Profile launch')
+    if (typeof launch['executable'] !== 'string' || launch['executable'].length === 0) {
+      throw new TypeError('Runtime Profile executable must be a non-empty string')
+    }
+    if (!Array.isArray(launch['args'])
+      || launch['args'].some(argument => typeof argument !== 'string')) {
+      throw new TypeError('Runtime Profile arguments must be strings')
+    }
+    if (!Array.isArray(launch['ambientEnv'])
+      || launch['ambientEnv'].some(name => typeof name !== 'string')) {
+      throw new TypeError('Runtime Profile ambientEnv must contain strings')
+    }
+    uniqueStrings('Runtime Profile ambientEnv', launch['ambientEnv'] as string[])
+    const environment = snapshotRecord(launch['env'], 'Runtime Profile environment')
+    for (const [name, literal] of Object.entries(environment)) {
+      environmentName('Runtime Profile environment name', name)
+      if (typeof literal !== 'string') {
+        throw new TypeError('Runtime Profile environment values must be strings')
+      }
+    }
+    const resolution = snapshotRecord(
+      launch['resolution'],
+      'Runtime Profile executable resolution',
+    )
+    if (resolution['kind'] === 'search-path') {
+      if (!Array.isArray(resolution['paths'])
+        || resolution['paths'].some(path => typeof path !== 'string')) {
+        throw new TypeError('Runtime Profile search paths must be strings')
+      }
+    } else if (resolution['kind'] !== 'absolute') {
+      throw new TypeError('Runtime Profile executable resolution is invalid')
+    }
+    const cwd = snapshotRecord(launch['cwd'], 'Runtime Profile cwd policy')
+    if (cwd['kind'] !== 'session-workspace'
+      && cwd['kind'] !== 'parent-workspace'
+      && (cwd['kind'] !== 'fixed'
+        || typeof cwd['path'] !== 'string'
+        || cwd['path'].length === 0)) {
+      throw new TypeError('Runtime Profile cwd policy is invalid')
+    }
+
+    const model = snapshotRecord(root['model'], 'Runtime Profile model policy')
+    if (typeof model['allowSessionOverride'] !== 'boolean'
+      || model['default'] !== undefined && typeof model['default'] !== 'string') {
+      throw new TypeError('Runtime Profile model policy is invalid')
+    }
+    const permissions = snapshotRecord(
+      root['permissions'],
+      'Runtime Profile permissions',
+    )
+    if (permissions['enforcement'] !== 'required'
+      && permissions['enforcement'] !== 'best-effort') {
+      throw new TypeError('Runtime Profile permission enforcement is invalid')
+    }
+    if (permissions['approval'] !== 'unattended-fail-closed') {
+      throw new TypeError('Runtime Profile approval policy is invalid')
+    }
+    const nativeTools = snapshotRecord(root['nativeTools'], 'Runtime Profile native tools')
+    const harnessTools = snapshotRecord(root['harnessTools'], 'Runtime Profile Harness tools')
+    for (const [label, tools] of [
+      ['Runtime Profile native tools', nativeTools['allowed']],
+      ['Runtime Profile Harness tools', harnessTools['allowed']],
+    ] as const) {
+      if (!Array.isArray(tools) || tools.some(tool => typeof tool !== 'string')) {
+        throw new TypeError(`${label} must contain strings`)
+      }
+      uniqueStrings(label, tools as string[])
+    }
+    if (harnessTools['transport'] !== 'none' && harnessTools['transport'] !== 'mcp') {
+      throw new TypeError('Runtime Profile Harness tool transport is invalid')
+    }
+    if (harnessTools['transport'] === 'none'
+      && (harnessTools['allowed'] as JsonValue[]).length > 0) {
+      throw new TypeError('Runtime Profile cannot allow Harness tools with transport "none"')
+    }
+    if (!Array.isArray(root['credentials'])) {
+      throw new TypeError('Runtime Profile credentials must be an array')
+    }
+    const credentialTargets = new Set<string>()
+    for (const entry of root['credentials']) {
+      const mapping = snapshotRecord(entry, 'Runtime Profile credential mapping')
+      const target = snapshotString(
+        mapping['target'],
+        'Runtime Profile credential target',
+      )
+      environmentName('Runtime Profile credential target', target)
+      if (credentialTargets.has(target)) {
+        throw new TypeError(`Runtime Profile assigns credential target "${target}" more than once`)
+      }
+      credentialTargets.add(target)
+      if (typeof mapping['credentialRef'] !== 'string') {
+        throw new TypeError('Runtime Profile credential reference must be a string')
+      }
+      credentialRef(mapping['credentialRef'])
+    }
+    const deadlines = snapshotRecord(root['deadlines'], 'Runtime Profile deadlines')
+    for (const field of ['startupMs', 'turnMs', 'shutdownMs', 'terminationMs'] as const) {
+      positiveInteger(`Runtime Profile ${field}`, Number(deadlines[field]))
+    }
+    const capacity = snapshotRecord(root['capacity'], 'Runtime Profile capacity')
+    positiveInteger(
+      'Runtime Profile maxConcurrentRuns',
+      Number(capacity['maxConcurrentRuns']),
+    )
+    if (provider['options'] === undefined
+      || root['product'] === undefined
+      || permissions['policy'] === undefined) {
+      throw new TypeError('Runtime Profile snapshot omits required JSON values')
+    }
+    const snapshot = snapshotJsonValue(root)
+    if (snapshot === undefined) throw new TypeError('Runtime Profile snapshot must be lossless JSON')
+    return deepFreeze(snapshot as unknown as RuntimeProfileSnapshot)
+  } catch (error: unknown) {
+    const cause = error as Error
+    throw new AgentRuntimeError({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'resume',
+      message: `stored Runtime Profile snapshot is invalid: ${cause.message}`,
+    }, { cause })
+  }
+}
+
 /** Settings-backed profile resolver shared by the Agent Router and subagent routes. */
 export class AgentRuntimeProfiles extends Service {
   static Config: z<AgentRuntimeProfileSettings> = z.object({
@@ -533,6 +699,15 @@ export class AgentRuntimeProfiles extends Service {
       })
     }
     return this.snapshot(wanted, profile, this.settingsRevision(), overrides)
+  }
+
+  /**
+   * Validate and detach the Runtime Profile snapshot stored in a Session Header.
+   * @param value - persisted non-secret JSON snapshot.
+   * @returns complete immutable snapshot independent of current Settings.
+   */
+  restore(value: JsonValue | undefined): RuntimeProfileSnapshot {
+    return restoreSnapshot(value)
   }
 
   /**

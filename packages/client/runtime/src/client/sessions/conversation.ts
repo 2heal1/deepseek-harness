@@ -36,7 +36,8 @@ export interface AssistantRequestConfig {
 /** Stable provider/model identity reported for one completed request. */
 export interface AssistantProvenanceView {
   provider: string
-  model: string
+  model?: string
+  source?: 'protocol'
 }
 
 /** Assistant content blocks sorted by what the UI cares about
@@ -105,7 +106,7 @@ export interface AssistantMessageNode {
   /** Unix epoch ms from the source session event (or turn/end when frozen from a partial). */
   time: number
   turn: number
-  step: number
+  step?: number
   blocks: readonly AssistantBlock[]
   usage?: unknown
   provenance?: AssistantProvenanceView
@@ -327,7 +328,7 @@ export interface QueuedMessage {
 /** In-progress assistant output (chunk accumulator product). */
 export interface PartialAssistant {
   turn: number
-  step: number
+  step?: number
   blocks: readonly AssistantBlock[]
 }
 

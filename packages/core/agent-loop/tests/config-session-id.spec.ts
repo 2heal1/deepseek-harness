@@ -299,7 +299,7 @@ describe('config-driven session id', () => {
       const ctx = await makeCoreContext()
       await ctx.plugin(JsonlSessionPersistence, { root })
       const preparing = Promise.withResolvers<SessionPreparation>()
-      vi.spyOn(ctx.sessionPersistence, 'prepare').mockReturnValue(preparing.promise)
+      const prepare = vi.spyOn(ctx.sessionPersistence, 'prepare').mockReturnValue(preparing.promise)
       const released = vi.fn()
       const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => undefined)
       const failures: unknown[] = []
@@ -308,6 +308,7 @@ describe('config-driven session id', () => {
       const loop = await ctx.plugin(AgentLoop, {
         agents: [{ id: 'main', sessionId: SessionId('config-exact-dispose'), model: 'mock' }],
       })
+      await expect.poll(() => prepare).toHaveBeenCalledOnce()
       await loop.dispose()
       if (outcome === 'resolve') {
         preparing.resolve(SessionPreparation.create(
@@ -413,7 +414,10 @@ describe('config-driven session id', () => {
     await ctx1.plugin(AgentLoop, { agents: [] })
     await ctx1.plugin(JsonlSessionPersistence, { root })
     ctx1.llm.registerAdapter(['mock'], new MockAdapter([textResponse('first')]))
-    const a1 = (await ctx1.agents.create({ sessionId: SessionId('sticky-1') })).agent
+    const a1 = (await ctx1.agents.create({
+      sessionId: SessionId('sticky-1'),
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })).agent
     a1.followup(createUserMessage({ content: [{ type: 'text', text: 'remember me' }], source: { kind: 'user' } }))
     await waitForIdle(ctx1, a1)
     await ctx1.fiber.dispose()
@@ -428,12 +432,20 @@ describe('config-driven session id', () => {
     await ctx2.plugin(AgentRegistry)
     await ctx2.plugin(AgentRuntimeRegistry)
     await mountNativeTestRuntimeRouter(ctx2)
+    const failures: unknown[] = []
+    ctx2.on('agent-loop/config-start-failed', ({ error }) => { failures.push(error) })
     await ctx2.plugin(AgentLoop, { agents: [{ id: SessionId('main'), provider: 'mock', model: 'mock', resumeSessionId: SessionId('sticky-1') }] })
     await ctx2.plugin(JsonlSessionPersistence, { root })
     ctx2.llm.registerAdapter(['mock'], new MockAdapter([textResponse('second')]))
 
     // The deferred resume runs after the backend is available.
-    await expect.poll(() => ctx2.agents.get(SessionId('sticky-1')), { timeout: 5_000 }).toBeDefined()
+    await expect.poll(() => ({
+      agentCreated: ctx2.agents.get(SessionId('sticky-1')) !== undefined,
+      failures,
+    }), { timeout: 5_000 }).toEqual({
+      agentCreated: true,
+      failures: [],
+    })
     const resumed = ctx2.agents.get(SessionId('sticky-1'))!
     // The live session id IS the resumed id (NOT a fresh ${id}-session-<uuid>),
     // and the prior turn's user message is in the derived history.

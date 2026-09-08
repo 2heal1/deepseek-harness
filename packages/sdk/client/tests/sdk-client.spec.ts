@@ -73,24 +73,37 @@ describe('DeepSeekHarness', () => {
         params: {
           sessionId: 'owned',
           event: {
-            type: 'agent/inbox/spliced',
+            type: 'agent/submission/accepted',
             seq: 0,
             time: 0,
             data: {
-              target: 'next-turn',
-              start: 0,
-              inserted: [{ id: 'accepted-message', role: 'user', content: [], source: { kind: 'user' } }],
+              submissionId: 'accepted-submission',
+              messageId: 'accepted-message',
             },
           },
         },
       },
-      { method: 'session.status', params: { sessionId: 'owned', status: 'idle' } },
+      {
+        method: 'session.event',
+        params: {
+          sessionId: 'owned',
+          event: {
+            type: 'agent/submission/settled',
+            seq: 1,
+            time: 1,
+            data: { submissionId: 'accepted-submission' },
+          },
+        },
+      },
     ] as HarnessNotification[]
     let closed = false
     const harness = {
       start: () => Promise.resolve(),
       client: {
-        prompt: () => Promise.resolve('accepted-message'),
+        prompt: () => Promise.resolve({
+          messageId: 'accepted-message',
+          submissionId: 'accepted-submission',
+        }),
         subscribeSessionTree: () => ({
           next: async () => {
             const notification = notifications.shift()
@@ -107,8 +120,9 @@ describe('DeepSeekHarness', () => {
     const result = await new HarnessSession(harness, 'owned').run('go')
 
     expect(result.notifications.map(notification => notification.method))
-      .toEqual(['session.event', 'session.status'])
-    expect(result.events.map(event => event.type)).toEqual(['agent/inbox/spliced'])
+      .toEqual(['session.event', 'session.event'])
+    expect(result.events.map(event => event.type))
+      .toEqual(['agent/submission/accepted', 'agent/submission/settled'])
     expect(closed).toBe(true)
   })
 
@@ -117,7 +131,8 @@ describe('DeepSeekHarness', () => {
     const first = await harness.run('say hi')
     expect(first.finalResponse).toBe('turn answer')
     expect(first.events.map(event => event.type)).toEqual([
-      'agent/inbox/spliced', 'turn/start', 'assistant/chunk', 'assistant/message', 'turn/end',
+      'agent/submission/accepted', 'turn/start', 'agent/submission/started',
+      'assistant/chunk', 'assistant/message', 'turn/end', 'agent/submission/settled',
     ])
 
     // Same subprocess, second session: ids differ, protocol state is reusable.
@@ -188,7 +203,8 @@ describe('DeepSeekHarness', () => {
     const identity = await harness.client.initialize({ cwd: inner, provider: 'p', model: 'm' })
     await harness.close()
     // The child spawned under the temp worker dir (its physical cwd)...
-    expect(identity.serverInfo.version).toBe(await realpath(inner))
+    expect(identity.serverInfo.name).toBe(await realpath(inner))
+    expect(identity.serverInfo.version).toBe('0.0.2')
     // ...and the handshake wire cwd went out ABSOLUTE, so the child cannot
     // re-resolve a relative string into dir/worker/worker.
     const records = (await readFile(recordFile, 'utf8')).trim().split('\n')
@@ -227,6 +243,13 @@ describe('DeepSeekHarness', () => {
   it('rejects a malformed initialize result as a protocol error', async () => {
     const harness = harnessWith({ FAKE_MALFORMED: '1' })
     await expect(harness.run('bad')).rejects.toThrow(SdkProtocolError)
+  })
+
+  it('rejects an incompatible SDK protocol version', async () => {
+    const harness = harnessWith({ FAKE_PROTOCOL_VERSION: '0.0.1' })
+    await expect(harness.start()).rejects.toThrow(
+      'unsupported DeepSeek Harness SDK protocol version "0.0.1" (expected "0.0.2")',
+    )
   })
 
   it('supports await using disposal', async () => {

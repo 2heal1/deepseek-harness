@@ -26,7 +26,9 @@ import type { SessionEvent } from './types.ts'
 type DeltaKind = 'text-delta' | 'reasoning-delta' | 'tool-call-delta'
 
 /** A run member: an `assistant/chunk` event whose exact shape the encoder whitelisted. */
-type DeltaEvent = SessionEvent<'assistant/chunk'>
+type DeltaEvent = SessionEvent<'assistant/chunk'> & {
+  data: { turn: number; step: number; chunk: StreamChunk }
+}
 
 /**
  * Fields shared by every packed run: placement, block correlation, and member
