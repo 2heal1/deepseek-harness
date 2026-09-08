@@ -173,7 +173,7 @@ agentRuntime:
       driver: codex-app-server
       launch:
         executable: coding-agent-cli
-        args: [app-server, --stdio]
+        args: []
         cwdPolicy: session-workspace
         ambientEnv: []
       model:
@@ -237,6 +237,8 @@ subagentRoutes:
     maxConcurrentRuns: 3
     toolName: delegate_to_acp_child
 ```
+
+The Codex App Server Driver injects `app-server --stdio`; a Runtime Profile cannot set either reserved protocol argument, including with the Driver-required value.
 
 The settings revision is a concurrency and audit marker, not profile history. At session creation the router resolves defaults and stores a complete non-secret `RuntimeProfileSnapshot`, including credential references but not values, in immutable session metadata. Resume reads that snapshot instead of the currently edited profile. A conflicting caller override, missing provider, or incompatible recorded driver fails explicitly; it never silently starts native execution or a fresh external session.
 
