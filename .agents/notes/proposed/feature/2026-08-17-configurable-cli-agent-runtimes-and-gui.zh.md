@@ -173,7 +173,7 @@ agentRuntime:
       driver: codex-app-server
       launch:
         executable: coding-agent-cli
-        args: [app-server, --stdio]
+        args: []
         cwdPolicy: session-workspace
         ambientEnv: []
       model:
@@ -237,6 +237,8 @@ subagentRoutes:
     maxConcurrentRuns: 3
     toolName: delegate_to_acp_child
 ```
+
+Codex App Server Driver 注入 `app-server --stdio`；Runtime Profile 不能设置任一保留协议参数，即使值与 Driver 要求的值相同。
 
 Settings revision 是并发与审计标记，不是 profile 历史。创建会话时，Router 解析默认值，并在不可变会话元数据中存储完整且不含秘密的 `RuntimeProfileSnapshot`，其中包括凭据引用但不包括值。恢复时读取该快照，而不是当前已编辑的 profile。调用方传入冲突覆盖项、缺少提供方或记录的 Driver 不兼容时必须明确失败；系统不得静默启动原生执行或新的外部会话。
 
