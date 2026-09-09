@@ -306,7 +306,7 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
   }
 
   private write(message: Record<string, unknown>): void {
-    if (this.failure !== undefined) throw this.failure
+    if (this.failure !== undefined) return
     this.output.write(`${JSON.stringify(message)}\n`)
   }
 

@@ -201,7 +201,9 @@ describe('JsonRpcLineTransport', () => {
     await expect(pending).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
     expect(input.isPaused()).toBe(true)
     await expect(transport.request('after-overflow', {})).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
-    expect(() => transport.notify('after-overflow')).toThrow('JSON-RPC input frame exceeds 8 bytes')
+    expect(() => {
+      transport.notify('after-overflow')
+    }).toThrow('JSON-RPC input frame exceeds 8 bytes')
     transport.close()
   })
 
@@ -217,6 +219,23 @@ describe('JsonRpcLineTransport', () => {
 
     expect(failures).toHaveLength(1)
     expect(failures[0]?.message).toBe('JSON-RPC input frame exceeds 8 bytes')
+    transport.close()
+  })
+
+  it('drops a late handler response after terminal input failure', async () => {
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const response = Promise.withResolvers<Record<string, unknown>>()
+    const transport = new JsonRpcLineTransport(input, output)
+    transport.onRequest(() => response.promise)
+    transport.start()
+
+    input.write('{"jsonrpc":"2.0","id":1,"method":"slow"}\n')
+    input.emit('error', new Error('input failed'))
+    response.resolve({ ok: true })
+    await new Promise<void>((resolve) => { setImmediate(resolve) })
+
+    expect(output.read()).toBeNull()
     transport.close()
   })
 

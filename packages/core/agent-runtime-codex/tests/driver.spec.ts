@@ -87,7 +87,20 @@ describe('Codex App Server Driver', () => {
     }
   })
 
-  it.each(['overflow', 'failure', 'cancellation'] as const)(
+  it.each([
+    'overflow',
+    'failure',
+    'cancellation',
+    'success',
+    'max-tokens',
+    'empty',
+    'blank',
+    'non-text',
+    'busy',
+    'timeout',
+    'cleanup-failure',
+    'startup-failure',
+  ] as const)(
     'stops the process and removes launch material after %s',
     async (scenario) => {
       const root = await mkdtemp(join(tmpdir(), 'dsh-codex-overflow-'))
@@ -101,7 +114,7 @@ describe('Codex App Server Driver', () => {
       import { appendFileSync, writeFileSync } from 'node:fs'
       const scenario = ${JSON.stringify(scenario)}
       let buffer = ''
-      const send = value => process.stdout.write(JSON.stringify(value) + '\\n')
+      const send = (...values) => process.stdout.write(values.map(value => JSON.stringify(value)).join('\\n') + '\\n')
       process.stdin.setEncoding('utf8')
       process.stdin.on('data', chunk => {
         buffer += chunk
@@ -110,7 +123,13 @@ describe('Codex App Server Driver', () => {
           if (newline < 0) break
           const frame = JSON.parse(buffer.slice(0, newline))
           buffer = buffer.slice(newline + 1)
-          if (frame.method === 'initialize') send({ id: frame.id, result: {} })
+          if (frame.method === 'initialize') {
+            if (scenario === 'startup-failure') {
+              send({ id: frame.id, error: { code: -32603, message: 'startup failed' } })
+            } else {
+              send({ id: frame.id, result: {} })
+            }
+          }
           if (frame.method === 'thread/start') {
             send({ id: frame.id, result: { thread: { id: 'thread-1', ephemeral: true } } })
           }
@@ -120,7 +139,7 @@ describe('Codex App Server Driver', () => {
             if (scenario === 'overflow') {
               setImmediate(() => process.stdout.write('x'.repeat(513)))
             }
-            if (scenario === 'failure') {
+            if (scenario === 'failure' || scenario === 'cleanup-failure') {
               setImmediate(() => send({
                 method: 'turn/completed',
                 params: {
@@ -132,6 +151,48 @@ describe('Codex App Server Driver', () => {
                   },
                 },
               }))
+            }
+            if (scenario === 'max-tokens') {
+              setImmediate(() => send({
+                method: 'turn/completed',
+                params: {
+                  threadId: 'thread-1',
+                  turn: {
+                    id: 'turn-1',
+                    status: 'failed',
+                    error: { codexErrorInfo: 'contextWindowExceeded' },
+                  },
+                },
+              }))
+            }
+            if (scenario === 'success') {
+              setImmediate(() => {
+                send(
+                  {
+                    method: 'item/agentMessage/delta',
+                    params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'live' },
+                  },
+                  {
+                    method: 'item/completed',
+                    params: {
+                      threadId: 'thread-1',
+                      turnId: 'turn-1',
+                      item: { type: 'agentMessage', text: 'answer', phase: 'final_answer' },
+                    },
+                  },
+                  {
+                    method: 'turn/completed',
+                    params: {
+                      threadId: 'thread-1',
+                      turn: { id: 'turn-1', status: 'completed', error: null },
+                    },
+                  },
+                )
+                setTimeout(() => send({
+                  method: 'item/agentMessage/delta',
+                  params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'late' },
+                }), 10)
+              })
             }
           }
           if (frame.method === 'turn/interrupt') {
@@ -170,7 +231,7 @@ describe('Codex App Server Driver', () => {
               },
               process: {
                 startupTimeoutMs: 1_000,
-                turnTimeoutMs: 1_000,
+                turnTimeoutMs: scenario === 'timeout' ? 20 : 1_000,
                 shutdownTimeoutMs: 1_000,
                 terminationTimeoutMs: 1_000,
                 maxConcurrentRuns: 1,
@@ -185,17 +246,81 @@ describe('Codex App Server Driver', () => {
         const provider = ctx.agentRuntimes.getProvider(AgentRuntimeProviderId('codex-app-server'))
         if (provider === undefined) throw new Error('Codex Provider was not registered')
         const sessionId = 'session-1' as AgentRuntimePrepareRequest['sessionId']
+        const profile = ctx.agentRuntimeProfiles.resolve('codex')
+        if (scenario === 'overflow') {
+          await expect(provider.probe({
+            profile,
+            signal: new AbortController().signal,
+          })).resolves.toMatchObject({
+            permissionEnforcement: 'enforced',
+            protocolVersion: '0.147.0',
+          })
+          for (const policy of [null, [], {}, { sandbox: 'other' }]) {
+            await expect(provider.probe({
+              profile: {
+                ...profile,
+                permissions: {
+                  ...profile.permissions,
+                  policy: policy,
+                },
+              },
+              signal: new AbortController().signal,
+            })).rejects.toThrow('requires the workspace-write unattended permission policy')
+          }
+          await expect(provider.prepare({
+            kind: 'resume',
+            runtimeId: AgentRuntimeId('runtime-resume'),
+            sessionId,
+            profile,
+            agentCtx: {} as Context,
+            sink: {
+              facts() {},
+              assistantChunk() {},
+              assistantMessage() {},
+              activity() {},
+            },
+            signal: new AbortController().signal,
+          })).rejects.toThrow('does not support resume')
+          for (const agent of [
+            undefined,
+            { id: 'other', session: { header: { cwd: workspace } } },
+            { id: sessionId, session: { header: {} } },
+          ]) {
+            await expect(provider.prepare({
+              kind: 'create',
+              runtimeId: AgentRuntimeId('runtime-invalid'),
+              sessionId,
+              profile,
+              agentCtx: { agent } as unknown as Context,
+              sink: {
+                facts() {},
+                assistantChunk() {},
+                assistantMessage() {},
+                activity() {},
+              },
+              signal: new AbortController().signal,
+            })).rejects.toThrow('requires the matching unpublished Agent')
+          }
+        }
+        const chunks: string[] = []
+        const messages: string[] = []
         const sink: AgentRuntimeEventSink = {
           facts() {},
-          assistantChunk() {},
-          assistantMessage() {},
+          assistantChunk(_submissionId, chunk) {
+            if (chunk.kind === 'text-delta') chunks.push(chunk.text)
+          },
+          assistantMessage(_submissionId, message) {
+            for (const block of message.content) {
+              if (block.type === 'text') messages.push(block.text)
+            }
+          },
           activity() {},
         }
-        const runtime = await provider.prepare({
+        const preparing = provider.prepare({
           kind: 'create',
           runtimeId: AgentRuntimeId('runtime-1'),
           sessionId,
-          profile: ctx.agentRuntimeProfiles.resolve('codex'),
+          profile,
           agentCtx: {
             agent: { id: sessionId, session: { header: { cwd: workspace } } },
             agentRuntimeLauncher: ctx.agentRuntimeLauncher,
@@ -203,22 +328,53 @@ describe('Codex App Server Driver', () => {
           sink,
           signal: new AbortController().signal,
         })
+        if (scenario === 'startup-failure') {
+          await expect(preparing).rejects.toThrow('startup failed')
+          await expect(readFile(exitMarker, 'utf8')).resolves.toBe('exited')
+          await expect(readdir(temporaryRoot)).resolves.toEqual([])
+          return
+        }
+        const runtime = await preparing
 
         const submissionId = SubmissionId('submission-1')
         const submissionAbort = new AbortController()
+        const content = scenario === 'empty'
+          ? []
+          : scenario === 'blank'
+            ? [{ type: 'text' as const, text: '  ' }]
+            : scenario === 'non-text'
+              ? [{ type: 'reasoning' as const, text: 'private' }]
+              : [{ type: 'text' as const, text: 'trigger overflow' }]
         const submission = runtime.submit({
           submissionId,
           message: createUserMessage({
-            content: [{ type: 'text', text: 'trigger overflow' }],
+            content,
             source: { kind: 'user' },
           }),
           signal: submissionAbort.signal,
           started() {},
         })
-        if (scenario === 'cancellation') {
+        if (scenario === 'empty' || scenario === 'blank' || scenario === 'non-text') {
+          await expect(submission).rejects.toThrow(
+            scenario === 'non-text' ? 'accepts text-only user input' : 'requires non-empty user input',
+          )
+          runtime.cancel(SubmissionId('other'), { kind: 'user' })
+          await runtime.dispose()
+        } else if (scenario === 'cancellation' || scenario === 'busy') {
           await vi.waitFor(async () => {
             await expect(readFile(turnMarker, 'utf8')).resolves.toBe('started')
           })
+          if (scenario === 'busy') {
+            await expect(runtime.submit({
+              submissionId: SubmissionId('submission-2'),
+              message: createUserMessage({
+                content: [{ type: 'text', text: 'second' }],
+                source: { kind: 'user' },
+              }),
+              signal: new AbortController().signal,
+              started() {},
+            })).rejects.toThrow('already has a running submission')
+          }
           const cause = { kind: 'user' } as const
           submissionAbort.abort(cause)
           runtime.cancel(submissionId, cause)
@@ -226,11 +382,30 @@ describe('Codex App Server Driver', () => {
             reason: { kind: 'aborted', reason: cause },
           })
           await expect(readFile(interruptMarker, 'utf8')).resolves.toBe('interrupted')
+        } else if (scenario === 'success' || scenario === 'max-tokens') {
+          await expect(submission).resolves.toEqual({
+            reason: scenario === 'success' ? { kind: 'completed' } : { kind: 'interrupted' },
+          })
+          if (scenario === 'success') {
+            await new Promise<void>((resolve) => { setTimeout(resolve, 20) })
+            expect(chunks).toEqual(['live'])
+            expect(messages).toEqual(['answer'])
+          }
+          await runtime.dispose()
+        } else if (scenario === 'cleanup-failure') {
+          const dispose = runtime.dispose.bind(runtime)
+          runtime.dispose = async () => {
+            throw new Error('cleanup failed')
+          }
+          await expect(submission).rejects.toThrow('Codex submission and cleanup failed')
+          await dispose()
         } else {
           await expect(submission).rejects.toThrow(
             scenario === 'overflow'
               ? 'JSON-RPC input frame exceeds 512 bytes'
-              : 'Codex turn ended with status failed',
+              : scenario === 'timeout'
+                ? 'exceeded 20ms'
+                : 'Codex turn ended with status failed',
           )
         }
         await expect(readFile(exitMarker, 'utf8')).resolves.toBe('exited')

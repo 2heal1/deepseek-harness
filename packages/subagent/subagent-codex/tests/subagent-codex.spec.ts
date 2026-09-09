@@ -235,12 +235,16 @@ function fakeChild(options: FakeChildOptions = {}): FakeChild {
   }
 }
 
-function defaultWire(child: FakeChild, maxFrameBytes?: number): CodexAppServerWire {
+function defaultWire(
+  child: FakeChild,
+  maxFrameBytes?: number,
+  onAssistantDelta?: (delta: string) => void,
+): CodexAppServerWire {
   return new CodexAppServerWire(
     child.handle.stdout!,
     child.handle.stdin!,
     DEFAULT_CODEX_PERMISSION_MODE,
-    undefined,
+    onAssistantDelta,
     undefined,
     maxFrameBytes === undefined ? undefined : { maxFrameBytes },
   )
@@ -260,12 +264,15 @@ function runSpec(
   }
 }
 
-async function initializeWire(maxFrameBytes?: number): Promise<{
+async function initializeWire(
+  maxFrameBytes?: number,
+  onAssistantDelta?: (delta: string) => void,
+): Promise<{
   readonly child: FakeChild
   readonly wire: CodexAppServerWire
 }> {
   const child = fakeChild()
-  const wire = defaultWire(child, maxFrameBytes)
+  const wire = defaultWire(child, maxFrameBytes, onAssistantDelta)
   wire.start()
   const initializing = wire.initialize(new AbortController().signal)
   const initialize = await child.peer.nextMethod('initialize')
@@ -710,6 +717,55 @@ describe('CodexAppServerWire', () => {
     child.fromChild.write('x'.repeat(129))
 
     await expect(running).rejects.toThrow('JSON-RPC input frame exceeds 128 bytes')
+    wire.close()
+  })
+
+  it('emits only correlated non-empty assistant deltas', async () => {
+    const deltas: string[] = []
+    const { child, wire } = await initializeWire(undefined, (delta) => { deltas.push(delta) })
+    const running = wire.runTurn(['task'], new AbortController().signal)
+    const turnStart = await child.peer.nextMethod('turn/start')
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+    child.peer.send(
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-2', turnId: 'turn-1', delta: 'wrong thread' },
+      },
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-2', delta: 'wrong turn' },
+      },
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: '' },
+      },
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'live' },
+      },
+      agentMessage('answer', 'final_answer'),
+      turnCompleted('completed'),
+    )
+
+    await expect(running).resolves.toMatchObject({ stopReason: 'completed' })
+    expect(deltas).toEqual(['live'])
+    wire.close()
+  })
+
+  it('fails an active turn for a non-string assistant delta', async () => {
+    const { child, wire } = await initializeWire()
+    const running = wire.runTurn(['task'], new AbortController().signal)
+    void running.catch(() => {})
+    const turnStart = await child.peer.nextMethod('turn/start')
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+    child.peer.send({
+      method: 'item/agentMessage/delta',
+      params: { threadId: 'thread-1', turnId: 'turn-1', delta: 42 },
+    })
+
+    await expect(running).rejects.toThrow('invalid agent message delta')
     wire.close()
   })
 

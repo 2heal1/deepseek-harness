@@ -207,14 +207,16 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
 
   constructor(private readonly config: Config) {}
 
-  async probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult> {
-    permissionMode(request.profile.permissions.policy)
-    return {
-      capabilities: CODEX_CAPABILITIES,
-      permissionEnforcement: 'enforced',
-      productVersion: CODEX_PROTOCOL_VERSION,
-      protocolVersion: CODEX_PROTOCOL_VERSION,
-    }
+  probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult> {
+    return Promise.resolve().then(() => {
+      permissionMode(request.profile.permissions.policy)
+      return {
+        capabilities: CODEX_CAPABILITIES,
+        permissionEnforcement: 'enforced',
+        productVersion: CODEX_PROTOCOL_VERSION,
+        protocolVersion: CODEX_PROTOCOL_VERSION,
+      }
+    })
   }
 
   async prepare(request: AgentRuntimePrepareRequest): Promise<PreparedAgentRuntime> {
