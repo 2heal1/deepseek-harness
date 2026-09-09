@@ -10,7 +10,11 @@
 import type { Readable, Writable } from 'node:stream'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
-import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
+import {
+  JsonRpcInputFrameTooLargeError,
+  JsonRpcLineTransport,
+  type JsonRpcLineTransportOptions,
+} from '@deepseek-ai/dsh-sdk-protocol'
 import type { CodexPermissionMode } from './run.ts'
 
 export type { CodexPermissionMode } from './run.ts'
@@ -219,6 +223,7 @@ export class CodexAppServerWire {
   private readonly fatal = Promise.withResolvers<never>()
   private threadId: string | undefined
   private turnId: string | undefined
+  private interruptedTurnId: string | undefined
   private pendingTurnId: string | undefined
   private turnCompleted: PromiseWithResolvers<{
     readonly params: JsonObject
@@ -252,12 +257,13 @@ export class CodexAppServerWire {
     private readonly permissionMode: CodexPermissionMode,
     private readonly onAssistantDelta?: CodexAssistantDeltaObserver,
     private readonly threadPermission?: JsonObject,
+    transportOptions?: JsonRpcLineTransportOptions,
   ) {
-    this.transport = new JsonRpcLineTransport(input, output)
-    // Fatal protocol state can arrive after the current guarded operation has
-    // already settled. Keep the shared rejection observed without inserting
-    // another promise-adoption hop into active races.
+    this.transport = new JsonRpcLineTransport(input, output, transportOptions)
     void this.fatal.promise.catch(() => {})
+    this.transport.onInputFailure((error) => {
+      if (error instanceof JsonRpcInputFrameTooLargeError) this.fail(error)
+    })
     this.transport.onRequest((method, params) => this.handleServerRequest(method, params))
     this.transport.onNotification((method, params) => {
       try {
@@ -405,6 +411,8 @@ export class CodexAppServerWire {
    */
   interrupt(): void {
     if (this.threadId === undefined || this.turnId === undefined || this.closed) return
+    if (this.interruptedTurnId === this.turnId) return
+    this.interruptedTurnId = this.turnId
     void this.transport.request('turn/interrupt', {
       threadId: this.threadId,
       turnId: this.turnId,

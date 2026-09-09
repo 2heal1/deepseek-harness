@@ -189,6 +189,69 @@ describe('JsonRpcLineTransport', () => {
     transport.close()
   })
 
+  it('pauses input and rejects pending work when an unterminated frame exceeds its byte limit', async () => {
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const transport = new JsonRpcLineTransport(input, output, { maxFrameBytes: 8 })
+    transport.start()
+
+    const pending = transport.request('never-replies', {})
+    input.write('012345678')
+
+    await expect(pending).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
+    expect(input.isPaused()).toBe(true)
+    await expect(transport.request('after-overflow', {})).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
+    expect(() => {
+      transport.notify('after-overflow')
+    }).toThrow('JSON-RPC input frame exceeds 8 bytes')
+    transport.close()
+  })
+
+  it('reports terminal input failure once when a frame exceeds its byte limit', async () => {
+    const input = new PassThrough()
+    const transport = new JsonRpcLineTransport(input, new PassThrough(), { maxFrameBytes: 8 })
+    const failures: Error[] = []
+    transport.onInputFailure((error) => { failures.push(error) })
+    transport.start()
+
+    input.write('012345678')
+    input.emit('error', new Error('late stream error'))
+
+    expect(failures).toHaveLength(1)
+    expect(failures[0]?.message).toBe('JSON-RPC input frame exceeds 8 bytes')
+    transport.close()
+  })
+
+  it('drops a late handler response after terminal input failure', async () => {
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const response = Promise.withResolvers<Record<string, unknown>>()
+    const transport = new JsonRpcLineTransport(input, output)
+    transport.onRequest(() => response.promise)
+    transport.start()
+
+    input.write('{"jsonrpc":"2.0","id":1,"method":"slow"}\n')
+    input.emit('error', new Error('input failed'))
+    response.resolve({ ok: true })
+    await new Promise<void>((resolve) => { setImmediate(resolve) })
+
+    expect(output.read()).toBeNull()
+    transport.close()
+  })
+
+  it('rejects a complete multibyte frame by UTF-8 byte length', async () => {
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const transport = new JsonRpcLineTransport(input, output, { maxFrameBytes: 2 })
+    transport.start()
+
+    const pending = transport.request('never-replies', {})
+    input.write('你\n')
+
+    await expect(pending).rejects.toThrow('JSON-RPC input frame exceeds 2 bytes')
+    transport.close()
+  })
+
   it('flush waits for all earlier output writes', async () => {
     const events: string[] = []
     const output = new Writable({

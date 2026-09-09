@@ -28,6 +28,7 @@ flowchart TD
     pkg_agent_default_model["agent-default-model"]
     pkg_agent_loop["agent-loop"]
     pkg_agent_runtime["agent-runtime"]
+    pkg_agent_runtime_codex["agent-runtime-codex"]
     pkg_agent_runtime_launcher["agent-runtime-launcher"]
     pkg_agent_runtime_profile["agent-runtime-profile"]
     pkg_agent_runtime_router["agent-runtime-router"]
@@ -1130,6 +1131,11 @@ flowchart TD
   pkg_workflow_worker_thread --> pkg_subagent
   pkg_workflow_worker_thread --> pkg_tools
   pkg_workflow_worker_thread --> pkg_workflow
+  pkg_agent_runtime_codex --> pkg_agent_runtime
+  pkg_agent_runtime_codex --> pkg_agent_runtime_launcher
+  pkg_agent_runtime_codex --> pkg_invariants
+  pkg_agent_runtime_codex --> pkg_llm
+  pkg_agent_runtime_codex --> pkg_subagent_codex
   pkg_subagent_fork_in_process --> pkg_agent
   pkg_subagent_fork_in_process --> pkg_invariants
   pkg_subagent_fork_in_process --> pkg_session
@@ -1682,6 +1688,7 @@ flowchart TD
 | [`agent-loop-testkit`](../packages/test-support/agent-loop-testkit) | `test-support` | [`agent`](../packages/core/agent), [`agent-runtime`](../packages/core/agent-runtime), [`agent-runtime-profile`](../packages/core/agent-runtime-profile), [`agent-runtime-router`](../packages/core/agent-runtime-router), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-ralph`](../packages/workflow/tool-ralph) | `workflow` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow) |
 | [`workflow-worker-thread`](../packages/workflow/workflow-worker-thread) | `workflow` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`tools`](../packages/core/tools), [`workflow`](../packages/workflow/workflow) |
+| [`agent-runtime-codex`](../packages/core/agent-runtime-codex) | `core` | [`agent-runtime`](../packages/core/agent-runtime), [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`subagent-codex`](../packages/subagent/subagent-codex) |
 | [`subagent-fork-in-process`](../packages/subagent/subagent-fork-in-process) | `subagent` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent), [`subagent-in-process-driver`](../packages/subagent/subagent-in-process-driver) |
 | [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | `subagent` | [`agent-runtime`](../packages/core/agent-runtime), [`agent-runtime-profile`](../packages/core/agent-runtime-profile), [`invariants`](../packages/runtime-diagnostics/invariants), [`subagent`](../packages/subagent/subagent), [`system-prompt`](../packages/core/system-prompt), [`tool-subagent`](../packages/subagent/tool-subagent), [`tools`](../packages/core/tools) |
 | [`subagent-spawn-in-process`](../packages/subagent/subagent-spawn-in-process) | `subagent` | [`invariants`](../packages/runtime-diagnostics/invariants), [`subagent`](../packages/subagent/subagent), [`subagent-in-process-driver`](../packages/subagent/subagent-in-process-driver) |

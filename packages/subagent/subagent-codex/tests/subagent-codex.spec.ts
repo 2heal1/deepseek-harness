@@ -235,11 +235,18 @@ function fakeChild(options: FakeChildOptions = {}): FakeChild {
   }
 }
 
-function defaultWire(child: FakeChild): CodexAppServerWire {
+function defaultWire(
+  child: FakeChild,
+  maxFrameBytes?: number,
+  onAssistantDelta?: (delta: string) => void,
+): CodexAppServerWire {
   return new CodexAppServerWire(
     child.handle.stdout!,
     child.handle.stdin!,
     DEFAULT_CODEX_PERMISSION_MODE,
+    onAssistantDelta,
+    undefined,
+    maxFrameBytes === undefined ? undefined : { maxFrameBytes },
   )
 }
 
@@ -257,12 +264,15 @@ function runSpec(
   }
 }
 
-async function initializeWire(): Promise<{
+async function initializeWire(
+  maxFrameBytes?: number,
+  onAssistantDelta?: (delta: string) => void,
+): Promise<{
   readonly child: FakeChild
   readonly wire: CodexAppServerWire
 }> {
   const child = fakeChild()
-  const wire = defaultWire(child)
+  const wire = defaultWire(child, maxFrameBytes, onAssistantDelta)
   wire.start()
   const initializing = wire.initialize(new AbortController().signal)
   const initialize = await child.peer.nextMethod('initialize')
@@ -676,6 +686,89 @@ describe('task admission and package contracts', () => {
 })
 
 describe('CodexAppServerWire', () => {
+  it('fails the active protocol operation and pauses stdout when a frame exceeds the configured byte limit', async () => {
+    const child = fakeChild()
+    const wire = new CodexAppServerWire(
+      child.handle.stdout as NonNullable<SubprocessHandle['stdout']>,
+      child.handle.stdin as NonNullable<SubprocessHandle['stdin']>,
+      DEFAULT_CODEX_PERMISSION_MODE,
+      undefined,
+      undefined,
+      { maxFrameBytes: 8 },
+    )
+    wire.start()
+
+    const initializing = wire.initialize(new AbortController().signal)
+    child.fromChild.write('012345678')
+
+    await expect(initializing).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
+    expect(child.fromChild.isPaused()).toBe(true)
+    wire.close()
+  })
+
+  it('fails an active turn when an oversized frame has no terminal notification', async () => {
+    const { child, wire } = await initializeWire(128)
+    const running = wire.runTurn(['task'], new AbortController().signal)
+    void running.catch(() => {})
+    const turnStart = await child.peer.nextMethod('turn/start')
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+
+    child.fromChild.write('x'.repeat(129))
+
+    await expect(running).rejects.toThrow('JSON-RPC input frame exceeds 128 bytes')
+    wire.close()
+  })
+
+  it('emits only correlated non-empty assistant deltas', async () => {
+    const deltas: string[] = []
+    const { child, wire } = await initializeWire(undefined, (delta) => { deltas.push(delta) })
+    const running = wire.runTurn(['task'], new AbortController().signal)
+    const turnStart = await child.peer.nextMethod('turn/start')
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+    child.peer.send(
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-2', turnId: 'turn-1', delta: 'wrong thread' },
+      },
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-2', delta: 'wrong turn' },
+      },
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: '' },
+      },
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'live' },
+      },
+      agentMessage('answer', 'final_answer'),
+      turnCompleted('completed'),
+    )
+
+    await expect(running).resolves.toMatchObject({ stopReason: 'completed' })
+    expect(deltas).toEqual(['live'])
+    wire.close()
+  })
+
+  it('fails an active turn for a non-string assistant delta', async () => {
+    const { child, wire } = await initializeWire()
+    const running = wire.runTurn(['task'], new AbortController().signal)
+    void running.catch(() => {})
+    const turnStart = await child.peer.nextMethod('turn/start')
+    child.peer.respond(turnStart, { turn: { id: 'turn-1' } })
+    await nextTask()
+    child.peer.send({
+      method: 'item/agentMessage/delta',
+      params: { threadId: 'thread-1', turnId: 'turn-1', delta: 42 },
+    })
+
+    await expect(running).rejects.toThrow('invalid agent message delta')
+    wire.close()
+  })
+
   it('sends the fixed handshake, thread, and turn payloads and keeps final_answer', async () => {
     const child = fakeChild()
     const wire = defaultWire(child)

@@ -34,6 +34,9 @@ export const inject = ['agentRuntimes', 'agentRuntimeLauncher']
 const CODEX_PROVIDER_ID = AgentRuntimeProviderId('codex-app-server')
 const CODEX_PROTOCOL_VERSION = '0.147.0'
 const CODEX_CAPABILITIES: AgentRuntimeCapabilities = []
+const DEFAULT_MAX_FRAME_BYTES = 1_048_576
+type CodexLaunchHandle = Awaited<ReturnType<Context['agentRuntimeLauncher']['launch']>>
+type CodexCancelCause = Parameters<PreparedAgentRuntime['cancel']>[1]
 
 /** Codex Driver-owned launch controls. */
 export const CODEX_APP_SERVER_DRIVER: RuntimeDriverLaunch = {
@@ -49,10 +52,15 @@ export const CODEX_APP_SERVER_DRIVER: RuntimeDriverLaunch = {
   permissionEnforcement: 'full',
 }
 
-/** This Provider has no deployment-varying configuration. */
-export interface Config {}
+/** Launcher-independent Codex protocol limits. */
+export interface Config {
+  /** Maximum UTF-8 bytes accepted for one JSONL frame from Codex. */
+  maxFrameBytes: number
+}
 
-export const Config: z<Config> = z.object({})
+export const Config: z<Config> = z.object({
+  maxFrameBytes: z.number().step(1).min(1).default(DEFAULT_MAX_FRAME_BYTES),
+})
 
 function permissionMode(value: unknown): CodexPermissionMode {
   if (value !== null
@@ -107,15 +115,21 @@ function textInput(request: AgentRuntimeSubmissionRequest): string[] {
   return texts
 }
 
+function closeProtocolInput(launch: CodexLaunchHandle, wire: CodexAppServerWire): void {
+  wire.close()
+  launch.process.stdin?.end()
+}
+
 class CodexPreparedRuntime implements PreparedAgentRuntime {
   readonly capabilities = CODEX_CAPABILITIES
   readonly initialFacts
   private active: SubmissionId | undefined
+  private cancellation: { readonly submissionId: SubmissionId; readonly cause: CodexCancelCause } | undefined
 
   constructor(
     readonly runtimeId: AgentRuntimePrepareRequest['runtimeId'],
     private readonly request: AgentRuntimePrepareRequest,
-    private readonly launch: Awaited<ReturnType<Context['agentRuntimeLauncher']['launch']>>,
+    private readonly launch: CodexLaunchHandle,
     private readonly wire: CodexAppServerWire,
   ) {
     this.initialFacts = snapshotAgentRuntimeFacts({
@@ -141,28 +155,48 @@ class CodexPreparedRuntime implements PreparedAgentRuntime {
     }
     const texts = textInput(request)
     this.active = request.submissionId
+    this.cancellation = undefined
     try {
       const result = await this.launch.runTurn(async (signal) => {
-        return this.wire.runTurn(texts, signal)
+        return this.wire.runTurn(texts, AbortSignal.any([signal, request.signal]))
       }, {
-        cancel: () => this.wire.interrupt(),
-        closeInput: () => this.wire.close(),
+        cancel: () => { this.wire.interrupt() },
+        closeInput: () => { closeProtocolInput(this.launch, this.wire) },
       })
       this.request.sink.assistantMessage(request.submissionId, { content: result.output })
       return { reason: result.stopReason === 'completed' ? { kind: 'completed' } : { kind: 'interrupted' } }
+    } catch (error: unknown) {
+      try {
+        await this.dispose()
+      } catch (cleanupError: unknown) {
+        throw new AggregateError([error, cleanupError], 'Codex submission and cleanup failed')
+      }
+      const cancellation = this.cancellationCause(request.submissionId)
+      if (cancellation !== undefined) {
+        return { reason: { kind: 'aborted', reason: cancellation } }
+      }
+      throw error
     } finally {
       this.active = undefined
+      this.cancellation = undefined
     }
   }
 
-  cancel(submissionId: SubmissionId): void {
-    if (submissionId === this.active) this.wire.interrupt()
+  cancel(submissionId: SubmissionId, cause: CodexCancelCause): void {
+    if (submissionId !== this.active) return
+    this.cancellation = { submissionId, cause }
+    this.wire.interrupt()
+  }
+
+  private cancellationCause(submissionId: SubmissionId): CodexCancelCause | undefined {
+    const cancellation = this.cancellation
+    return cancellation?.submissionId === submissionId ? cancellation.cause : undefined
   }
 
   async dispose(): Promise<void> {
     await this.launch.dispose({
-      cancel: () => this.wire.interrupt(),
-      closeInput: () => this.wire.close(),
+      cancel: () => { this.wire.interrupt() },
+      closeInput: () => { closeProtocolInput(this.launch, this.wire) },
     })
   }
 }
@@ -171,14 +205,18 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
   readonly id = CODEX_PROVIDER_ID
   readonly profileSnapshotVersions = [1]
 
-  async probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult> {
-    permissionMode(request.profile.permissions.policy)
-    return {
-      capabilities: CODEX_CAPABILITIES,
-      permissionEnforcement: 'enforced',
-      productVersion: CODEX_PROTOCOL_VERSION,
-      protocolVersion: CODEX_PROTOCOL_VERSION,
-    }
+  constructor(private readonly config: Config) {}
+
+  probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult> {
+    return Promise.resolve().then(() => {
+      permissionMode(request.profile.permissions.policy)
+      return {
+        capabilities: CODEX_CAPABILITIES,
+        permissionEnforcement: 'enforced',
+        productVersion: CODEX_PROTOCOL_VERSION,
+        protocolVersion: CODEX_PROTOCOL_VERSION,
+      }
+    })
   }
 
   async prepare(request: AgentRuntimePrepareRequest): Promise<PreparedAgentRuntime> {
@@ -210,6 +248,7 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
         }
       },
       { approvalPolicy: 'never', sandbox: 'workspace-write' },
+      { maxFrameBytes: this.config.maxFrameBytes },
     )
     wire.start()
     await launch.waitUntilReady(
@@ -217,7 +256,10 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
         await wire.initialize(request.signal)
         await wire.startThread(cwd, request.signal)
       })(),
-      { cancel: () => wire.interrupt(), closeInput: () => wire.close() },
+      {
+        cancel: () => { wire.interrupt() },
+        closeInput: () => { closeProtocolInput(launch, wire) },
+      },
     )
     const runtime = new CodexPreparedRuntime(request.runtimeId, request, launch, wire)
     const submit = runtime.submit.bind(runtime)
@@ -235,5 +277,5 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
 
 /** Register the Codex App Server runtime Provider. */
 export function apply(ctx: Context, _config: Config): void {
-  ctx.agentRuntimes.registerProvider(new CodexAppServerProvider())
+  ctx.agentRuntimes.registerProvider(new CodexAppServerProvider(_config))
 }

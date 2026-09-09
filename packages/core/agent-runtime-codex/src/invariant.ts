@@ -15,7 +15,7 @@ export const name = 'agent-runtime-codex-invariant'
 /** Services required before the companion can register. */
 export const inject = ['invariants']
 
-/** Router-owned submission invariants cover all Codex runtime output. */
+/** No runtime invariant: Router-owned submission invariants cover all Codex runtime output. */
 const install: InvariantInstaller = () => {}
 
 /**

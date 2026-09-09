@@ -8,9 +8,16 @@
  * @module @deepseek-ai/dsh-sdk-protocol
  */
 
-export { JsonRpcLineTransport, JsonRpcResponseError } from './transport.ts'
+export {
+  JsonRpcInputFrameTooLargeError,
+  JsonRpcLineTransport,
+  JsonRpcResponseError,
+} from './transport.ts'
 export { HARNESS_SDK_PROTOCOL_VERSION } from './types.ts'
-export type { JsonRpcTransportPeer } from './transport.ts'
+export type {
+  JsonRpcLineTransportOptions,
+  JsonRpcTransportPeer,
+} from './transport.ts'
 export type {
   HarnessSdkNotificationMap,
   HarnessSdkRequestMap,
