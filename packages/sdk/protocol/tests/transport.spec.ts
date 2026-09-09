@@ -252,6 +252,19 @@ describe('JsonRpcLineTransport', () => {
     transport.close()
   })
 
+  it('counts untrimmed frame bytes and releases the failed frame', async () => {
+    const input = new PassThrough()
+    const transport = new JsonRpcLineTransport(input, new PassThrough(), { maxFrameBytes: 8 })
+    transport.start()
+
+    const pending = transport.request('never-replies', {})
+    input.write('         \n')
+
+    await expect(pending).rejects.toThrow('JSON-RPC input frame exceeds 8 bytes')
+    expect((transport as unknown as { buffer: string }).buffer).toBe('')
+    transport.close()
+  })
+
   it('flush waits for all earlier output writes', async () => {
     const events: string[] = []
     const output = new Writable({
