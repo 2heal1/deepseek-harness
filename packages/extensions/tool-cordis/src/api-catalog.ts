@@ -258,6 +258,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{AgentRuntimeError} when the profile is absent or invalid.'],
       },
       {
+        signature: 'configuration(): AgentRuntimeProfileConfiguration',
+        description: 'Read the complete effective non-secret configuration for trusted control planes.',
+        parameters: [],
+        returns: 'a detached deeply frozen document and its observed Settings revision.',
+      },
+      {
         signature: 'restore(value: JsonValue | undefined): RuntimeProfileSnapshot',
         description: 'Validate and detach the Runtime Profile snapshot stored in a Session Header.',
         parameters: [{ name: 'value', description: 'persisted non-secret JSON snapshot.' }],
@@ -3005,6 +3011,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AgentRuntimeProbeResult {\n    readonly productVersion?: string;\n    readonly protocolVersion?: string;\n    readonly capabilities: AgentRuntimeCapabilities;\n    readonly permissionEnforcement: \'enforced\' | \'best-effort\' | \'unsupported\';\n    readonly details?: JsonValue;\n}',
   },
   {
+    name: 'AgentRuntimeProfileConfiguration',
+    declaration: 'export interface AgentRuntimeProfileConfiguration {\n    readonly revision: number;\n    readonly value: AgentRuntimeProfileSettings;\n}',
+  },
+  {
+    name: 'AgentRuntimeProfileSettings',
+    declaration: 'export interface AgentRuntimeProfileSettings {\n    defaultMainProfile: string;\n    profiles: Record<string, RuntimeProfileConfig>;\n    subagentRoutes?: Record<string, RuntimeSubagentRouteConfig>;\n}',
+  },
+  {
     name: 'AgentRuntimeProvider',
     declaration: 'export interface AgentRuntimeProvider {\n    readonly id: AgentRuntimeProviderId;\n    readonly profileSnapshotVersions: readonly number[];\n    probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult>;\n    prepare(request: AgentRuntimePrepareRequest): Promise<PreparedAgentRuntime>;\n}',
   },
@@ -4125,6 +4139,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface RuntimeProcessDeadlines {\n    readonly startupMs: number;\n    readonly turnMs: number;\n    readonly shutdownMs: number;\n    readonly terminationMs: number;\n}',
   },
   {
+    name: 'RuntimeProfileConfig',
+    declaration: 'export interface RuntimeProfileConfig {\n    provider: string;\n    schemaVersion?: number;\n    providerOptionsVersion?: number;\n    providerOptions?: unknown;\n    launch: RuntimeProfileLaunchConfig;\n    model?: RuntimeProfileModelConfig;\n    product?: unknown;\n    permissions: {\n        policy: unknown;\n        enforcement: \'required\' | \'best-effort\';\n        approval?: \'unattended-fail-closed\';\n    };\n    nativeTools?: {\n        allowed?: string[];\n    };\n    harnessTools?: {\n        transport?: \'none\' | \'mcp\';\n        allowed?: string[];\n    };\n    credentials?: {\n        env?: Record<string, RuntimeProfileCredentialConfig>;\n    };\n    process: {\n        startupTimeoutMs: number;\n        turnTimeoutMs: number;\n        shutdownTimeoutMs: number;\n        terminationTimeoutMs: number;\n        maxConcurrentRuns: number;\n    };\n}',
+  },
+  {
+    name: 'RuntimeProfileCredentialConfig',
+    declaration: 'export interface RuntimeProfileCredentialConfig {\n    credentialRef: string;\n}',
+  },
+  {
+    name: 'RuntimeProfileExecutableResolution',
+    declaration: 'export interface RuntimeProfileExecutableResolution {\n    searchPath: string[];\n}',
+  },
+  {
+    name: 'RuntimeProfileLaunchConfig',
+    declaration: 'export interface RuntimeProfileLaunchConfig {\n    executable: string;\n    args?: string[];\n    resolution?: \'absolute\' | RuntimeProfileExecutableResolution;\n    cwdPolicy: \'session-workspace\' | \'parent-workspace\' | {\n        fixed: string;\n    };\n    ambientEnv?: string[];\n    env?: Record<string, string>;\n}',
+  },
+  {
+    name: 'RuntimeProfileModelConfig',
+    declaration: 'export interface RuntimeProfileModelConfig {\n    default?: string;\n    allowSessionOverride?: boolean;\n}',
+  },
+  {
     name: 'RuntimeProfileOverrides',
     declaration: 'export interface RuntimeProfileOverrides {\n    readonly model?: string;\n    readonly nativeLlmProvider?: string;\n    readonly nativeMaxTokens?: number;\n    readonly cwd?: string;\n}',
   },
@@ -4139,6 +4173,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RuntimeReservedArgument',
     declaration: 'export interface RuntimeReservedArgument {\n    readonly name: string;\n    readonly forms: readonly string[];\n    readonly argv: readonly string[];\n}',
+  },
+  {
+    name: 'RuntimeSubagentRouteConfig',
+    declaration: 'export interface RuntimeSubagentRouteConfig {\n    runtimeProfile: string;\n    mode?: \'one-shot\';\n    maxDepth: number;\n    maxConcurrentRuns: number;\n    toolName: string;\n}',
   },
   {
     name: 'RuntimeTemporaryFile',

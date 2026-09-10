@@ -65,6 +65,16 @@ import {
 } from '../api/credentials.schema.ts'
 import { llmDiscoverModelsRequestSchema, llmModelsRequestSchema, llmProvidersRequestSchema } from '../api/llm.schema.ts'
 import {
+  runtimeProfileCatalogRequestSchema,
+  runtimeProfileDescribeRequestSchema,
+  runtimeProfileProbeRequestSchema,
+  runtimeProfileRemoveRequestSchema,
+  runtimeProfileRemoveRouteRequestSchema,
+  runtimeProfileSaveRequestSchema,
+  runtimeProfileSaveRouteRequestSchema,
+  runtimeProfileSetDefaultRequestSchema,
+} from '../api/runtime-profiles.schema.ts'
+import {
   subagentHistoryRequestSchema,
   subagentInterruptRequestSchema,
   subagentListRequestSchema,
@@ -140,6 +150,14 @@ const UNARY_ROUTES: UnaryRoutes = {
   'llm.providers': { schema: llmProvidersRequestSchema, invoke: (api, r) => api.llm.providers(r) },
   'llm.models': { schema: llmModelsRequestSchema, invoke: (api, r) => api.llm.models(r) },
   'llm.discoverModels': { schema: llmDiscoverModelsRequestSchema, invoke: (api, r, signal) => api.llm.discoverModels(r, signal) },
+  'runtimeProfile.catalog': { schema: runtimeProfileCatalogRequestSchema, invoke: (api, r) => api.runtimeProfiles.catalog(r) },
+  'runtimeProfile.describe': { schema: runtimeProfileDescribeRequestSchema, invoke: (api, r) => api.runtimeProfiles.describe(r) },
+  'runtimeProfile.save': { schema: runtimeProfileSaveRequestSchema, invoke: (api, r) => api.runtimeProfiles.save(r) },
+  'runtimeProfile.remove': { schema: runtimeProfileRemoveRequestSchema, invoke: (api, r) => api.runtimeProfiles.remove(r) },
+  'runtimeProfile.saveRoute': { schema: runtimeProfileSaveRouteRequestSchema, invoke: (api, r) => api.runtimeProfiles.saveRoute(r) },
+  'runtimeProfile.removeRoute': { schema: runtimeProfileRemoveRouteRequestSchema, invoke: (api, r) => api.runtimeProfiles.removeRoute(r) },
+  'runtimeProfile.setDefault': { schema: runtimeProfileSetDefaultRequestSchema, invoke: (api, r) => api.runtimeProfiles.setDefault(r) },
+  'runtimeProfile.probe': { schema: runtimeProfileProbeRequestSchema, invoke: (api, r, signal) => api.runtimeProfiles.probe(r, signal) },
 }
 
 /** Route lookup that narrows an arbitrary path segment to a map key (single cast point for the string→key refinement). */

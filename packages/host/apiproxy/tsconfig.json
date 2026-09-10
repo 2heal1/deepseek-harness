@@ -45,6 +45,9 @@
       "path": "../../core/agent-runtime"
     },
     {
+      "path": "../../core/agent-runtime-profile"
+    },
+    {
       "path": "../../preset/agent-presets"
     },
     {

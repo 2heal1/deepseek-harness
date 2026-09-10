@@ -9,7 +9,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {
-  RpcResult, SessionId, SubagentAddress,
+  RpcResult, SessionId, SubagentAddress, WorkspaceId,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import type { HostObservable, SessionMaybeProvideInfo } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentContext } from '../agents/scope.ts'
@@ -21,6 +21,14 @@ import type { SessionFace } from './session.ts'
 import type { ObservableSnapshot } from './store.ts'
 
 export type { AgentContext } from '../agents/scope.ts'
+
+/** Options fixed before the Host creates a new Session and its Agent. */
+export interface ClientSessionCreateOptions {
+  workspaceId?: WorkspaceId
+  cwd?: string
+  sessionId?: SessionId
+  runtimeProfile?: string
+}
 
 /** The sessions-service face injected as `ctx.sessions`. */
 export interface ISessions {
@@ -71,6 +79,12 @@ export interface ISessions {
    * @param agentPreset - the preset id the host confirmed.
    */
   noteAgentPreset(sessionId: SessionId, agentPreset: string): void
+  /**
+   * Create a Host Session with an optional Runtime Profile selection.
+   * @param opts - project, caller-owned identity, and pre-publication runtime selection.
+   * @returns the new session id after it is synchronously addressable.
+   */
+  create(opts?: ClientSessionCreateOptions): Promise<SessionId>
   /** Clear the current selection into the no-session view state. */
   clear(): void
   /**

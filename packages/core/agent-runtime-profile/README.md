@@ -11,6 +11,7 @@ The plugin config is the base value for the `agent-runtime` Settings namespace. 
 - `resolve(id?, overrides?)` selects the named or default profile, applies permitted per-session values, and returns a detached deeply frozen snapshot.
 - `resolveRoute(id)` returns a configured one-shot route and the profile snapshot resolved at that call.
 - `listRoutes()` returns the current route ids in settings order.
+- `configuration()` returns the detached deeply frozen effective non-secret settings document and its current revision for trusted administrative consumers. It exposes credential references, never resolved credential values.
 - `acquire(profile, signal, upperLimit?)` waits in cancelable FIFO order for shared profile capacity. A route limit can lower, but never raise, the profile limit.
 - `acquireSync(profile)` serves the Native synchronous compatibility entry and fails with `AGENT_BUSY` instead of queueing.
 - `resolveCredentials(profile)` resolves each credential reference immediately before a process start and returns target-to-value entries without retaining them.

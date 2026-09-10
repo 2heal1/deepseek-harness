@@ -62,6 +62,16 @@ import {
 } from '../api/credentials.schema.ts'
 import { llmDiscoverModelsValueSchema, llmModelsValueSchema, llmProvidersValueSchema } from '../api/llm.schema.ts'
 import {
+  runtimeProfileCatalogValueSchema,
+  runtimeProfileDescribeValueSchema,
+  runtimeProfileProbeValueSchema,
+  runtimeProfileRemoveRouteValueSchema,
+  runtimeProfileRemoveValueSchema,
+  runtimeProfileSaveRouteValueSchema,
+  runtimeProfileSaveValueSchema,
+  runtimeProfileSetDefaultValueSchema,
+} from '../api/runtime-profiles.schema.ts'
+import {
   subagentHistoryValueSchema,
   subagentInterruptValueSchema,
   subagentListValueSchema,
@@ -161,6 +171,16 @@ export interface IApiClient {
     models(payload: RequestPayload<'llm.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.models'>>>
     discoverModels(payload: RequestPayload<'llm.discoverModels'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'llm.discoverModels'>>>
   }
+  runtimeProfiles: {
+    catalog(payload: RequestPayload<'runtimeProfile.catalog'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.catalog'>>>
+    describe(payload: RequestPayload<'runtimeProfile.describe'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.describe'>>>
+    save(payload: RequestPayload<'runtimeProfile.save'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.save'>>>
+    remove(payload: RequestPayload<'runtimeProfile.remove'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.remove'>>>
+    saveRoute(payload: RequestPayload<'runtimeProfile.saveRoute'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.saveRoute'>>>
+    removeRoute(payload: RequestPayload<'runtimeProfile.removeRoute'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.removeRoute'>>>
+    setDefault(payload: RequestPayload<'runtimeProfile.setDefault'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.setDefault'>>>
+    probe(payload: RequestPayload<'runtimeProfile.probe'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'runtimeProfile.probe'>>>
+  }
   /** client-response passthrough (rpcId is a backfill of the server-request's id — never minted here). */
   respond(message: ClientResponse, signal?: AbortSignal): Promise<RpcReceipt>
 }
@@ -222,6 +242,14 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'llm.providers': llmProvidersValueSchema,
   'llm.models': llmModelsValueSchema,
   'llm.discoverModels': llmDiscoverModelsValueSchema,
+  'runtimeProfile.catalog': runtimeProfileCatalogValueSchema,
+  'runtimeProfile.describe': runtimeProfileDescribeValueSchema,
+  'runtimeProfile.save': runtimeProfileSaveValueSchema,
+  'runtimeProfile.remove': runtimeProfileRemoveValueSchema,
+  'runtimeProfile.saveRoute': runtimeProfileSaveRouteValueSchema,
+  'runtimeProfile.removeRoute': runtimeProfileRemoveRouteValueSchema,
+  'runtimeProfile.setDefault': runtimeProfileSetDefaultValueSchema,
+  'runtimeProfile.probe': runtimeProfileProbeValueSchema,
 }
 
 /** Default timeout for bounded unary calls (rpc-compare 2026-07-19: a hung host must not leave callers pending forever). */
@@ -498,6 +526,17 @@ export abstract class AbstractApiClient implements IApiClient {
     providers: (payload, signal) => this.callUnary('llm.providers', payload, signal),
     models: (payload, signal) => this.callUnary('llm.models', payload, signal),
     discoverModels: (payload, signal) => this.callUnary('llm.discoverModels', payload, signal),
+  }
+
+  readonly runtimeProfiles: IApiClient['runtimeProfiles'] = {
+    catalog: (payload, signal) => this.callUnary('runtimeProfile.catalog', payload, signal),
+    describe: (payload, signal) => this.callUnary('runtimeProfile.describe', payload, signal),
+    save: (payload, signal) => this.callUnary('runtimeProfile.save', payload, signal),
+    remove: (payload, signal) => this.callUnary('runtimeProfile.remove', payload, signal),
+    saveRoute: (payload, signal) => this.callUnary('runtimeProfile.saveRoute', payload, signal),
+    removeRoute: (payload, signal) => this.callUnary('runtimeProfile.removeRoute', payload, signal),
+    setDefault: (payload, signal) => this.callUnary('runtimeProfile.setDefault', payload, signal),
+    probe: (payload, signal) => this.callUnary('runtimeProfile.probe', payload, signal),
   }
 
   readonly events: IApiClient['events'] = {

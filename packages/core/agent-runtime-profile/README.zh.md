@@ -11,6 +11,7 @@
 - `resolve(id?, overrides?)` 选择具名或默认 profile，应用允许的每会话值，并返回分离且深度冻结的快照。
 - `resolveRoute(id)` 返回一条已配置的一次性 route，以及该次调用时解析出的 profile 快照。
 - `listRoutes()` 按设置顺序返回当前 route id。
+- `configuration()` 为可信管理 Consumer 返回分离且深度冻结的有效非秘密设置文档及其当前 revision。它会暴露凭据引用，但绝不暴露已解析的凭据值。
 - `acquire(profile, signal, upperLimit?)` 按可取消 FIFO 顺序等待共享 profile 容量。route 限制可以降低但不能提高 profile 限制。
 - `acquireSync(profile)` 服务于 Native 同步兼容入口，在没有立即可用的 slot 时以 `AGENT_BUSY` 失败，而不进入队列。
 - `resolveCredentials(profile)` 在每次进程启动前立即解析各项凭据引用，并返回目标到值的映射，但不保留这些值。

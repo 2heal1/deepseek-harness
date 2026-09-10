@@ -10,7 +10,12 @@ import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
-import { hasAgentRuntimeCapability } from '@deepseek-ai/dsh-agent-runtime'
+import { AgentRuntimeError, AgentRuntimeProviderId, hasAgentRuntimeCapability } from '@deepseek-ai/dsh-agent-runtime'
+import type { RuntimeProfileSnapshot } from '@deepseek-ai/dsh-agent-runtime'
+import {
+  AGENT_RUNTIME_SETTINGS_NAMESPACE,
+  type AgentRuntimeProfileSettings,
+} from '@deepseek-ai/dsh-agent-runtime-profile'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
@@ -42,7 +47,7 @@ import type {
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata,
   SessionProjectionsBlock, SessionRuntimeStatus, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
-  WorkspaceId, WorkspaceView,
+  RuntimeProfileDocumentView, WorkspaceId, WorkspaceView,
 } from './api/index.ts'
 import {
   DEFAULT_SESSION_LOG_COMPRESSION_LEVEL,
@@ -488,16 +493,24 @@ function sessionListFields(header: SessionHeader, events: readonly SessionEvent[
   origin?: 'subagent'
   cwd?: string
   agentPreset?: string
+  runtimeProfile?: string
 } {
   // The preset comes from the log, not the header: a session that switched
   // while blank ran its turns under the newer composition, and a picker
   // showing the creation-time value would contradict what the model saw.
   const agentPreset = resolveSessionPreset({ header, events })
+  const runtimeProfile = header.runtimeProfile !== null
+    && typeof header.runtimeProfile === 'object'
+    && !Array.isArray(header.runtimeProfile)
+    && typeof header.runtimeProfile['profileId'] === 'string'
+    ? header.runtimeProfile['profileId']
+    : undefined
   return {
     ...header.parentSession === undefined ? {} : { parentSessionId: header.parentSession },
     ...header.origin === undefined ? {} : { origin: header.origin },
     ...header.cwd === undefined ? {} : { cwd: header.cwd },
     ...agentPreset === undefined ? {} : { agentPreset },
+    ...runtimeProfile === undefined ? {} : { runtimeProfile },
   }
 }
 
@@ -1585,6 +1598,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     cwd: string,
     checkPersistedIdentity: boolean,
     presetId?: string,
+    runtimeProfile?: string,
   ): Promise<Agent> {
     let creation = sessionCreations.get(sessionId)
     if (creation === undefined) {
@@ -1621,6 +1635,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // longer make.
           return (await ctx.agents.resume({
             resumeSessionId: sessionId,
+            ...runtimeProfile === undefined ? {} : { agentOptions: { runtimeProfile } },
             setup: (await composeAgent(storedPreset)).setup,
           })).agent
         }
@@ -1633,7 +1648,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const composition = await composeAgent(presetId)
         return (await ctx.agents.create({
           sessionId,
-          agentOptions: agentOptions(),
+          agentOptions: {
+            ...agentOptions(),
+            ...runtimeProfile === undefined ? {} : { runtimeProfile },
+          },
           meta: {
             cwd,
             ...composition.agentPreset === undefined ? {} : { agentPreset: composition.agentPreset },
@@ -1664,6 +1682,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     // covers every path that yields a live agent — freshly created, adopted
     // live, resumed from disk, or recovered by the concurrent-creation catch.
     assertPresetUnchanged(sessionId, presetId, resolveSessionPreset(agent.session))
+    const existingRuntimeProfile = sessionListFields(agent.session.header).runtimeProfile
+    if (runtimeProfile !== undefined && runtimeProfile !== existingRuntimeProfile) {
+      throw new AgentRuntimeError({
+        code: 'RUNTIME_INCOMPATIBLE',
+        phase: 'profile',
+        message: `session "${sessionId}" uses Runtime Profile "${existingRuntimeProfile ?? 'unknown'}", not "${runtimeProfile}"`,
+      })
+    }
     if (agent.session.header.cwd !== cwd) {
       throw new SessionCwdConflict(sessionId, cwd, agent.session.header.cwd)
     }
@@ -1958,6 +1984,100 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return ok(request, namespaceView(descriptor))
   }
 
+  /** Read the effective non-secret Runtime Profile document from its owning service. */
+  function runtimeConfiguration(): {
+    revision: number
+    value: AgentRuntimeProfileSettings
+  } {
+    const profiles = ctx.get('agentRuntimeProfiles')
+    if (profiles === undefined) {
+      throw new AgentRuntimeError({
+        code: 'RUNTIME_UNAVAILABLE',
+        phase: 'profile',
+        message: 'Runtime Profile service is not available',
+      })
+    }
+    return profiles.configuration()
+  }
+
+  /** Build the trusted editor response without resolving or exposing credential values. */
+  async function runtimeProfileDocument(): Promise<RuntimeProfileDocumentView> {
+    const { revision, value } = runtimeConfiguration()
+    const credentials = ctx.get('credentials')
+    const credentialStatusEntries = await Promise.all(
+      Object.entries(value.profiles).map(async ([profileId, profile]) => {
+        const statuses = await Promise.all(
+          Object.entries(profile.credentials?.env ?? {}).map(async ([target, mapping]) => {
+            if (credentials === undefined) return [target, null] as const
+            const info = await credentials.describe(credentialRef(mapping.credentialRef))
+            return [target, info.configured] as const
+          }),
+        )
+        return [profileId, Object.fromEntries(statuses)] as const
+      }),
+    )
+    return {
+      revision,
+      writable: ctx.get('settings')?.writable ?? false,
+      defaultMainProfile: value.defaultMainProfile,
+      profiles: structuredClone(value.profiles),
+      subagentRoutes: structuredClone(value.subagentRoutes ?? {}),
+      credentialStatus: Object.fromEntries(credentialStatusEntries),
+    }
+  }
+
+  /** Map a Runtime Profile operation failure onto the client-safe error vocabulary. */
+  function runtimeProfileError(
+    error: unknown,
+    profileId?: string,
+  ): RpcError {
+    if (error instanceof SettingsConflictError) {
+      return {
+        code: 'settings-conflict',
+        message: error.message,
+        details: {
+          ns: String(AGENT_RUNTIME_SETTINGS_NAMESPACE),
+          expected: error.expected,
+          actual: error.actual,
+        },
+      }
+    }
+    if (error instanceof AgentRuntimeError) {
+      return {
+        code: 'runtime-profile-error',
+        message: error.message,
+        details: {
+          ...profileId === undefined ? {} : { profileId },
+          runtimeCode: error.code,
+          phase: error.phase,
+          ...error.providerId === undefined ? {} : { providerId: error.providerId },
+        },
+      }
+    }
+    return {
+      code: 'runtime-profile-error',
+      message: error instanceof Error ? error.message : String(error),
+      details: { ...profileId === undefined ? {} : { profileId } },
+    }
+  }
+
+  /** Apply one fenced path edit to the Runtime Profile document. */
+  async function mutateRuntimeProfiles(
+    request: RpcRequest<unknown>,
+    ops: readonly SettingsPathOp[],
+    expectedRevision: number,
+    profileId?: string,
+  ): Promise<RpcResponse<RuntimeProfileDocumentView>> {
+    const settings = ctx.get('settings')
+    if (settings === undefined) return err(request, settingsAbsent())
+    try {
+      await settings.mutate(AGENT_RUNTIME_SETTINGS_NAMESPACE, ops, expectedRevision)
+      return ok(request, await runtimeProfileDocument())
+    } catch (error: unknown) {
+      return err(request, runtimeProfileError(error, profileId))
+    }
+  }
+
   return {
     sessions: {
       // Attached sessions summarize from memory; persisted-but-unattached (cold)
@@ -2114,8 +2234,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         const cwd = workspace?.path ?? request.payload.cwd ?? defaults.cwd
         const requestedPreset = request.payload.agentPreset
+        const requestedRuntimeProfile = request.payload.runtimeProfile
         try {
-          await ensureSession(sessionId, cwd, request.payload.sessionId !== undefined, requestedPreset)
+          await ensureSession(
+            sessionId,
+            cwd,
+            request.payload.sessionId !== undefined,
+            requestedPreset,
+            requestedRuntimeProfile,
+          )
         } catch (error: unknown) {
           if (error instanceof AgentPresetConflict) {
             return err(request, {
@@ -2144,6 +2271,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           if (error instanceof SubagentSessionOwnership) {
             return err(request, subagentOwnershipError(error.sessionId))
           }
+          if (error instanceof AgentRuntimeError) {
+            return err(request, runtimeProfileError(error, requestedRuntimeProfile))
+          }
           return err(request, {
             code: 'internal',
             message: `failed to create session "${sessionId}": ${String(error)}`,
@@ -2171,7 +2301,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // allowed and the row `session.list` serves for the same session.
         const created = ctx.agents.get(sessionId)
         const createdPreset = created === undefined ? undefined : resolveSessionPreset(created.session)
-        return ok(request, { sessionId, ...createdPreset === undefined ? {} : { agentPreset: createdPreset } })
+        const createdRuntimeProfile = created === undefined
+          ? undefined
+          : sessionListFields(created.session.header).runtimeProfile
+        return ok(request, {
+          sessionId,
+          ...createdPreset === undefined ? {} : { agentPreset: createdPreset },
+          ...createdRuntimeProfile === undefined ? {} : { runtimeProfile: createdRuntimeProfile },
+        })
       },
 
       async history(request) {
@@ -3218,6 +3355,127 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           })
         } catch (error: unknown) {
           return err(request, { code: 'internal', message: `skill listing failed: ${String(error)}`, details: {} })
+        }
+      },
+    },
+
+    runtimeProfiles: {
+      catalog(request) {
+        try {
+          const { value } = runtimeConfiguration()
+          const registry = ctx.get('agentRuntimes')
+          return Promise.resolve(ok(request, {
+            profiles: Object.entries(value.profiles).map(([id, profile]) => {
+              const provider = registry?.getProvider(AgentRuntimeProviderId(profile.provider))
+              return {
+                id,
+                provider: profile.provider,
+                ...profile.model?.default === undefined ? {} : { model: profile.model.default },
+                isDefault: id === value.defaultMainProfile,
+                providerAvailable: provider !== undefined,
+                schemaCompatible: provider?.profileSnapshotVersions.includes(
+                  profile.schemaVersion ?? 0,
+                ) ?? false,
+              }
+            }),
+            routes: Object.entries(value.subagentRoutes ?? {}).map(([id, route]) => ({
+              id,
+              runtimeProfile: route.runtimeProfile,
+              toolName: route.toolName,
+            })),
+          }))
+        } catch (error: unknown) {
+          return Promise.resolve(err(request, runtimeProfileError(error)))
+        }
+      },
+
+      async describe(request) {
+        try {
+          return ok(request, await runtimeProfileDocument())
+        } catch (error: unknown) {
+          return err(request, runtimeProfileError(error))
+        }
+      },
+
+      save(request) {
+        const { profileId, profile, expectedRevision } = request.payload
+        return mutateRuntimeProfiles(request, [{
+          op: 'set',
+          path: ['profiles', profileId],
+          value: profile,
+        }], expectedRevision, profileId)
+      },
+
+      remove(request) {
+        const { profileId, expectedRevision } = request.payload
+        return mutateRuntimeProfiles(request, [{
+          op: 'unset',
+          path: ['profiles', profileId],
+        }], expectedRevision, profileId)
+      },
+
+      saveRoute(request) {
+        const { routeId, route, expectedRevision } = request.payload
+        return mutateRuntimeProfiles(request, [{
+          op: 'set',
+          path: ['subagentRoutes', routeId],
+          value: route,
+        }], expectedRevision)
+      },
+
+      removeRoute(request) {
+        const { routeId, expectedRevision } = request.payload
+        return mutateRuntimeProfiles(request, [{
+          op: 'unset',
+          path: ['subagentRoutes', routeId],
+        }], expectedRevision)
+      },
+
+      setDefault(request) {
+        const { profileId, expectedRevision } = request.payload
+        return mutateRuntimeProfiles(request, [{
+          op: 'set',
+          path: ['defaultMainProfile'],
+          value: profileId,
+        }], expectedRevision, profileId)
+      },
+
+      async probe(request, signal) {
+        const { profileId } = request.payload
+        try {
+          const profiles = ctx.get('agentRuntimeProfiles')
+          const registry = ctx.get('agentRuntimes')
+          if (profiles === undefined || registry === undefined) {
+            throw new AgentRuntimeError({
+              code: 'RUNTIME_UNAVAILABLE',
+              phase: 'probe',
+              message: 'agent runtime services are not available',
+            })
+          }
+          const profile: RuntimeProfileSnapshot = profiles.resolve(profileId)
+          const provider = registry.getProvider(profile.provider.id)
+          if (provider === undefined) {
+            throw new AgentRuntimeError({
+              code: 'RUNTIME_UNAVAILABLE',
+              phase: 'probe',
+              message: `agent runtime provider "${profile.provider.id}" is not registered`,
+              providerId: profile.provider.id,
+            })
+          }
+          if (!provider.profileSnapshotVersions.includes(profile.schemaVersion)) {
+            throw new AgentRuntimeError({
+              code: 'RUNTIME_INCOMPATIBLE',
+              phase: 'probe',
+              message: `agent runtime provider "${provider.id}" does not accept profile schema version ${String(profile.schemaVersion)}`,
+              providerId: provider.id,
+            })
+          }
+          return ok(request, await provider.probe({ profile, signal }))
+        } catch (error: unknown) {
+          if (isAborted(signal)) {
+            return err(request, { code: 'cancelled', message: 'runtime probe was aborted', details: {} })
+          }
+          return err(request, runtimeProfileError(error, profileId))
         }
       },
     },

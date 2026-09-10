@@ -213,6 +213,8 @@ export interface SessionSummary {
    * the deployment currently defaults to.
    */
   agentPreset?: string
+  /** Runtime Profile snapshot identity fixed when this Session was created. */
+  runtimeProfile?: string
   /**
    * Projection baseline for this row, with zero log loads: attached sessions
    * read the registry's live watermark cut; cold sessions read the persisted
@@ -263,9 +265,21 @@ export interface SessionsApi {
    * the session header, so a later resume rebuilds the same agent. An unknown
    * id fails with `agent-preset-not-found`, and a preset whose composition
    * cannot be mounted fails with `agent-preset-invalid`.
+   *
+   * `runtimeProfile` selects the immutable Runtime Profile snapshot resolved
+   * before Provider preparation. Omission uses the profile service default.
    */
-  create(request: RpcRequest<{ workspaceId?: WorkspaceId; cwd?: string; sessionId?: SessionId; agentPreset?: string }>):
-  Promise<RpcResponse<{ sessionId: SessionId; agentPreset?: string }>>
+  create(request: RpcRequest<{
+    workspaceId?: WorkspaceId
+    cwd?: string
+    sessionId?: SessionId
+    agentPreset?: string
+    runtimeProfile?: string
+  }>): Promise<RpcResponse<{
+    sessionId: SessionId
+    agentPreset?: string
+    runtimeProfile?: string
+  }>>
 
   /**
    * Reads a window of history events; page boundaries align to append-origin message

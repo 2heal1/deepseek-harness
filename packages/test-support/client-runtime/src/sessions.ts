@@ -4,7 +4,8 @@ import type { AttachmentIdType } from '@deepseek-ai/dsh-attachment'
 import { createScope, scopeOf, SessionProvideChannel } from '@deepseek-ai/dsh-client-runtime/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
-  AgentContext, ConversationSnapshot, ISessions, ObservableSnapshot, ProjectionsFace, SessionFace, SessionId,
+  AgentContext, ClientSessionCreateOptions, ConversationSnapshot, ISessions, ObservableSnapshot,
+  ProjectionsFace, SessionFace, SessionId,
   SessionListState, SessionProvideDescriptor, SessionSearchResultItem, SessionSummary, SnapshotStore,
   SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
@@ -185,7 +186,7 @@ export class TestSessions implements ISessions {
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
     method: 'open' | 'openSubagent' | 'setSubagentCatalogOpen' | 'refreshSubagents'
-      | 'clear' | 'search' | 'fork'
+      | 'create' | 'clear' | 'search' | 'fork'
     args: unknown[]
   }[] = []
 
@@ -411,6 +412,25 @@ export class TestSessions implements ISessions {
       draft.current = id
       draft.currentAddress = undefined
     })
+  }
+
+  /**
+   * Materialize a blank test Session under the requested pre-publication options.
+   * @param opts - caller-owned identity and Runtime Profile selection.
+   * @returns the created Session id without changing current selection.
+   */
+  async create(opts: ClientSessionCreateOptions = {}): Promise<SessionId> {
+    this.calls.push({ method: 'create', args: [opts] })
+    const id = opts.sessionId ?? `test-created-${String(this.records.size + 1)}` as SessionId
+    await this.add({
+      id,
+      summary: {
+        blank: true,
+        ...(opts.cwd === undefined ? {} : { cwd: opts.cwd }),
+        ...(opts.runtimeProfile === undefined ? {} : { runtimeProfile: opts.runtimeProfile }),
+      },
+    }, { current: false })
+    return id
   }
 
   /** Open an existing fixture through its catalog address. */

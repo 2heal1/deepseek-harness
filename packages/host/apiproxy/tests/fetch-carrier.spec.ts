@@ -218,6 +218,40 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
         return Promise.resolve({ rpcId: request.rpcId, result: { ok: true as const, value: {} } })
       },
     },
+    runtimeProfiles: {
+      catalog: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: true, value: { profiles: [], routes: [] } },
+      }),
+      describe: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+      }),
+      save: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+      }),
+      remove: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+      }),
+      saveRoute: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+      }),
+      removeRoute: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+      }),
+      setDefault: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+      }),
+      probe: request => Promise.resolve({
+        rpcId: request.rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'stub', details: {} } },
+      }),
+    },
     skills: {
       async list(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { skills: [{ name: 'commit-helper', description: 'Git commits', modelInvocable: true }] } } }

@@ -29,6 +29,8 @@ export type {
   GoalsApi, GoalRef,
   SettingsApi, SettingsNamespaceView, SettingsPathOpView, SettingsSecretView,
   CredentialsApi, CredentialView, ConfigurableProviderView, DiscoveredModelView, LlmApi,
+  RuntimeProfileCatalogEntry, RuntimeProfileConfigView, RuntimeProfileDocumentView,
+  RuntimeProfileProbeView, RuntimeProfilesApi, RuntimeRouteCatalogEntry, RuntimeSubagentRouteView,
 } from './api.ts'
 export {
   RpcId,

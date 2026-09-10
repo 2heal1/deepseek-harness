@@ -169,6 +169,12 @@ export interface ResolvedRuntimeSubagentRoute {
   readonly profile: RuntimeProfileSnapshot
 }
 
+/** Detached effective Runtime Profile settings and the revision they came from. */
+export interface AgentRuntimeProfileConfiguration {
+  readonly revision: number
+  readonly value: AgentRuntimeProfileSettings
+}
+
 /** One held profile or route capacity slot. */
 export interface RuntimeCapacityLease {
   /** Release the slot once the runtime reaches complete quiescence. */
@@ -699,6 +705,17 @@ export class AgentRuntimeProfiles extends Service {
       })
     }
     return this.snapshot(wanted, profile, this.settingsRevision(), overrides)
+  }
+
+  /**
+   * Read the complete effective non-secret configuration for trusted control planes.
+   * @returns a detached deeply frozen document and its observed Settings revision.
+   */
+  configuration(): AgentRuntimeProfileConfiguration {
+    return deepFreeze({
+      revision: this.settingsRevision(),
+      value: structuredClone(this.current),
+    })
   }
 
   /**

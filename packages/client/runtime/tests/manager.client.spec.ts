@@ -760,6 +760,34 @@ describe('remaining branches', () => {
     expect(await manager.create()).toMatchObject({ ok: false })
   })
 
+  it('carries Runtime Profile identity through create echoes and host frames', async () => {
+    const api = new FakeApiClient()
+    api.onCreate = () => Promise.resolve(ok({
+      sessionId: S1,
+      runtimeProfile: 'external',
+    }))
+    const manager = new SessionManager(api, fakeRemote())
+
+    await manager.create({ sessionId: S1, runtimeProfile: 'external' })
+    expect(api.callsOf('session.create')).toEqual([{
+      sessionId: S1,
+      runtimeProfile: 'external',
+    }])
+    expect(manager.getListSnapshot().items[0]?.runtimeProfile).toBe('external')
+
+    manager.handleHostEnvelope({
+      rpcId: 'runtime-profile-frame' as never,
+      payload: {
+        type: 'host/session-added',
+        blank: true,
+        sessionId: S2,
+        runtimeProfile: 'native',
+      },
+    })
+    expect(manager.getListSnapshot().items.find(item => item.sessionId === S2)?.runtimeProfile)
+      .toBe('native')
+  })
+
   it('publishes a real Ungrouped summary from workspace-attach-failed', async () => {
     const api = new FakeApiClient()
     api.onCreate = () => Promise.resolve(err({
