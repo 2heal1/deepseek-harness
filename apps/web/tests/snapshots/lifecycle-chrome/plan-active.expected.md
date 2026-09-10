@@ -29,6 +29,10 @@
   - img
   - text: Standard mode
   - img
+- button "native · native":
+  - img
+  - text: native · native
+  - img
 - textbox "Describe what you want to build"
 - button "Commands":
   - img

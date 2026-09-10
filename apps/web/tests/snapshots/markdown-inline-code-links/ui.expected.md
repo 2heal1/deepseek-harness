@@ -1,6 +1,8 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Inline code links" [disabled]
+  - img
+  - text: native · native
   - button "Session log":
     - text: Session log
     - img

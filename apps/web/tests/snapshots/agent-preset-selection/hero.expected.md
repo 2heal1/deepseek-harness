@@ -6,3 +6,7 @@
   - img
   - text: Standard mode
   - img
+- button "native · native":
+  - img
+  - text: native · native
+  - img
