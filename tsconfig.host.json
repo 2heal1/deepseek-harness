@@ -170,6 +170,7 @@
     { "path": "./packages/core/system-prompt" },
     { "path": "./packages/core/agent" },
     { "path": "./packages/core/agent-runtime" },
+    { "path": "./packages/core/agent-runtime-acp" },
     { "path": "./packages/core/agent-runtime-codex" },
     { "path": "./packages/core/agent-runtime-profile" },
     { "path": "./packages/core/agent-runtime-launcher" },

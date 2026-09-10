@@ -12,11 +12,11 @@
 
 发布过程依次进入 Session 与 Agent 注册表，同步通知 `session/created` 和 `agent/created`，发出 `agent/session-start`，再打开准入。注册表查询在这些通知期间可能暴露 Agent，但 waking input 会以 phase 为 `publication` 的 `SUBMISSION_REJECTED` 拒绝。失败会先关闭准入，并在拒绝操作前通过回滚移除两个注册表条目。
 
-调用方 context、Router service 与所选 Provider generation 都是结构化 owner。任一 owner teardown 都汇聚到同一个 memoized disposal：关闭准入、取消并排空 prepared runtime、释放 Agent scope、detach Agent、detach Session，最后释放 profile 容量租约。即使清理最终报告 `DISPOSE_FAILED`，disposal 也会等待 Provider 完全停稳。
+调用方 context、Router service 与所选 Provider generation 都是结构化 owner。任一 owner teardown 都汇聚到同一个 memoized disposal：关闭准入，在 event sink 保持开放期间取消并排空 prepared runtime，等待持久 submission 结算，关闭 sink，释放 Agent scope、detach Agent、detach Session，最后释放 profile 容量租约。即使清理最终报告 `DISPOSE_FAILED`，disposal 也会等待 Provider 完全停稳。
 
 ## Submission 与事件
 
-`RoutedAgent.submit()` 会同步追加 `agent/submission/accepted`，并返回 receipt；其 `started` 和 `settled` Promise 跟随持久生命周期记录。Router 串行执行 Provider submission，以 `SubmissionId` 定向取消，并在所有已接纳 submission 结算前保持 `Agent.status` 为 running。Disposal 会关闭准入、取消未完成工作，并在释放 Provider 前等待持久结算。
+`RoutedAgent.submit()` 会同步追加 `agent/submission/accepted`，并返回 receipt；其 `started` 和 `settled` Promise 跟随持久生命周期记录。Router 串行执行 Provider submission，以 `SubmissionId` 定向取消，并在所有已接纳 submission 结算前保持 `Agent.status` 为 running。Disposal 会关闭准入、取消未完成工作，并在 Provider 完全停稳和持久 settlement 完成前保持 event sink 开放。
 
 受限 event sink 会追加规范化运行时事实与 activity，以及外部 assistant chunk 和 message。追加前，它会校验 runtime、Provider、submission、turn、capability、provenance 与 JSON 大小关系。Native 执行继续拥有自己的 step、request、inbox、tool 与模型输出事件；精确 turn 关联通过 Native submission request 到达 Router。
 
@@ -46,5 +46,5 @@ Router 不重写请求前缀。Native cache 行为保持不变。
 
 ## 已知限制和延后工作
 
-- **外部协议 Provider 属于后续工作** - Router 已能持久化并投影其规范输出，但 Codex App Server 与 ACP runtime 实现由后续工作包交付。
+- **外部协议 Provider 保持可选** - Router 已能持久化并投影其规范输出，但发布的 bundle 不会选择独立的 Codex App Server 或 ACP runtime 包。
 - **持久化 flush 仍由调用方负责** - Receipt settlement 跟随同步事件追加与分发；Host 在自己的响应边界 flush 存储与 transport 队列。
