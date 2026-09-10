@@ -264,7 +264,7 @@ function forkSeedWithoutRuntimeFacts(
   }
 }
 
-/** Mutable sink state closed before provider teardown. */
+/** Mutable sink state kept open through provider teardown and receipt settlement. */
 class RouterEventSink implements AgentRuntimeEventSink {
   private open = true
   private agent!: RoutedAgent
@@ -522,7 +522,6 @@ class AgentLifecycle {
     const submissionsSettled = this.agentValue?.closeAdmission()
     this.abort.abort(new Error(`agent "${id}" lifecycle disposed`))
     this.removeAbortListeners()
-    this.sink.close()
     if (this.agentValue === undefined) await this.agentReady.promise
     const agent = this.agentValue
     let failure: unknown
@@ -535,6 +534,7 @@ class AgentLifecycle {
       }
     }
     await submissionsSettled
+    this.sink.close()
     try {
       await agent?.disposeScope()
     } catch (error: unknown) {

@@ -201,6 +201,26 @@ export type PresetTrust = 'system' | 'user'
 
 来源：[`packages/preset/agent-presets/src/preset.ts:52`](../packages/preset/agent-presets/src/preset.ts)
 
+<a id="deepseek-aidsh-agent-runtime-acp"></a>
+
+## `@deepseek-ai/dsh-agent-runtime-acp`
+
+依赖：`agentRuntimes` · `agentRuntimeLauncher`
+
+```ts config-catalog
+/** ACP protocol limits independent of the shared process Launcher. */
+export interface Config {
+  /** Maximum UTF-8 bytes accepted for one JSONL frame from the ACP agent. */
+  maxFrameBytes: number
+  /** Maximum cumulative UTF-8 bytes accepted for one assistant result. */
+  maxOutputBytes: number
+  /** Maximum diagnostic bytes drained from ACP stderr. */
+  maxStderrBytes: number
+}
+```
+
+来源：[`packages/core/agent-runtime-acp/src/index.ts:90`](../packages/core/agent-runtime-acp/src/index.ts)
+
 <a id="deepseek-aidsh-agent-runtime-codex"></a>
 
 ## `@deepseek-ai/dsh-agent-runtime-codex`

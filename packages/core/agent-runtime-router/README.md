@@ -12,11 +12,11 @@ Load `AgentRegistry`, `AgentRuntimeRegistry`, `AgentRuntimeProfiles`, and this p
 
 Publication enters the Session and Agent registries, synchronously announces `session/created` and `agent/created`, emits `agent/session-start`, then opens admission. Registry lookup may expose the Agent during those notifications, but waking input rejects with `SUBMISSION_REJECTED` in phase `publication`. Failure closes admission before rollback and removes both registry entries before rejecting.
 
-The caller context, Router service, and selected Provider generation are structural owners. Any owner teardown converges on one memoized disposal: close admission, cancel and drain the prepared runtime, dispose the Agent scope, detach the Agent, detach the Session, then release the profile capacity lease. Disposal waits for provider quiescence even when cleanup ultimately reports `DISPOSE_FAILED`.
+The caller context, Router service, and selected Provider generation are structural owners. Any owner teardown converges on one memoized disposal: close admission, cancel and drain the prepared runtime while its event sink remains open, await durable submission settlement, close the sink, dispose the Agent scope, detach the Agent, detach the Session, then release the profile capacity lease. Disposal waits for provider quiescence even when cleanup ultimately reports `DISPOSE_FAILED`.
 
 ## Submission and events
 
-`RoutedAgent.submit()` synchronously appends `agent/submission/accepted` and returns a receipt whose `started` and `settled` promises follow the durable lifecycle records. The Router serializes Provider submissions, targets cancellation by `SubmissionId`, and keeps `Agent.status` running until every admitted submission settles. Disposal closes admission, cancels outstanding work, and waits for durable settlement before releasing the Provider.
+`RoutedAgent.submit()` synchronously appends `agent/submission/accepted` and returns a receipt whose `started` and `settled` promises follow the durable lifecycle records. The Router serializes Provider submissions, targets cancellation by `SubmissionId`, and keeps `Agent.status` running until every admitted submission settles. Disposal closes admission, cancels outstanding work, and keeps the event sink open through Provider quiescence and durable settlement.
 
 The restricted event sink appends normalized runtime facts and activity plus external assistant chunks and messages. It verifies runtime, Provider, submission, turn, capability, provenance, and JSON-size relationships before append. Native execution continues to own its step, request, inbox, tool, and model-output events; exact turn correlation reaches the Router through the Native submission request.
 
@@ -46,5 +46,5 @@ The Router does not rewrite request prefixes. Native cache behavior is unchanged
 
 ## Known Limitations and Deferred Work
 
-- **External protocol Providers remain separate work** - the Router can persist and project their canonical output, but Codex App Server and ACP runtime implementations are delivered by later work packages.
+- **External protocol Providers remain opt-in** - the Router can persist and project their canonical output, but shipped bundles do not select the separate Codex App Server or ACP runtime packages.
 - **Persistence flushing remains caller-owned** - receipt settlement follows synchronous event append and dispatch; Hosts flush storage and transport queues at their own response boundary.
