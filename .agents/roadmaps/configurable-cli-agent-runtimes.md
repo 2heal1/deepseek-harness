@@ -56,7 +56,7 @@
 | F4 | 安全启动基础能力 | F1、P0c | F | 高级 | `done` | `feat/configurable-cli-f4-secure-launch` | [PR #10](https://github.com/2heal1/deepseek-harness/pull/10) | 唯一安全 Launcher、精确环境、保留参数、进程树完全停稳、私有临时材料、known-value 脱敏与 Windows Launcher；逐文件 100% coverage，`doc-sync` 28 项、build、lint、hygiene、pre-push typecheck 与 CI 18 项通过；PR 已合入集成分支 |
 | F5 | 会话事件与 Host API | F1、P0c | F | 高级 | `done` | `feat/configurable-cli-f5-events-host-api` | [PR #11](https://github.com/2heal1/deepseek-harness/pull/11) | Runtime Profile snapshot、durable submission receipt、Router event sink、Host projection、fork、来源、不支持能力与 API schema 测试；逐文件 100% coverage，`doc-sync`、build、lint、hygiene、pre-push typecheck 与 CI 18 项通过；PR 已合入集成分支 |
 | D1 | Codex App Server Provider | P0a、F1、F4 | D | 中等，高级状态机评审 | `in-progress` | `feat/configurable-cli-d1-codex-provider` | — | Fixture 一致性、背压、取消与失败清理 |
-| D2 | ACP 一次性 Provider | P0b、F1、F4 | D | 中等，高级状态机评审 | `not-started` | `feat/configurable-cli-d2-acp-provider` | — | Fixture 一致性、一次性结果、取消与失败清理 |
+| D2 | ACP 一次性 Provider | P0b、F1、F4 | D | 中等，高级状态机评审 | `in-progress` | `feat/configurable-cli-d2-acp-provider` | — | Fixture 一致性、一次性结果、取消与失败清理；补充 Driver 启动 argv 与保留参数拒绝 fixture |
 | U1 | Profile、route 与能力 UI | F3、F5 | D | 中等；固定表单可交给较低 agent | `not-started` | `feat/configurable-cli-u1-runtime-ui` | — | 表单、探测、可信写入、禁用状态与 Client schema 测试 |
 | M1 | 外部主 agent 垂直切片 | F2、F3、F5、D1 | M | 高级 | `not-started` | `feat/configurable-cli-m1-main-agent` | — | 创建、流、submit receipt、取消、活动与固定会话集成 |
 | S1 | 运行时支持的一次性子 agent | F3、F4、D2 | M | 中等，高级评审 | `not-started` | `feat/configurable-cli-s1-child-agent` | — | Route 解析、容量、工作区、凭据隔离与一次性集成 |
@@ -118,3 +118,6 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | 2026-09-08 | D1 | 从最新 `fork/feat/configurable-cli` 的 `eb93b869c9` 创建 `feat/configurable-cli-d1-codex-provider`；确认 P0a、F1 与 F4 已合入且远端不存在同名工作分支；状态更新为 `in-progress` |
 | 2026-09-08 | D1 | 阻塞：F4 Launcher 规定 Driver 独占注入协议参数并拒绝 Profile 的保留参数，但冻结 Runtime Profile 示例把 Codex `app-server --stdio` 写在 `launch.args`；需要高级架构裁决并同步 Agent Note 后，才能定义 D1 的 Driver 参数所有权和 fixture 行为 |
 | 2026-09-08 | D1 | 高级裁决确认 F4 的 Driver 参数所有权不变；修正 Runtime Profile 示例为 `launch.args: []`，Codex Driver 注入 `app-server --stdio`，Profile 对保留参数的设置继续在 spawn 前失败；状态更新为 `in-progress`，取消、背压和失败清理仍待高级状态机评审 |
+| 2026-09-10 | D2 | 从最新 `fork/feat/configurable-cli` 的 `b09efa9cd8` 创建 `feat/configurable-cli-d2-acp-provider`；确认 P0b、F1 与 F4 已合入且远端不存在同名工作分支；状态更新为 `in-progress` |
+| 2026-09-10 | D2 | 阻塞：冻结方案的 ACP Profile 仍配置 `launch.args: [acp, serve]`，但 F4 要求协议模式参数由 Driver 独占注入并拒绝 Profile 设置；P0b 固定了协议帧，没有固定产品启动命令与保留项，D1 的已有裁决只明确 Codex。需要高级架构所有者明确 ACP 的可信启动声明及 Profile 参数限制，并同步双语 Agent Note 后继续；未修改 Provider、S1 或其他后继实现，状态更新为 `blocked` |
+| 2026-09-10 | D2 | 用户裁决保持 F4 的 Driver 独占注入规则；双语 Agent Note 明确可信的产品专用 ACP 启动声明，示例 Profile 改为 `launch.args: []`，示例 Driver 注入并保留 `acp serve`，缺少声明或 Profile 设置保留参数均在 spawn 前失败；阻塞解除，状态恢复为 `in-progress`。本次仅更新文档，Provider 实现、启动 fixture、取消与失败清理及高级状态机评审仍待完成 |

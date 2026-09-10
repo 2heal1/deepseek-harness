@@ -205,7 +205,7 @@ agentRuntime:
       driver: acp
       launch:
         executable: acp-agent-cli
-        args: [acp, serve]
+        args: []
         cwdPolicy: parent-workspace
         ambientEnv: []
       model:
@@ -239,6 +239,10 @@ subagentRoutes:
 ```
 
 The Codex App Server Driver injects `app-server --stdio`; a Runtime Profile cannot set either reserved protocol argument, including with the Driver-required value.
+
+ACP does not define a universal CLI launch command. The ACP Provider owns a trusted, product-specific Driver launch declaration for each supported CLI, specifying the protocol argv, reserved argument forms, required and reserved environment keys, and credential targets. This declaration belongs to the trusted Provider implementation, not the Runtime Profile, and is never inferred from `launch.args`. An executable that starts directly in ACP mode has an explicitly empty protocol argv; a missing launch declaration fails before spawn.
+
+For the illustrative `acp-agent-cli`, the Driver injects `acp serve` and reserves both arguments; the Profile supplies neither. Profile attempts to set a reserved argument fail before spawn even when the value matches the Driver declaration. D2 fixtures must pin the declared launch argv and reserved-argument rejection as well as the P0b protocol frames. A launch declaration does not prove sandbox enforcement; required permission claims still need the verified mapping or enforcing wrapper described in the secure-launch rules.
 
 The settings revision is a concurrency and audit marker, not profile history. At session creation the router resolves defaults and stores a complete non-secret `RuntimeProfileSnapshot`, including credential references but not values, in immutable session metadata. Resume reads that snapshot instead of the currently edited profile. A conflicting caller override, missing provider, or incompatible recorded driver fails explicitly; it never silently starts native execution or a fresh external session.
 
@@ -319,6 +323,8 @@ Implementation status, hard dependencies, parallel groups, coding-agent level, w
 **Record product-native tools as ordinary Harness tool events.** Those tools were not selected or executed by Harness and may expose incomplete arguments or results. Runtime activity events preserve observability without corrupting Harness-derived model history.
 
 **Ship a generic JSONL provider in V1.** The repository has no representative product protocol or consumer that fixes its lifecycle semantics. Adding it would create an unsupported public choice, so another documented protocol and fixtures must justify it later.
+
+**Let ACP Profiles select protocol mode through free-form arguments.** ACP wire compatibility does not establish product launch controls. Allowing Profiles to supply those controls would bypass Driver ownership and reserved-argument validation. Product-specific trusted Driver declarations preserve the shared launcher policy without inventing a universal ACP command.
 
 **Run arbitrary shell command strings or parse an interactive terminal.** Shell strings create quoting and injection differences, while terminal prose cannot reliably express lifecycle facts. Providers use an executable plus argument array and a documented structured protocol.
 

@@ -205,7 +205,7 @@ agentRuntime:
       driver: acp
       launch:
         executable: acp-agent-cli
-        args: [acp, serve]
+        args: []
         cwdPolicy: parent-workspace
         ambientEnv: []
       model:
@@ -240,6 +240,10 @@ subagentRoutes:
 
 Codex App Server Driver 注入 `app-server --stdio`；Runtime Profile 不能设置任一保留协议参数，即使值与 Driver 要求的值相同。
 
+ACP 不定义通用 CLI 启动命令。ACP Provider 为每个受支持的 CLI 持有可信的产品专用 Driver 启动声明，指定协议 argv、保留参数形式、必需与保留环境键以及凭据目标。该声明属于可信 Provider 实现，不属于 Runtime Profile，也绝不从 `launch.args` 推断。直接以 ACP 模式启动的可执行文件显式声明空的协议 argv；缺少启动声明时在 spawn 前失败。
+
+对于示例中的 `acp-agent-cli`，Driver 注入 `acp serve` 并保留这两个参数，Profile 不提供任一参数。Profile 设置保留参数的尝试在 spawn 前失败，即使值与 Driver 声明相同。D2 fixture（测试前置数据）除了固定 P0b 协议帧，还必须固定声明的启动 argv 与保留参数拒绝行为。启动声明不能证明沙箱强制执行能力；必需权限声称仍须满足安全启动规则中的已验证映射或强制执行包装要求。
+
 Settings revision 是并发与审计标记，不是 profile 历史。创建会话时，Router 解析默认值，并在不可变会话元数据中存储完整且不含秘密的 `RuntimeProfileSnapshot`，其中包括凭据引用但不包括值。恢复时读取该快照，而不是当前已编辑的 profile。调用方传入冲突覆盖项、缺少提供方或记录的 Driver 不兼容时必须明确失败；系统不得静默启动原生执行或新的外部会话。
 
 协商能力、产品版本、进程状态和安全的外部会话标识等创建后才获知的运行时事实，以会话事件追加。编辑 profile 只影响新会话。每次启动进程时重新解析凭据引用，因此 Key 轮换不需要改写历史数据。
@@ -248,7 +252,7 @@ Settings revision 是并发与审计标记，不是 profile 历史。创建会�
 
 ### 协议与安全启动规则
 
-V1 包含两个外部协议目标：供主 agent 垂直切片使用的 Codex App Server，以及供一次性子 agent 使用的 ACP。每个提供方固定经过测试的兼容范围，并负责握手、codec、流、错误、取消和关闭 fixture（测试前置数据）。名为 `app-server` 的命令或方法不能证明兼容性。系统绝不把终端文案解析成自动化协议。
+V1 包含两个外部协议目标：供主 agent 垂直切片使用的 Codex App Server，以及供一次性子 agent 使用的 ACP。每个提供方固定经过测试的兼容范围，并负责握手、codec、流、错误、取消和关闭 fixture。名为 `app-server` 的命令或方法不能证明兼容性。系统绝不把终端文案解析成自动化协议。
 
 按换行分隔的 JSON transport 按 UTF-8 字节数限制每个输入 frame。超限时，transport 暂停并移除输入监听器、以类型化失败拒绝未完成请求、报告一次终态输入失败，并拒绝后续协议写入。Codex Provider 提供经过校验的 `maxFrameBytes` 限制，默认值为 1 MiB，并把该类型化失败提升为活动协议操作的失败。定向取消发送一次尽力而为的 `turn/interrupt`；取消、超限与协议失败会关闭 stdin，并在 settlement 前等待 Launcher 完成进程树静止与临时材料清理。
 
@@ -319,6 +323,8 @@ agent 运行时 Service Definition 负责提供方注册、品牌化标识、请
 **把产品原生工具记录成普通 Harness 工具事件。** 这些工具不是 Harness 选择或执行的，并且可能只暴露不完整参数或结果。运行时 Activity 事件既保留可观察性，也不会破坏 Harness 派生模型历史。
 
 **在 V1 交付通用 JSONL 提供方。** 仓库没有能够确定其生命周期语义的代表性产品协议或 Consumer。此时增加它会形成缺乏支持的公开选项，因此后续必须先有另一项文档协议和 fixture 作为依据。
+
+**让 ACP Profile 通过自由参数选择协议模式。** ACP 协议兼容性不能确定产品启动控制项。允许 Profile 提供这些控制项会绕过 Driver 所有权与保留参数校验。可信的产品专用 Driver 声明既保留共享 Launcher 策略，也不虚构通用 ACP 命令。
 
 **运行任意 Shell 命令字符串或解析交互式终端。** Shell 字符串在不同平台产生引用与注入差异，终端文案也无法可靠表达生命周期事实。提供方使用可执行文件、参数数组和有文档的结构化协议。
 
