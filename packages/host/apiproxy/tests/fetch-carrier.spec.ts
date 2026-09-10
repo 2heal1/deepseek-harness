@@ -423,6 +423,61 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
     expect((await c.agentPresets.remove({ agentPreset: 'mine' })).result).toEqual({ ok: true, value: {} })
   })
 
+  it('round-trips every Runtime Profile method', async () => {
+    const c = client()
+    const profile = {
+      provider: 'native',
+      launch: {
+        executable: '/usr/bin/node',
+        cwdPolicy: 'session-workspace' as const,
+      },
+      permissions: {
+        policy: { kind: 'harness' },
+        enforcement: 'required' as const,
+      },
+      process: {
+        startupTimeoutMs: 1,
+        turnTimeoutMs: 2,
+        shutdownTimeoutMs: 3,
+        terminationTimeoutMs: 4,
+        maxConcurrentRuns: 1,
+      },
+    }
+
+    expect((await c.runtimeProfiles.catalog({})).result)
+      .toEqual({ ok: true, value: { profiles: [], routes: [] } })
+    expect((await c.runtimeProfiles.describe({})).result.ok).toBe(false)
+    expect((await c.runtimeProfiles.save({
+      profileId: 'native',
+      profile,
+      expectedRevision: 1,
+    })).result.ok).toBe(false)
+    expect((await c.runtimeProfiles.remove({
+      profileId: 'old',
+      expectedRevision: 2,
+    })).result.ok).toBe(false)
+    expect((await c.runtimeProfiles.saveRoute({
+      routeId: 'child',
+      route: {
+        runtimeProfile: 'native',
+        mode: 'one-shot',
+        maxDepth: 2,
+        maxConcurrentRuns: 1,
+        toolName: 'delegate_child',
+      },
+      expectedRevision: 2,
+    })).result.ok).toBe(false)
+    expect((await c.runtimeProfiles.removeRoute({
+      routeId: 'child',
+      expectedRevision: 3,
+    })).result.ok).toBe(false)
+    expect((await c.runtimeProfiles.setDefault({
+      profileId: 'native',
+      expectedRevision: 4,
+    })).result.ok).toBe(false)
+    expect((await c.runtimeProfiles.probe({ profileId: 'native' })).result.ok).toBe(false)
+  })
+
   it('round-trips the native picker without the default unary timeout', async () => {
     const api = fakeApi()
     api.host.pickDirectory = async (request) => {
