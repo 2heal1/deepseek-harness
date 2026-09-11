@@ -3,6 +3,8 @@
     - 'button "Using ONE run_code program: run" [disabled]'
   - img
   - text: Standard mode
+  - img
+  - text: native · native
   - button "Session log":
     - text: Session log
     - img

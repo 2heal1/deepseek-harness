@@ -2870,6 +2870,54 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         return ok(request, {})
       },
     },
+    runtimeProfiles: {
+      catalog: request => ok(request, {
+        profiles: [{
+          id: 'native',
+          provider: 'native',
+          isDefault: true,
+          providerAvailable: true,
+          schemaCompatible: true,
+        }],
+        routes: [],
+      }),
+      describe: request => err(request, {
+        code: 'runtime-profile-error',
+        message: 'fixture runtime profile editing is unavailable',
+        details: {},
+      }),
+      save: request => err(request, {
+        code: 'runtime-profile-error',
+        message: 'fixture runtime profile editing is unavailable',
+        details: { profileId: request.payload.profileId },
+      }),
+      remove: request => err(request, {
+        code: 'runtime-profile-error',
+        message: 'fixture runtime profile editing is unavailable',
+        details: { profileId: request.payload.profileId },
+      }),
+      saveRoute: request => err(request, {
+        code: 'runtime-profile-error',
+        message: 'fixture runtime route editing is unavailable',
+        details: {},
+      }),
+      removeRoute: request => err(request, {
+        code: 'runtime-profile-error',
+        message: 'fixture runtime route editing is unavailable',
+        details: {},
+      }),
+      setDefault: request => err(request, {
+        code: 'runtime-profile-error',
+        message: 'fixture runtime profile editing is unavailable',
+        details: { profileId: request.payload.profileId },
+      }),
+      probe: request => ok(request, {
+        productVersion: 'fixture',
+        protocolVersion: 'native',
+        capabilities: [],
+        permissionEnforcement: 'enforced',
+      }),
+    },
 
     skills: {
       list: (request) => {
@@ -3210,6 +3258,14 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'agentPreset.copy': return this.api.agentPresets.copy(request)
       case 'agentPreset.openDocument': return this.api.agentPresets.openDocument(request, new AbortController().signal)
       case 'agentPreset.remove': return this.api.agentPresets.remove(request)
+      case 'runtimeProfile.catalog': return this.api.runtimeProfiles.catalog(request)
+      case 'runtimeProfile.describe': return this.api.runtimeProfiles.describe(request)
+      case 'runtimeProfile.save': return this.api.runtimeProfiles.save(request)
+      case 'runtimeProfile.remove': return this.api.runtimeProfiles.remove(request)
+      case 'runtimeProfile.saveRoute': return this.api.runtimeProfiles.saveRoute(request)
+      case 'runtimeProfile.removeRoute': return this.api.runtimeProfiles.removeRoute(request)
+      case 'runtimeProfile.setDefault': return this.api.runtimeProfiles.setDefault(request)
+      case 'runtimeProfile.probe': return this.api.runtimeProfiles.probe(request, signal)
       case 'goal.create': return this.api.goals.create(request)
       case 'goal.edit': return this.api.goals.edit(request)
       case 'goal.pause': return this.api.goals.pause(request)

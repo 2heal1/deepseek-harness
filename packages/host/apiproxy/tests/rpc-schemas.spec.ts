@@ -38,6 +38,14 @@ import { approvalRequestIdSchema, approvalResponsePayloadSchema } from '../src/a
 import { askUserQuestionAnswerSchema, questionResponsePayloadSchema } from '../src/api/questions.schema.ts'
 import { goalEditRequestSchema } from '../src/api/goals.schema.ts'
 import { subagentPromptRequestSchema } from '../src/api/subagents.schema.ts'
+import {
+  runtimeProfileCatalogValueSchema,
+  runtimeProfileConfigSchema,
+  runtimeProfileDocumentSchema,
+  runtimeProfileProbeSchema,
+  runtimeProfileSaveRequestSchema,
+  runtimeSubagentRouteSchema,
+} from '../src/api/runtime-profiles.schema.ts'
 
 describe('RpcId', () => {
   it('brands a raw string at zero runtime cost', () => {
@@ -140,7 +148,10 @@ describe('sessions domain schemas', () => {
     expect(sessionIdSchema.parse('s1')).toBe('s1')
     expect(() => sessionIdSchema.parse('')).toThrow()
     expect(sessionSummarySchema.parse({ sessionId: 's1', updatedAt: 1, running: false, blank: true })).toMatchObject({ sessionId: 's1', blank: true })
-    expect(sessionSummarySchema.parse({ sessionId: 's1', updatedAt: 1, running: true, blank: false, parentSessionId: 'p', cwd: '/x' }).cwd).toBe('/x')
+    expect(sessionSummarySchema.parse({
+      sessionId: 's1', updatedAt: 1, running: true, blank: false,
+      parentSessionId: 'p', cwd: '/x', runtimeProfile: 'external',
+    })).toMatchObject({ cwd: '/x', runtimeProfile: 'external' })
     // blank is mandatory: a summary without it fails the parse.
     expect(() => sessionSummarySchema.parse({ sessionId: 's1', updatedAt: 1, running: false })).toThrow()
     const event = sessionEventSchema.parse({
@@ -221,9 +232,13 @@ describe('sessions domain schemas', () => {
     })).toThrow()
     expect(sessionCreateRequestSchema.parse({ cwd: '/w' }).cwd).toBe('/w')
     // The refine's both-sides branch: workspaceId alone passes, workspaceId+cwd rejects.
-    expect(sessionCreateRequestSchema.parse({ workspaceId: 'w1', sessionId: 's1' }).sessionId).toBe('s1')
+    expect(sessionCreateRequestSchema.parse({
+      workspaceId: 'w1', sessionId: 's1', runtimeProfile: 'external',
+    })).toMatchObject({ sessionId: 's1', runtimeProfile: 'external' })
     expect(() => sessionCreateRequestSchema.parse({ workspaceId: 'w1', cwd: '/w' })).toThrow(/not both/)
-    expect(sessionCreateValueSchema.parse({ sessionId: 's1' }).sessionId).toBe('s1')
+    expect(sessionCreateValueSchema.parse({
+      sessionId: 's1', runtimeProfile: 'external',
+    })).toMatchObject({ sessionId: 's1', runtimeProfile: 'external' })
     expect(sessionHistoryRequestSchema.parse({ sessionId: 's1', beforeSeq: 3, maxMessages: 5 }).beforeSeq).toBe(3)
     expect(() => sessionHistoryRequestSchema.parse({ sessionId: 's1', maxMessages: 0 })).toThrow()
     expect(sessionHistoryValueSchema.parse({
@@ -560,6 +575,90 @@ describe('events frame schemas', () => {
       { type: 'stream/error', error: { code: 'internal', message: 'm', details: {} } },
     ]
     for (const frame of frames) expect(hostFrameSchema.parse(frame)).toMatchObject({ type: frame.type })
+  })
+})
+
+describe('Runtime Profile schemas', () => {
+  const profile = {
+    provider: 'native',
+    schemaVersion: 0,
+    providerOptionsVersion: 1,
+    providerOptions: { mode: 'test' },
+    launch: {
+      executable: '/usr/bin/runtime',
+      args: ['serve'],
+      resolution: 'absolute' as const,
+      cwdPolicy: 'session-workspace' as const,
+      ambientEnv: ['LANG'],
+      env: { LOG_LEVEL: 'debug' },
+    },
+    model: { default: 'model-a', allowSessionOverride: true },
+    product: { profile: 'test' },
+    permissions: {
+      policy: { sandbox: 'workspace' },
+      enforcement: 'required' as const,
+      approval: 'unattended-fail-closed' as const,
+    },
+    nativeTools: { allowed: ['filesystem'] },
+    harnessTools: { transport: 'mcp' as const, allowed: ['todo_write'] },
+    credentials: { env: { API_KEY: { credentialRef: 'RUNTIME_KEY' } } },
+    process: {
+      startupTimeoutMs: 1,
+      turnTimeoutMs: 2,
+      shutdownTimeoutMs: 3,
+      terminationTimeoutMs: 4,
+      maxConcurrentRuns: 1,
+    },
+  }
+
+  it('accepts complete profile, route, catalog, document, and probe values', () => {
+    expect(runtimeProfileConfigSchema.parse(profile)).toEqual(profile)
+    expect(runtimeSubagentRouteSchema.parse({
+      runtimeProfile: 'main',
+      mode: 'one-shot',
+      maxDepth: 2,
+      maxConcurrentRuns: 1,
+      toolName: 'delegate_main',
+    })).toMatchObject({ runtimeProfile: 'main', toolName: 'delegate_main' })
+    expect(runtimeProfileCatalogValueSchema.parse({
+      profiles: [{
+        id: 'main', provider: 'native', model: 'model-a', isDefault: true,
+        providerAvailable: true, schemaCompatible: true,
+      }],
+      routes: [{ id: 'child', runtimeProfile: 'main', toolName: 'delegate_main' }],
+    }).profiles[0]?.id).toBe('main')
+    expect(runtimeProfileDocumentSchema.parse({
+      revision: 2,
+      writable: true,
+      defaultMainProfile: 'main',
+      profiles: { main: profile },
+      subagentRoutes: {},
+      credentialStatus: { main: { API_KEY: false } },
+    }).credentialStatus.main).toEqual({ API_KEY: false })
+    expect(runtimeProfileProbeSchema.parse({
+      productVersion: '1.0',
+      protocolVersion: 'v1',
+      capabilities: [{ id: 'runtimeActivity', metadata: { fidelity: 'full' } }],
+      permissionEnforcement: 'enforced',
+      details: { executable: true },
+    }).capabilities[0]?.id).toBe('runtimeActivity')
+  })
+
+  it('rejects unsafe ids, NUL arguments, invalid capacities, and malformed probes', () => {
+    expect(() => runtimeProfileSaveRequestSchema.parse({
+      profileId: '../escape', profile, expectedRevision: 0,
+    })).toThrow()
+    expect(() => runtimeProfileConfigSchema.parse({
+      ...profile,
+      launch: { ...profile.launch, args: ['bad\0arg'] },
+    })).toThrow()
+    expect(() => runtimeSubagentRouteSchema.parse({
+      runtimeProfile: 'main', maxDepth: -1, maxConcurrentRuns: 0, toolName: '',
+    })).toThrow()
+    expect(() => runtimeProfileProbeSchema.parse({
+      capabilities: [{ id: 'unknown' }],
+      permissionEnforcement: 'claimed',
+    })).toThrow()
   })
 })
 

@@ -231,6 +231,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   AgentRuntimePrepareRequest: 'core.md',
   AgentRuntimeProbeRequest: 'core.md',
   AgentRuntimeProbeResult: 'core.md',
+  AgentRuntimeProfileConfiguration: 'core.md',
   AgentRuntimeLaunchHandle: 'core.md',
   AgentRuntimeLaunchRequest: 'core.md',
   ResolvedRuntimeCredentials: 'core.md',

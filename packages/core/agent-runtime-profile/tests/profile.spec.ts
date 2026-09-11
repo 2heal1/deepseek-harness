@@ -183,6 +183,13 @@ describe('AgentRuntimeProfiles', () => {
       credentials: [],
     })
     expect(ctx.agentRuntimeProfiles.listRoutes()).toEqual([])
+    const configuration = ctx.agentRuntimeProfiles.configuration()
+    expect(configuration).toMatchObject({
+      revision: 0,
+      value: { defaultMainProfile: 'minimal' },
+    })
+    expect(Object.isFrozen(configuration)).toBe(true)
+    expect(Object.isFrozen(configuration.value.profiles.minimal)).toBe(true)
     await expect(ctx.agentRuntimeProfiles.resolveCredentials(snapshot)).resolves.toEqual({})
     expect(() => ctx.agentRuntimeProfiles.resolveRoute('missing'))
       .toThrow(expect.objectContaining({ code: 'PROFILE_NOT_FOUND' }))

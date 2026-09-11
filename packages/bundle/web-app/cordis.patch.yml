@@ -279,6 +279,11 @@
     - id: ui-agent-preset
       name: '@deepseek-ai/dsh-client-ui-agent-preset'
 
+    # Runtime Profile selection for new sessions and loopback-only profile,
+    # one-shot route, and provider-probe settings.
+    - id: ui-runtime-profile
+      name: '@deepseek-ai/dsh-client-ui-runtime-profile'
+
     # Plugin configuration: the host-plane sections a user owns, as expandable
     # cards. A namespace this deployment does not expose renders nothing.
     - id: ui-settings-plugins

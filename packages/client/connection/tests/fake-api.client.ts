@@ -30,6 +30,14 @@ export function ok<T>(value: T): RpcResponse<T> {
   return { rpcId: RpcId(`fake-${nextRpc++}`), result: { ok: true, value } }
 }
 
+function err(error: {
+  code: 'internal'
+  message: string
+  details: Record<string, never>
+}): RpcResponse<never> {
+  return { rpcId: RpcId(`fake-${nextRpc++}`), result: { ok: false, error } }
+}
+
 
 type StreamItem<F> = { kind: 'frame'; envelope: RpcRequest<F> } | { kind: 'end' } | { kind: 'fail'; error: unknown }
 
@@ -190,6 +198,33 @@ export class FakeApiClient implements IApiClient {
       this.record('agentPreset.openDocument', payload, Promise.resolve(ok({ opened: true as const }))),
     remove: (payload: { agentPreset: string }) =>
       this.record('agentPreset.remove', payload, Promise.resolve(ok({}))),
+  }
+
+  readonly runtimeProfiles: IApiClient['runtimeProfiles'] = {
+    catalog: payload => this.record('runtimeProfile.catalog', payload, Promise.resolve(ok({
+      profiles: [], routes: [],
+    }))),
+    describe: payload => this.record('runtimeProfile.describe', payload, Promise.resolve(err({
+      code: 'internal', message: 'not implemented', details: {},
+    }))),
+    save: payload => this.record('runtimeProfile.save', payload, Promise.resolve(err({
+      code: 'internal', message: 'not implemented', details: {},
+    }))),
+    remove: payload => this.record('runtimeProfile.remove', payload, Promise.resolve(err({
+      code: 'internal', message: 'not implemented', details: {},
+    }))),
+    saveRoute: payload => this.record('runtimeProfile.saveRoute', payload, Promise.resolve(err({
+      code: 'internal', message: 'not implemented', details: {},
+    }))),
+    removeRoute: payload => this.record('runtimeProfile.removeRoute', payload, Promise.resolve(err({
+      code: 'internal', message: 'not implemented', details: {},
+    }))),
+    setDefault: payload => this.record('runtimeProfile.setDefault', payload, Promise.resolve(err({
+      code: 'internal', message: 'not implemented', details: {},
+    }))),
+    probe: payload => this.record('runtimeProfile.probe', payload, Promise.resolve(err({
+      code: 'internal', message: 'not implemented', details: {},
+    }))),
   }
 
   readonly skills: IApiClient['skills'] = {

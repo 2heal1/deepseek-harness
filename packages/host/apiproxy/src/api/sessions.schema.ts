@@ -49,16 +49,22 @@ export const sessionEventSchema = z.object({
   ignorable: z.literal(true).optional(),
 }) as unknown as z.ZodType<SessionEvent>
 
-/** SessionSummary row of session.list (`projections` reuses the history block's shape and schema). */
-export const sessionSummarySchema = z.object({
-  sessionId: sessionIdSchema,
-  updatedAt: z.number(),
-  running: z.boolean(),
+/** Session summary fields shared with the host/session-added frame. */
+export const sessionSummaryBaseSchema = z.object({
   blank: z.boolean(),
   parentSessionId: sessionIdSchema.optional(),
   origin: z.literal('subagent').optional(),
   cwd: z.string().optional(),
   agentPreset: z.string().optional(),
+  runtimeProfile: z.string().optional(),
+})
+
+/** SessionSummary row of session.list (`projections` reuses the history block's shape and schema). */
+export const sessionSummarySchema = z.object({
+  sessionId: sessionIdSchema,
+  updatedAt: z.number(),
+  running: z.boolean(),
+  ...sessionSummaryBaseSchema.shape,
   projections: z.lazy(() => sessionProjectionsBlockSchema).optional(),
 }) as unknown as z.ZodType<Wire<SessionSummary>>
 
@@ -105,6 +111,7 @@ export const sessionCreateRequestSchema = z.object({
   cwd: z.string().optional(),
   sessionId: sessionIdSchema.optional(),
   agentPreset: z.string().optional(),
+  runtimeProfile: z.string().min(1).optional(),
 }).refine(
   payload => payload.workspaceId === undefined || payload.cwd === undefined,
   { message: 'session.create accepts workspaceId or cwd, not both' },
@@ -114,6 +121,7 @@ export const sessionCreateRequestSchema = z.object({
 export const sessionCreateValueSchema = z.object({
   sessionId: sessionIdSchema,
   agentPreset: z.string().optional(),
+  runtimeProfile: z.string().optional(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.create'>>>
 
 /** session.rename request payload (raw title; host-side normalization decides acceptance). */
