@@ -1,0 +1,107 @@
+{
+  "providers": [
+    "codex-app-server"
+  ],
+  "profile": {
+    "profileId": "codex-main",
+    "schemaVersion": 1,
+    "provider": {
+      "id": "codex-app-server",
+      "optionsVersion": 0,
+      "options": {}
+    },
+    "frozen": true
+  },
+  "capabilities": [
+    {
+      "id": "runtimeActivity",
+      "metadata": {
+        "fidelity": "complete",
+        "kinds": [
+          "turn"
+        ]
+      }
+    }
+  ],
+  "runtime": {
+    "providerId": "codex-app-server",
+    "phase": "ready",
+    "externalSessionId": "fixture-thread"
+  },
+  "first": {
+    "started": {
+      "kind": "started",
+      "turn": 1
+    },
+    "settled": {
+      "kind": "settled",
+      "turn": 1,
+      "reason": {
+        "kind": "completed"
+      }
+    }
+  },
+  "second": {
+    "started": {
+      "kind": "started",
+      "turn": 2
+    },
+    "cancelWon": true,
+    "settled": {
+      "kind": "settled",
+      "turn": 2,
+      "reason": {
+        "kind": "aborted",
+        "reason": {
+          "kind": "user"
+        }
+      }
+    }
+  },
+  "assistantDeltas": [
+    "EXTERNAL_",
+    "MAIN_OK"
+  ],
+  "assistantMessages": [
+    "EXTERNAL_MAIN_OK"
+  ],
+  "activities": [
+    {
+      "kind": "turn",
+      "phase": "started",
+      "fidelity": "complete"
+    },
+    {
+      "kind": "turn",
+      "phase": "completed",
+      "fidelity": "complete"
+    },
+    {
+      "kind": "turn",
+      "phase": "started",
+      "fidelity": "complete"
+    }
+  ],
+  "eventTypes": [
+    "agent/runtime/facts",
+    "agent/submission/accepted",
+    "turn/start",
+    "agent/submission/started",
+    "user/message",
+    "agent/runtime/activity",
+    "assistant/chunk",
+    "assistant/chunk",
+    "agent/runtime/activity",
+    "assistant/message",
+    "turn/end",
+    "agent/submission/settled",
+    "agent/submission/accepted",
+    "turn/start",
+    "agent/submission/started",
+    "user/message",
+    "agent/runtime/activity",
+    "turn/end",
+    "agent/submission/settled"
+  ],
+  "finalStatus": "idle"
+}

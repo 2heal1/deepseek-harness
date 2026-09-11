@@ -123,6 +123,16 @@ The Router stores the complete non-secret effective snapshot in every new Sessio
 
 Web Host publishes the latest runtime facts as the typed `runtimeStatus` Session projection. A new idle Web prompt uses a submission receipt. When a Native Agent is running or retains queued input, Queue uses the declared `continuation` and `queuedInputRead` capabilities and Steer uses `steering`, so pending messages remain addressable; these operations return no receipt and complete through their Native turn events. ACP, Headless, the JSON-RPC server, and both SDKs use submission receipts instead of inbox or whole-Agent-idle inference. JSON-RPC version `0.0.2` returns `{ messageId, submissionId }`; clients collect through the matching durable settlement. F5 does not add an external protocol Provider, main-agent vertical slice, activity UI, or runtime selector.
 
+#### M1 Codex external main Agent
+
+`@deepseek-ai/dsh-agent-runtime-codex` is an optional Profile Bundle. Loading its patch registers the `codex-app-server` Provider without starting a process; a Runtime Profile with `schemaVersion: 1` selects it for a new main Agent. The default base bundle remains free of the Codex wrapper and platform payloads.
+
+Web Host omits its implicit Agent Preset and Native model defaults for an external profile. An explicitly requested Preset fails at the Host API, while the Router independently rejects non-empty Preset metadata before external Provider preparation, including create, resume, and fork paths.
+
+One prepared Codex runtime owns one process and ephemeral thread across serial submissions. Each submission opens a distinct Codex turn, streams correlated assistant deltas, publishes one canonical final assistant message, and settles through the Router receipt. Targeted cancellation interrupts the active turn and waits for Launcher quiescence; a failed runtime does not fall back to Native.
+
+The Provider reports the validated thread id as the safe external Session identity and declares `runtimeActivity` with complete fields for each observed turn phase. It emits only observed `turn` start and terminal activity; local cancellation may settle before Codex emits a terminal notification, and the Provider does not synthesize one. Command, file, diff, usage, and native-tool details remain unclaimed. The Session Header retains the complete non-secret Runtime Profile snapshot independently of later Settings edits.
+
 #### Secure launch
 
 F4 implements one launcher used by every external runtime under these rules:

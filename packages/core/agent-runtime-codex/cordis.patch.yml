@@ -1,0 +1,5 @@
+# Optional Profile Bundle: register the Codex App Server main-runtime Provider.
+# Runtime Profile settings select and configure it without starting a process.
+- insert:
+    - id: agent-runtime-codex
+      name: '@deepseek-ai/dsh-agent-runtime-codex'
