@@ -60,6 +60,9 @@ const INACTIVE_STATES: ReadonlySet<FiberState> = new Set([
   FiberState.FAILED,
 ])
 
+/** Provider identity whose runtime consumes Harness Agent Presets. */
+const NATIVE_PROVIDER_ID = AgentRuntimeProviderId('native')
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     agentRuntimeRouter: AgentRuntimeRouter
@@ -633,6 +636,7 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
     const profile = persistedProfile === undefined
       ? this.resolveProfile(options.meta?.cwd, options.agentOptions ?? {})
       : this.profiles.restore(persistedProfile)
+    this.assertAgentPresetCompatible(profile, options.meta?.agentPreset)
     const agentOptions = persistedProfile === undefined
       ? options.agentOptions ?? {}
       : restoredAgentOptions(profile, options.agentOptions ?? {}, 'profile')
@@ -755,6 +759,9 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
       const listedProfile = listedHeader?.runtimeProfile === undefined
         ? undefined
         : this.profiles.restore(listedHeader.runtimeProfile)
+      if (listedProfile !== undefined) {
+        this.assertAgentPresetCompatible(listedProfile, listedHeader?.agentPreset)
+      }
       const listedGeneration = listedProfile === undefined
         ? undefined
         : this.requireProviderGeneration(listedProfile.provider.id)
@@ -774,6 +781,7 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
       ownerCtx.fiber.assertActive()
       this.assertActive()
       const profile = this.profiles.restore(preparation.session.header.runtimeProfile)
+      this.assertAgentPresetCompatible(profile, preparation.session.header.agentPreset)
       if (listedProfile !== undefined && !isDeepStrictEqual(profile, listedProfile)) {
         throw new AgentRuntimeError({
           code: 'RUNTIME_INCOMPATIBLE',
@@ -947,6 +955,20 @@ export class AgentRuntimeRouter extends Service implements AgentFactory {
       phase: 'profile',
       message: `agent runtime provider "${provider.id}" does not accept profile snapshot version ${profile.schemaVersion}`,
       providerId: provider.id,
+    })
+  }
+
+  /** Reject Harness composition that the selected external Provider cannot consume. */
+  private assertAgentPresetCompatible(
+    profile: RuntimeProfileSnapshot,
+    agentPreset: string | undefined,
+  ): void {
+    if (agentPreset === undefined || profile.provider.id === NATIVE_PROVIDER_ID) return
+    throw new AgentRuntimeError({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'profile',
+      message: `Runtime Profile "${profile.profileId}" cannot apply Agent Preset "${agentPreset}" to external provider "${profile.provider.id}"`,
+      providerId: profile.provider.id,
     })
   }
 

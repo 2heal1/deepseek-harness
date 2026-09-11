@@ -124,6 +124,9 @@ import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
 
+/** Provider identity whose runtime consumes Harness Agent Presets and model defaults. */
+const NATIVE_AGENT_RUNTIME_PROVIDER_ID = AgentRuntimeProviderId('native')
+
 /** Provider work budget: at most 100 calls and 2,000 inspected hits. */
 const SESSION_SEARCH_PROVIDER_CALL_LIMIT = 100
 
@@ -1184,14 +1187,67 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    *
    * A deployment with no preset roster composes nothing and every session
    * shares the host composition, which is the behavior before presets existed.
-   * @param presetId - the requested preset, or `undefined` for the default.
+   * External runtimes receive no implicit default because they cannot consume
+   * Harness prompt and tool composition.
+   * @param presetId - the requested preset, or `undefined` for the Native default.
+   * @param profile - selected or persisted Runtime Profile, when available.
    * @returns the id to record on the header (absent without a roster) and the setup callback.
-   * @throws when the roster supplies no such preset.
+   * @throws when the roster supplies no such preset or an external runtime receives one.
    */
-  async function composeAgent(presetId: string | undefined): Promise<{
+  function isExternalRuntime(
+    profile: RuntimeProfileSnapshot | undefined,
+  ): profile is RuntimeProfileSnapshot {
+    return profile !== undefined && profile.provider.id !== NATIVE_AGENT_RUNTIME_PROVIDER_ID
+  }
+
+  function restoreRuntimeProfile(
+    value: SessionHeader['runtimeProfile'],
+  ): RuntimeProfileSnapshot | undefined {
+    if (value === undefined) return undefined
+    const profiles = ctx.get('agentRuntimeProfiles')
+    if (profiles === undefined) {
+      throw new AgentRuntimeError({
+        code: 'RUNTIME_UNAVAILABLE',
+        phase: 'profile',
+        message: 'Runtime Profile service is not available',
+      })
+    }
+    return profiles.restore(value)
+  }
+
+  function resolveRuntimeProfile(profileId: string | undefined): RuntimeProfileSnapshot | undefined {
+    return ctx.get('agentRuntimeProfiles')?.resolve(profileId)
+  }
+
+  function assertAgentPresetCompatible(
+    profile: RuntimeProfileSnapshot | undefined,
+    presetId: string | undefined,
+  ): void {
+    if (presetId === undefined || !isExternalRuntime(profile)) return
+    throw new AgentRuntimeError({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'profile',
+      message: `Runtime Profile "${profile.profileId}" cannot apply Agent Preset "${presetId}" to external provider "${profile.provider.id}"`,
+      providerId: profile.provider.id,
+    })
+  }
+
+  async function composeAgent(
+    presetId: string | undefined,
+    profile?: RuntimeProfileSnapshot,
+  ): Promise<{
     agentPreset?: string
     setup: (agentCtx: Context) => Promise<void>
   }> {
+    assertAgentPresetCompatible(profile, presetId)
+    if (isExternalRuntime(profile)) {
+      return {
+        setup: (agentCtx: Context) => {
+          installSelection(agentCtx)
+          return Promise.resolve()
+        },
+      }
+    }
     const presets = ctx.get('agentPresets')
     if (presets === undefined) {
       return {
@@ -1230,7 +1286,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   // restore that history under the old tool set.
   const agentFor = createApiRemoteAgentResolver(ctx, {
     setup: async ({ meta, events }) =>
-      (await composeAgent(resolveSessionPreset({ header: meta, events }))).setup,
+      (await composeAgent(
+        resolveSessionPreset({ header: meta, events }),
+        restoreRuntimeProfile(meta.runtimeProfile),
+      )).setup,
   })
 
   /** Send one transient frame to every connected mux consumer. */
@@ -1636,7 +1695,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           return (await ctx.agents.resume({
             resumeSessionId: sessionId,
             ...runtimeProfile === undefined ? {} : { agentOptions: { runtimeProfile } },
-            setup: (await composeAgent(storedPreset)).setup,
+            setup: (await composeAgent(
+              storedPreset,
+              restoreRuntimeProfile(inspected.meta.runtimeProfile),
+            )).setup,
           })).agent
         }
 
@@ -1645,11 +1707,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         } catch (error: unknown) {
           throw new Error(`failed to ensure project directory "${cwd}": ${String(error)}`, { cause: error })
         }
-        const composition = await composeAgent(presetId)
+        const profile = resolveRuntimeProfile(runtimeProfile)
+        const composition = await composeAgent(presetId, profile)
         return (await ctx.agents.create({
           sessionId,
           agentOptions: {
-            ...agentOptions(),
+            ...isExternalRuntime(profile) ? {} : agentOptions(),
             ...runtimeProfile === undefined ? {} : { runtimeProfile },
           },
           meta: {
@@ -2490,7 +2553,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // those tools, and composing anything else would strand the tool calls
         // it already carries. Now that no model-facing row sits in the host
         // plane, composing nothing would leave the child with no tools at all.
-        const forkComposition = await composeAgent(resolveSessionPreset(source))
+        const forkComposition = await composeAgent(
+          resolveSessionPreset(source),
+          restoreRuntimeProfile(source.header.runtimeProfile),
+        )
         try {
           await ctx.agents.create({
             sessionId: childId,
@@ -3198,6 +3264,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
         const { agent } = found
+        try {
+          assertAgentPresetCompatible(
+            restoreRuntimeProfile(agent.session.header.runtimeProfile),
+            agentPreset,
+          )
+        } catch (error: unknown) {
+          return err(
+            request,
+            runtimeProfileError(error, sessionListFields(agent.session.header).runtimeProfile),
+          )
+        }
         const swap = async (): Promise<RpcResponse<{ agentPreset: string }>> => {
           // Re-read inside the queue: an earlier switch may have run, and a
           // conversation may have started, since this request arrived.

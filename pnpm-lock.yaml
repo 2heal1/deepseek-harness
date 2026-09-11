@@ -439,6 +439,21 @@ importers:
       '@deepseek-ai/dsh-agent-loop':
         specifier: workspace:*
         version: link:../packages/core/agent-loop
+      '@deepseek-ai/dsh-agent-runtime':
+        specifier: workspace:*
+        version: link:../packages/core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-codex':
+        specifier: workspace:*
+        version: link:../packages/core/agent-runtime-codex
+      '@deepseek-ai/dsh-agent-runtime-launcher':
+        specifier: workspace:*
+        version: link:../packages/core/agent-runtime-launcher
+      '@deepseek-ai/dsh-agent-runtime-profile':
+        specifier: workspace:*
+        version: link:../packages/core/agent-runtime-profile
+      '@deepseek-ai/dsh-agent-runtime-router':
+        specifier: workspace:*
+        version: link:../packages/core/agent-runtime-router
       '@deepseek-ai/dsh-agent-spine-demo':
         specifier: workspace:*
         version: link:../packages/examples/agent-spine-demo

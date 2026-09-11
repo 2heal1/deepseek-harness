@@ -233,7 +233,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-runtime-codex/src/index.ts:56`](../packages/core/agent-runtime-codex/src/index.ts)
+Source: [`packages/core/agent-runtime-codex/src/index.ts:61`](../packages/core/agent-runtime-codex/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-launcher"></a>
 
@@ -390,7 +390,7 @@ Requires: `agents` · `sessions` · `agentRuntimes` · `agentRuntimeProfiles` ·
 export interface Config {}
 ```
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:70`](../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:73`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 
@@ -2436,7 +2436,7 @@ export type CodexPermissionMode =
   | 'dangerously-bypass-approvals-and-sandbox'
 ```
 
-Source: [`packages/subagent/subagent-codex/src/index.ts:43`](../packages/subagent/subagent-codex/src/index.ts)
+Source: [`packages/subagent/subagent-codex/src/index.ts:45`](../packages/subagent/subagent-codex/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-dsh-sdk"></a>
 

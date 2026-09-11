@@ -1,7 +1,7 @@
 /**
  * Minimal Codex app-server 0.147.0 protocol adapter. The shared JSON-RPC
  * transport owns framing and request correlation; this module owns only the
- * product methods, current thread/turn association, unattended approval
+ * product methods, current thread and serial turn association, unattended approval
  * responses, and terminal-answer selection.
  *
  * @module @deepseek-ai/dsh-subagent-codex/wire
@@ -30,6 +30,16 @@ export interface CodexWireFailureFacts {
 
 /** Optional observer for one app-server assistant text delta. */
 export type CodexAssistantDeltaObserver = (text: string) => void
+
+/** Normalized product activity exposed to runtime consumers. */
+export interface CodexActivityObservation {
+  readonly kind: 'turn'
+  readonly phase: 'started' | 'completed' | 'interrupted' | 'failed'
+  readonly data: Readonly<Record<string, never>>
+}
+
+/** Optional observer for one validated app-server activity transition. */
+export type CodexActivityObserver = (activity: CodexActivityObservation) => void
 
 const THREAD_PERMISSION_PARAMS: Readonly<Record<CodexPermissionMode, JsonObject>> = {
   never: { approvalPolicy: 'never' },
@@ -213,7 +223,7 @@ async function raceAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T
 }
 
 /**
- * One app-server connection and its single ephemeral thread/turn.
+ * One app-server connection and its ephemeral thread with serial turns.
  *
  * The class deliberately exposes no generic request surface. Supporting
  * another product method must first become part of the provider contract.
@@ -223,6 +233,7 @@ export class CodexAppServerWire {
   private readonly fatal = Promise.withResolvers<never>()
   private threadId: string | undefined
   private turnId: string | undefined
+  private readonly completedTurnIds = new Set<string>()
   private interruptedTurnId: string | undefined
   private pendingTurnId: string | undefined
   private turnCompleted: PromiseWithResolvers<{
@@ -258,6 +269,7 @@ export class CodexAppServerWire {
     private readonly onAssistantDelta?: CodexAssistantDeltaObserver,
     private readonly threadPermission?: JsonObject,
     transportOptions?: JsonRpcLineTransportOptions,
+    private readonly onActivity?: CodexActivityObserver,
   ) {
     this.transport = new JsonRpcLineTransport(input, output, transportOptions)
     void this.fatal.promise.catch(() => {})
@@ -333,6 +345,17 @@ export class CodexAppServerWire {
   }
 
   /**
+   * Return the validated ephemeral thread identity after {@link startThread}.
+   * @returns the product-assigned thread id.
+   */
+  externalSessionId(): string {
+    if (this.threadId === undefined) {
+      throw new Error('subagent-codex: app-server thread has not started')
+    }
+    return this.threadId
+  }
+
+  /**
    * Submit the one text-only task and wait for this thread/turn's authoritative
    * terminal notification.
    * @param texts - already validated task text blocks.
@@ -347,7 +370,7 @@ export class CodexAppServerWire {
       readonly params: JsonObject
       readonly order: number
     }>()
-    this.turnCompleted = completion
+    this.beginTurn(completion)
     const threadId = this.threadId as string
     try {
       const response = object(await this.guarded(this.transport.request('turn/start', {
@@ -514,6 +537,8 @@ export class CodexAppServerWire {
       throw new Error('subagent-codex: turn/start response did not match the active turn')
     }
     this.turnId = id
+    this.pendingTurnId = undefined
+    this.onActivity?.({ kind: 'turn', phase: 'started', data: {} })
     const pendingDiagnostic = this.pendingDiagnostic
     this.pendingDiagnostic = undefined
     if (pendingDiagnostic !== undefined) {
@@ -532,6 +557,29 @@ export class CodexAppServerWire {
         notification.order,
       )
     }
+  }
+
+  private beginTurn(
+    completion: PromiseWithResolvers<{
+      readonly params: JsonObject
+      readonly order: number
+    }>,
+  ): void {
+    if (this.turnCompleted !== undefined && !this.terminalObserved) {
+      throw new Error('subagent-codex: app-server already has an active turn')
+    }
+    this.turnId = undefined
+    this.interruptedTurnId = undefined
+    this.pendingTurnId = undefined
+    this.earlyTurnNotifications.length = 0
+    this.lastFinalAnswer = undefined
+    this.lastUnphasedAnswer = undefined
+    this.diagnostic = undefined
+    this.failure = undefined
+    this.diagnosticOrder = 0
+    this.pendingDiagnostic = undefined
+    this.terminalObserved = false
+    this.turnCompleted = completion
   }
 
   /**
@@ -694,6 +742,7 @@ export class CodexAppServerWire {
       const threadId = string(params.threadId, 'turn/started thread id')
       if (threadId !== this.threadId) return
       const turn = object(params.turn, 'turn/started turn')
+      if (typeof turn.id === 'string' && this.completedTurnIds.has(turn.id)) return
       if (this.turnCompleted !== undefined && this.turnId === undefined) {
         this.observePendingTurnId(string(turn.id, 'turn/started turn id'))
       }
@@ -703,6 +752,7 @@ export class CodexAppServerWire {
       const threadId = string(params.threadId, 'item/completed thread id')
       if (threadId !== this.threadId) return
       const id = string(params.turnId, 'item/completed turn id')
+      if (this.completedTurnIds.has(id)) return
       if (this.turnId === undefined) {
         if (this.turnCompleted !== undefined) {
           this.observePendingTurnId(id)
@@ -747,6 +797,7 @@ export class CodexAppServerWire {
     if (threadId !== this.threadId) return
     const turn = object(params.turn, 'turn/completed turn')
     const id = string(turn.id, 'turn/completed turn id')
+    if (this.completedTurnIds.has(id)) return
     const turnCompleted = this.turnCompleted
     if (turnCompleted === undefined) return
     if (this.turnId === undefined) {
@@ -759,10 +810,13 @@ export class CodexAppServerWire {
       return
     }
     if (id !== this.turnId) return
-    this.terminalObserved = true
-    if (!['completed', 'interrupted', 'failed'].includes(String(turn.status))) {
+    const status = turn.status
+    if (status !== 'completed' && status !== 'interrupted' && status !== 'failed') {
       throw new Error(`subagent-codex: app-server returned invalid terminal turn status ${String(turn.status)}`)
     }
+    this.terminalObserved = true
+    this.completedTurnIds.add(id)
+    this.onActivity?.({ kind: 'turn', phase: status, data: {} })
     turnCompleted.resolve({
       params,
       order: order ?? this.nextObservationOrder(),

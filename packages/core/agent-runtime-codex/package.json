@@ -28,9 +28,15 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
+    "cordis.patch.yml",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
   "peerDependencies": {
     "@deepseek-ai/dsh-agent-runtime": "workspace:^",
     "@deepseek-ai/dsh-agent-runtime-launcher": "workspace:^",

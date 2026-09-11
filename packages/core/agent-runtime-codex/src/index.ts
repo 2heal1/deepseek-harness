@@ -9,6 +9,8 @@ import z from '@deepseek-ai/schemastery'
 import {
   AgentRuntimeError,
   AgentRuntimeProviderId,
+  ExternalSessionId,
+  snapshotAgentRuntimeCapabilities,
   snapshotAgentRuntimeFacts,
 } from '@deepseek-ai/dsh-agent-runtime'
 import type {
@@ -33,7 +35,10 @@ export const inject = ['agentRuntimes', 'agentRuntimeLauncher']
 
 const CODEX_PROVIDER_ID = AgentRuntimeProviderId('codex-app-server')
 const CODEX_PROTOCOL_VERSION = '0.147.0'
-const CODEX_CAPABILITIES: AgentRuntimeCapabilities = []
+const CODEX_CAPABILITIES: AgentRuntimeCapabilities = snapshotAgentRuntimeCapabilities([{
+  id: 'runtimeActivity',
+  metadata: { fidelity: 'complete', kinds: ['turn'] },
+}])
 const DEFAULT_MAX_FRAME_BYTES = 1_048_576
 type CodexLaunchHandle = Awaited<ReturnType<Context['agentRuntimeLauncher']['launch']>>
 type CodexCancelCause = Parameters<PreparedAgentRuntime['cancel']>[1]
@@ -141,6 +146,7 @@ class CodexPreparedRuntime implements PreparedAgentRuntime {
       productVersion: { value: CODEX_PROTOCOL_VERSION, source: 'profile' },
       protocol: { value: 'codex-app-server', source: 'profile' },
       protocolVersion: { value: CODEX_PROTOCOL_VERSION, source: 'profile' },
+      externalSessionId: ExternalSessionId(wire.externalSessionId()),
     })
   }
 
@@ -205,7 +211,10 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
   readonly id = CODEX_PROVIDER_ID
   readonly profileSnapshotVersions = [1]
 
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly ctx: Context,
+    private readonly config: Config,
+  ) {}
 
   probe(request: AgentRuntimeProbeRequest): Promise<AgentRuntimeProbeResult> {
     return Promise.resolve().then(() => {
@@ -231,7 +240,7 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
     const mode = permissionMode(request.profile.permissions.policy)
     const cwd = sessionCwd(request)
     let active: SubmissionId | undefined
-    const launch = await request.agentCtx.agentRuntimeLauncher.launch({
+    const launch = await this.ctx.agentRuntimeLauncher.launch({
       profile: request.profile,
       cwd,
       driver: CODEX_APP_SERVER_DRIVER,
@@ -249,6 +258,14 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
       },
       { approvalPolicy: 'never', sandbox: 'workspace-write' },
       { maxFrameBytes: this.config.maxFrameBytes },
+      (activity) => {
+        request.sink.activity({
+          runtimeId: request.runtimeId,
+          submissionId: active as SubmissionId,
+          fidelity: 'complete',
+          ...activity,
+        })
+      },
     )
     wire.start()
     await launch.waitUntilReady(
@@ -277,5 +294,5 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
 
 /** Register the Codex App Server runtime Provider. */
 export function apply(ctx: Context, _config: Config): void {
-  ctx.agentRuntimes.registerProvider(new CodexAppServerProvider(_config))
+  ctx.agentRuntimes.registerProvider(new CodexAppServerProvider(ctx, _config))
 }

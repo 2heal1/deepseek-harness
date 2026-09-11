@@ -9,9 +9,10 @@ import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import AgentRegistry, { type AgentFactory } from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { type AgentFactory, type CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import SessionStore, { SessionId, type Session } from '@deepseek-ai/dsh-session'
+import AgentRuntimeProfiles from '@deepseek-ai/dsh-agent-runtime-profile'
+import SessionStore, { SessionId, type JsonValue, type Session } from '@deepseek-ai/dsh-session'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { RpcId, type RpcRequest } from '../src/api/rpc.ts'
 import type { HostFrame } from '../src/api/events.ts'
@@ -101,24 +102,71 @@ const failingStandingKeys = new Set<string>()
 /** Per-agent service instances a mounted preset would own, keyed by session id. */
 const services = new Map<string, Record<string, unknown>>()
 
+function runtimeProfiles(provider: 'native' | 'external') {
+  return {
+    defaultMainProfile: provider,
+    profiles: {
+      [provider]: {
+        provider,
+        launch: {
+          executable: process.execPath,
+          resolution: 'absolute' as const,
+          cwdPolicy: 'session-workspace' as const,
+        },
+        product: { kind: 'test' },
+        permissions: {
+          policy: { kind: 'test' },
+          enforcement: 'required' as const,
+        },
+        process: {
+          startupTimeoutMs: 1_000,
+          turnTimeoutMs: 1_000,
+          shutdownTimeoutMs: 1_000,
+          terminationTimeoutMs: 1_000,
+          maxConcurrentRuns: 1,
+        },
+      },
+    },
+  }
+}
+
 async function harness(
   presets?: readonly string[],
   persistence?: unknown,
-  options: { userIds?: readonly string[]; defaults?: Record<string, unknown> } = {},
+  options: {
+    userIds?: readonly string[]
+    defaults?: Record<string, unknown>
+    runtimeProvider?: 'native' | 'external'
+  } = {},
 ) {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-apiproxy-preset-')))
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(UserQuestionService)
+  if (options.runtimeProvider !== undefined) {
+    await ctx.plugin(AgentRuntimeProfiles, runtimeProfiles(options.runtimeProvider))
+  }
   ctx.provide('sessionPersistence', (persistence ?? { list: () => Promise.resolve([]) }) as never)
   if (presets !== undefined) ctx.provide('agentPresets', roster(presets, options.userIds) as never)
 
+  const createdOptions: CreateAgentOptions[] = []
   const factory: AgentFactory = {
     async createAgent(_ownerCtx, options) {
+      createdOptions.push(options)
+      const profile = ctx.get('agentRuntimeProfiles')?.resolve(options.agentOptions?.runtimeProfile)
       const session = ctx.sessions.create(
         options.sessionId,
-        options.meta === undefined ? {} : { meta: options.meta },
+        options.meta === undefined && profile === undefined
+          ? {}
+          : {
+            meta: {
+              ...options.meta,
+              ...profile === undefined
+                ? {}
+                : { runtimeProfile: profile as unknown as JsonValue },
+            },
+          },
       )
       const agent = stubAgent(session)
       // Setup runs before publication against a context that carries the
@@ -140,7 +188,7 @@ async function harness(
     cwd,
     ...options.defaults,
   })
-  return { api, ctx, cwd }
+  return { api, ctx, cwd, createdOptions }
 }
 
 describe('session.create with an agent preset', () => {
@@ -226,6 +274,82 @@ describe('session.create with an agent preset', () => {
     await api.sessions.create(request({ sessionId: SessionId('s6') }))
 
     expect(ctx.sessions.get(SessionId('s6'))?.header.agentPreset).toBeUndefined()
+  })
+
+  it('does not mount the default Agent Preset or Native model defaults for an external runtime', async () => {
+    const { api, ctx, createdOptions } = await harness(
+      ['standard', 'minimal'],
+      undefined,
+      { runtimeProvider: 'external' },
+    )
+
+    const response = await api.sessions.create(request({
+      sessionId: SessionId('external-default'),
+      runtimeProfile: 'external',
+    }))
+
+    expect(response.result).toMatchObject({
+      ok: true,
+      value: { sessionId: 'external-default', runtimeProfile: 'external' },
+    })
+    expect(ctx.sessions.get(SessionId('external-default'))?.header.agentPreset).toBeUndefined()
+    expect(createdOptions[0]?.agentOptions).toEqual({ runtimeProfile: 'external' })
+  })
+
+  it('rejects explicit Agent Presets for an external runtime', async () => {
+    const { api, ctx } = await harness(
+      ['standard'],
+      undefined,
+      { runtimeProvider: 'external' },
+    )
+
+    const response = await api.sessions.create(request({
+      sessionId: SessionId('external-explicit'),
+      runtimeProfile: 'external',
+      agentPreset: 'standard',
+    }))
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'runtime-profile-error',
+        details: {
+          profileId: 'external',
+          runtimeCode: 'RUNTIME_INCOMPATIBLE',
+          providerId: 'external',
+        },
+      },
+    })
+    expect(ctx.sessions.get(SessionId('external-explicit'))).toBeUndefined()
+  })
+
+  it('rejects selecting an Agent Preset for a blank external session', async () => {
+    const { api } = await harness(
+      ['standard', 'minimal'],
+      undefined,
+      { runtimeProvider: 'external' },
+    )
+    await api.sessions.create(request({
+      sessionId: SessionId('external-select'),
+      runtimeProfile: 'external',
+    }))
+
+    const response = await api.agentPresets.select(request({
+      sessionId: SessionId('external-select'),
+      agentPreset: 'minimal',
+    }))
+
+    expect(response.result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'runtime-profile-error',
+        details: {
+          profileId: 'external',
+          runtimeCode: 'RUNTIME_INCOMPATIBLE',
+          providerId: 'external',
+        },
+      },
+    })
   })
 
   it('says why a preset-less session cannot be adopted under one', async () => {

@@ -14,6 +14,8 @@
 
 调用方 context、Router service 与所选 Provider generation 都是结构化 owner。任一 owner teardown 都汇聚到同一个 memoized disposal：关闭准入，在 event sink 保持开放期间取消并排空 prepared runtime，等待持久 submission 结算，关闭 sink，释放 Agent scope、detach Agent、detach Session，最后释放 profile 容量租约。即使清理最终报告 `DISPOSE_FAILED`，disposal 也会等待 Provider 完全停稳。
 
+Native profile 可以在 Session metadata 中携带 Agent Preset。外部 profile 会在 Provider preparation 前拒绝非空 Agent Preset，因为外部 Provider 不消费 Harness 提示词与工具组合。
+
 ## Submission 与事件
 
 `RoutedAgent.submit()` 会同步追加 `agent/submission/accepted`，并返回 receipt；其 `started` 和 `settled` Promise 跟随持久生命周期记录。Router 串行执行 Provider submission，以 `SubmissionId` 定向取消，并在所有已接纳 submission 结算前保持 `Agent.status` 为 running。Disposal 会关闭准入、取消未完成工作，并在 Provider 完全停稳和持久 settlement 完成前保持 event sink 开放。
