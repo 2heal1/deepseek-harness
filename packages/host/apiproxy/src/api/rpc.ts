@@ -80,6 +80,13 @@ export interface RpcErrorDetailsMap {
    * details name the endpoint asked, never the credential offered.
    */
   'model-discovery-failed': { settingsNs: string; baseURL?: string }
+  /** Runtime Profile validation, availability, or provider probe failure. */
+  'runtime-profile-error': {
+    profileId?: string
+    runtimeCode?: string
+    phase?: string
+    providerId?: string
+  }
   'title-invalid': { sessionId: SessionId }
   'fork-unavailable': { sessionId: SessionId }
   'subagent-parent-unavailable': { parentSessionId: SessionId }

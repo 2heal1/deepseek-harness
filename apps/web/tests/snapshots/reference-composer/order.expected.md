@@ -1,6 +1,8 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Reference order target" [disabled]
+  - img
+  - text: native · native
   - button "Session log":
     - text: Session log
     - img

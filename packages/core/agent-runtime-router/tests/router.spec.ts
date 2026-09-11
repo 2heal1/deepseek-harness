@@ -1087,6 +1087,14 @@ describe('AgentRuntimeRouter', () => {
       return gate.promise
     }
     provider.disposeHandler = () => {
+      const request = provider.request
+      if (request === undefined) throw new Error('missing Provider request')
+      const submission = provider.submissionRequests[0]
+      if (submission === undefined) throw new Error('missing submission request')
+      request.sink.assistantChunk(submission.submissionId, {
+        kind: 'text-delta',
+        text: 'cancelled tail',
+      })
       for (const gate of pending.values()) {
         gate.resolve({
           reason: { kind: 'aborted', reason: { kind: 'disposed' } },
@@ -1108,6 +1116,14 @@ describe('AgentRuntimeRouter', () => {
     expect(handle.agent.session.events[settlement.eventSeq]).toMatchObject({
       type: 'agent/submission/settled',
       data: { submissionId: receipt.id },
+    })
+    expect(handle.agent.session.events.find(event =>
+      event.type === 'assistant/chunk'
+      && event.data.chunk.type === 'text-delta'
+      && event.data.chunk.text === 'cancelled tail',
+    )).toMatchObject({
+      type: 'assistant/chunk',
+      data: { chunk: { type: 'text-delta', text: 'cancelled tail' } },
     })
     expect(ctx.agents.get(handle.agent.id)).toBeUndefined()
     await ctx.fiber.dispose()

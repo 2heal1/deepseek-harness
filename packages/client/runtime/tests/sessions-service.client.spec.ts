@@ -36,6 +36,7 @@ type FeedRow = {
   running?: boolean
   blank?: boolean
   agentPreset?: string
+  runtimeProfile?: string
 }
 
 async function feedList(b: Bench, rows: FeedRow[]): Promise<void> {
@@ -46,6 +47,7 @@ async function feedList(b: Bench, rows: FeedRow[]): Promise<void> {
       ...(r.parentId !== undefined ? { parentSessionId: sid(r.parentId) } : {}),
       ...(r.origin !== undefined ? { origin: r.origin } : {}),
       ...(r.agentPreset !== undefined ? { agentPreset: r.agentPreset } : {}),
+      ...(r.runtimeProfile !== undefined ? { runtimeProfile: r.runtimeProfile } : {}),
     })),
   }) as never)
   await b.svc.refresh()
@@ -480,6 +482,25 @@ describe('create', () => {
       requestedSessionId: 'candidate',
       rpcError: { code: 'internal', message: '爆了' },
     })
+  })
+
+  it('sends the Runtime Profile at creation and projects the fixed response identity', async () => {
+    const b = bench()
+    b.api.onCreate = () => Promise.resolve(ok({
+      sessionId: sid('external'),
+      runtimeProfile: 'codex',
+    }))
+
+    await expect(b.svc.create({
+      workspaceId: 'ws' as never,
+      runtimeProfile: 'codex',
+    })).resolves.toBe('external')
+
+    expect(b.api.callsOf('session.create')).toEqual([{
+      workspaceId: 'ws',
+      runtimeProfile: 'codex',
+    }])
+    expect(b.svc.list.getSnapshot().byId[sid('external')]?.runtimeProfile).toBe('codex')
   })
 
   it('resolves with the session already listed and binding-resolvable (no flush wait)', async () => {

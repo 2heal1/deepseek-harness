@@ -45,8 +45,8 @@ Router 是唯一 `AgentFactory`，并执行一个覆盖回滚的事务：
 1. 在创建运行时资源之前，解析并校验有效 profile、提供方注册、调用方覆盖项、会话 identity 和不可变快照。
 2. 准备尚未发布的会话、agent scope 和处于 `publishing` 的 admission 控制器，再要求提供方返回包含不可变有效能力与初始规范化运行时事实的 prepared runtime 句柄。在进入注册表前，根据这些结果构造 Agent 及其预先构造的 `AgentHandle`。提供方可以分配协议与进程资源，但不能注册会话或 Agent、追加规范事件、接纳输入或改变 admission 状态。
 3. 运行调用方 setup 及其同步 publication commit。先 enter Session，再 enter Agent，announce `session/created`，通过 Router 追加初始 `agent/runtime/facts`，最后同步 announce `agent/created`；在整个过程中 admission 保持 `publishing`。`agent/created` 分发成功返回后，Router 重新检查事务与 owner 存活性，把 admission 转换为 `open`，将其作为最后一个不会抛错的发布动作，然后在没有其他 await 或可能失败步骤的情况下返回预先构造的句柄。
-4. 任何失败都会在第一次回滚 await 前把 admission 转换为终态 `closed`，再依次终结已接纳 submission、关闭提供方事件 sink、释放提供方并等待进程树完全停稳、展开 agent scope、detach Agent，最后 detach Session。任何已经开始的创建通知都会收到配对的释放通知。同步监听器触发的存活性失败或 teardown 会关闭 admission，而不会打开它。
-5. 正常释放使用同一条 memoized 反向路径。它停止接纳并请求取消，只在所有活动 submission 结算或 graceful-shutdown deadline 到达前接收终态提供方输出，随后关闭 sink；如果 deadline 先到达，它会用持久的 disposed cause 终结所有剩余 receipt。最后，它通过最终进程树终止流程释放提供方，等待完全停稳，展开 scope 注册，发出 `agent/disposed`，再发出 `session/disposed`。重复或竞态释放等待同一个 Promise。
+4. 任何失败都会在第一次回滚 await 前把 admission 转换为终态 `closed`、请求取消，并在提供方 event sink 保持开放以接收终态输出期间释放提供方、等待进程树完全停稳。已接纳 submission 终结后，Router 关闭 sink、展开 agent scope、detach Agent，最后 detach Session。任何已经开始的创建通知都会收到配对的释放通知。同步监听器触发的存活性失败或 teardown 会关闭 admission，而不会打开它。
+5. 正常释放使用同一条 memoized 反向路径。它停止接纳、请求取消，在 sink 接收终态输出期间通过有界协议关闭和最终进程树终止流程释放提供方，并等待每个活动 receipt。随后它关闭 sink、展开 scope 注册、发出 `agent/disposed`，再发出 `session/disposed`。重复或竞态释放等待同一个 Promise。
 
 `AgentRegistry.enter()` 会有意在 `agent/created` 之前让 `get`、`list` 和 `roots` 查到 Agent，以保留现有同步生命周期行为。通过 `session/created` 监听器查到 Agent，或通过 `agent/created` 监听器参数取得 Agent 后调用 `submit`，都会得到相同的 `SUBMISSION_REJECTED` publication-phase 拒绝；只有在同步发布成功后运行的 continuation 才可能在 Router 打开 admission 后提交。
 
@@ -205,7 +205,7 @@ agentRuntime:
       driver: acp
       launch:
         executable: acp-agent-cli
-        args: [acp, serve]
+        args: []
         cwdPolicy: parent-workspace
         ambientEnv: []
       model:
@@ -213,7 +213,7 @@ agentRuntime:
         allowSessionOverride: false
       permissions:
         sandbox: workspace-write
-        enforcement: required
+        enforcement: best-effort
         approval: unattended-fail-closed
       nativeTools:
         allowed: [filesystem, shell]
@@ -240,6 +240,10 @@ subagentRoutes:
 
 Codex App Server Driver 注入 `app-server --stdio`；Runtime Profile 不能设置任一保留协议参数，即使值与 Driver 要求的值相同。
 
+ACP 不定义通用 CLI 启动命令。ACP Provider 为每个受支持的 CLI 持有可信的产品专用 Driver 启动声明，指定协议 argv、保留参数形式、必需与保留环境键以及凭据目标。该声明属于可信 Provider 实现，不属于 Runtime Profile，也绝不从 `launch.args` 推断。直接以 ACP 模式启动的可执行文件显式声明空的协议 argv；缺少启动声明时在 spawn 前失败。
+
+对于示例中的 `acp-agent-cli`，Driver 注入 `acp serve` 并保留这两个参数，Profile 不提供任一参数。Profile 设置保留参数的尝试在 spawn 前失败，即使值与 Driver 声明相同。D2 fixture（测试前置数据）除了固定 P0b 协议帧，还必须固定声明的启动 argv 与保留参数拒绝行为。该 Driver 不能证明产品原生沙箱的强制执行能力，因此示例使用 `enforcement: best-effort`；除非单独评审的 Driver 能映射该策略或使用强制执行包装，否则 `enforcement: required` 会在 spawn 前失败。
+
 Settings revision 是并发与审计标记，不是 profile 历史。创建会话时，Router 解析默认值，并在不可变会话元数据中存储完整且不含秘密的 `RuntimeProfileSnapshot`，其中包括凭据引用但不包括值。恢复时读取该快照，而不是当前已编辑的 profile。调用方传入冲突覆盖项、缺少提供方或记录的 Driver 不兼容时必须明确失败；系统不得静默启动原生执行或新的外部会话。
 
 协商能力、产品版本、进程状态和安全的外部会话标识等创建后才获知的运行时事实，以会话事件追加。编辑 profile 只影响新会话。每次启动进程时重新解析凭据引用，因此 Key 轮换不需要改写历史数据。
@@ -248,9 +252,9 @@ Settings revision 是并发与审计标记，不是 profile 历史。创建会�
 
 ### 协议与安全启动规则
 
-V1 包含两个外部协议目标：供主 agent 垂直切片使用的 Codex App Server，以及供一次性子 agent 使用的 ACP。每个提供方固定经过测试的兼容范围，并负责握手、codec、流、错误、取消和关闭 fixture（测试前置数据）。名为 `app-server` 的命令或方法不能证明兼容性。系统绝不把终端文案解析成自动化协议。
+V1 包含两个外部协议目标：供主 agent 垂直切片使用的 Codex App Server，以及供一次性子 agent 使用的 ACP。每个提供方固定经过测试的兼容范围，并负责握手、codec、流、错误、取消和关闭 fixture。名为 `app-server` 的命令或方法不能证明兼容性。系统绝不把终端文案解析成自动化协议。
 
-按换行分隔的 JSON transport 按 UTF-8 字节数限制每个输入 frame。超限时，transport 暂停并移除输入监听器、以类型化失败拒绝未完成请求、报告一次终态输入失败，并拒绝后续协议写入。Codex Provider 提供经过校验的 `maxFrameBytes` 限制，默认值为 1 MiB，并把该类型化失败提升为活动协议操作的失败。定向取消发送一次尽力而为的 `turn/interrupt`；取消、超限与协议失败会关闭 stdin，并在 settlement 前等待 Launcher 完成进程树静止与临时材料清理。
+按换行分隔的 JSON transport 按 UTF-8 字节数限制每个输入 frame。超限时，transport 暂停并移除输入监听器、以类型化失败拒绝未完成请求、报告一次终态输入失败，并拒绝后续协议写入。Codex 和 ACP Provider 分别提供经过校验的 `maxFrameBytes` 限制，默认值均为 1 MiB，并把该类型化失败提升为活动协议操作的失败。Codex 定向取消发送一次尽力而为的 `turn/interrupt`；取消、超限与协议失败会关闭 stdin，并在 settlement 前等待 Launcher 完成进程树完全停稳与临时材料清理。
 
 运行时 Launcher 不经 Shell 解析可执行文件，校验保留参数和环境键，并根据 Driver 必需的操作系统条目、显式允许的非秘密条目、profile 值和刚解析的凭据，构造精确子进程环境。现有宽泛清理后的父环境无法满足该保证。Windows 可执行文件和 `.cmd` 的解析与引用属于这项启动约定，不能留到最后加固。
 
@@ -264,9 +268,9 @@ subprocess 所有者观察整棵进程树，并提供有界启动、协议取消
 
 V1 ACP 子 agent 的兼容基线是 `@agentclientprotocol/sdk@0.25.1`、ACP 协议版本 `1`，通过 stdio 传输换行分隔的 JSON-RPC 2.0。Client 调用顺序为 `initialize` → `session/new` → 单次 `session/prompt`。assistant 文本通过有序 `session/update` 通知到达，`session/prompt` 响应只提供终止 `stopReason`。提供方必须校验协商得到的 `InitializeResponse.protocolVersion`，因为 SDK 接受任意整数响应，不会强制它与请求版本相等。
 
-取消使用 `session/cancel` 通知。在未完成的 prompt 以 `stopReason: "cancelled"` 结算前，agent 仍可发送 `session/update` 通知，因此适配器会继续读取更新直至 prompt 结算；对于不协作的 agent，本地进程取消仍是权威机制。结构化 agent 失败是使请求 Promise 被拒绝的 JSON-RPC 错误响应，传输 EOF 则会独立拒绝未完成请求。两者都会在保留完整更新帧已经报告的 assistant 文本后成为提供方失败。
+取消使用 `session/cancel` 通知。在未完成的 prompt 以 `stopReason: "cancelled"` 结算前，agent 仍可发送 `session/update` 通知，因此适配器会继续读取更新直至 prompt 结算；对于不协作的 agent，本地进程取消仍是权威机制。结构化 agent 失败是使请求 Promise 被拒绝的 JSON-RPC 错误响应，传输 EOF 则会独立拒绝未完成请求。两者都会在保留完整更新帧已经报告的 assistant 文本后成为提供方失败。经过校验的 `maxOutputBytes` 限制会约束单次 submission 保留并发送给 Router 的累计 UTF-8 assistant 文本。
 
-ACP 协议版本 1 仅在 agent 声明 `sessionCapabilities.close` 时提供可选的 `session/close` 方法；V1 一次性基线不要求该能力。因此，提供方关闭时会关闭 Client stdin、观察 agent stdout EOF 和连接关闭，再由 subprocess 所有者证明进程树完全停稳。带版本的 [fixture manifest](../../../../packages/subagent/subagent-acp/tests/fixtures/protocol-v1-sdk-0.25.1/manifest.json)和[官方 SDK 回放测试](../../../../packages/subagent/subagent-acp/tests/protocol-fixtures.spec.ts)固定一次性运行、取消、结构化错误和 EOF 关闭帧。
+ACP 协议版本 1 仅在 agent 声明 `sessionCapabilities.close` 时提供可选的 `session/close` 方法；V1 一次性基线不要求该能力。因此，Provider 关闭时会关闭 Client stdin、排空有界的 stderr 尾部，并在发布最终 assistant 消息前观察 agent stdout EOF 和 connection 关闭，再由 subprocess 所有者证明进程树完全停稳。带版本的 [fixture manifest](../../../../packages/subagent/subagent-acp/tests/fixtures/protocol-v1-sdk-0.25.1/manifest.json)和[官方 SDK 回放测试](../../../../packages/subagent/subagent-acp/tests/protocol-fixtures.spec.ts)固定一次性运行、取消、结构化错误和 EOF 关闭帧。
 
 ### 会话事实与来源
 
@@ -288,9 +292,9 @@ Profile 与 route 容量取较小值。等待运行使用可取消的 FIFO 队�
 
 ### API 与 GUI
 
-现有三栏 Web Shell 继续作为首个 Client。Runtime Profile 与 Subagent Route 使用专用设置表单和探测诊断。会话创建页增加 Runtime Profile 选择器；现有对话标题栏与 Activity slot 展示进程状态、产品、模型、固定 profile、能力、活动和子 agent 关系。只有声明对应能力时才显示 diff、终端、图片、模型、steering、审批和恢复控件，同时 Host 方法独立执行相同检查。
+现有三栏 Web Shell 继续作为首个 Client。Runtime Profile 与 Subagent Route 已有专用设置表单和探测诊断。新会话选择器会携带显式 profile 创建 Session，而不是改变已发布的空白 Agent；对话标题栏读取固定在 Session Header 中的 profile id。Activity slot 后续再增加进程状态、产品、模型、能力、活动和子 agent 关系。只有声明对应能力时才显示 diff、终端、图片、模型、steering、审批和恢复控件，同时 Host 方法独立执行相同检查。
 
-Host 暴露类型化 profile 与 route CRUD、可执行文件与版本探测、能力诊断、会话运行时状态、取消和凭据状态 API。普通 Client 永远不能获得任意 Settings 访问权或凭据值。由于可执行文件路径、环境继承、产品原生工具和沙箱策略会授权代码执行，它们只能由可信本地或管理员控制平面写入。
+Host 按信任级别拆分 Runtime Profile API。每个 Client 都可以读取安全 catalog，其中只包含 profile 与 route id、Provider／模型标签、可用性和快照 schema 兼容性。在具备认证的管理控制平面之前，完整的非秘密配置、凭据配置状态、受 revision 约束的 profile／route／default 写入和 Provider 探测都只限 loopback。两类响应都不包含凭据值。移除用户层 profile 或 route 可能让同 id 的组合基础层条目重新出现，因为 Settings mutation 移除的是覆盖层，而不是基础层。
 
 Headless、ACP Host 和 SDK 适配器在公共 `submit` receipt 与能力行为冻结后迁移。这些适配器可以并行实现，但都不能通过增加传输层专用例外来恢复 Native inbox 语义。
 
@@ -319,6 +323,8 @@ agent 运行时 Service Definition 负责提供方注册、品牌化标识、请
 **把产品原生工具记录成普通 Harness 工具事件。** 这些工具不是 Harness 选择或执行的，并且可能只暴露不完整参数或结果。运行时 Activity 事件既保留可观察性，也不会破坏 Harness 派生模型历史。
 
 **在 V1 交付通用 JSONL 提供方。** 仓库没有能够确定其生命周期语义的代表性产品协议或 Consumer。此时增加它会形成缺乏支持的公开选项，因此后续必须先有另一项文档协议和 fixture 作为依据。
+
+**让 ACP Profile 通过自由参数选择协议模式。** ACP 协议兼容性不能确定产品启动控制项。允许 Profile 提供这些控制项会绕过 Driver 所有权与保留参数校验。可信的产品专用 Driver 声明既保留共享 Launcher 策略，也不虚构通用 ACP 命令。
 
 **运行任意 Shell 命令字符串或解析交互式终端。** Shell 字符串在不同平台产生引用与注入差异，终端文案也无法可靠表达生命周期事实。提供方使用可执行文件、参数数组和有文档的结构化协议。
 

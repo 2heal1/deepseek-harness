@@ -1,6 +1,8 @@
 - banner:
   - navigation "Session hierarchy":
     - button "CJK strong emphasis" [disabled]
+  - img
+  - text: native · native
   - button "Session log":
     - text: Session log
     - img

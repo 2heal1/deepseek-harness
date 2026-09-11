@@ -3,6 +3,8 @@
     - button "Use the ask_user_question tool to" [disabled]
   - img
   - text: Standard mode
+  - img
+  - text: native · native
   - button "Session log":
     - text: Session log
     - img

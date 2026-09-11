@@ -45,8 +45,8 @@ The router is the only `AgentFactory` and performs one rollback-covered transact
 1. Resolve and validate the effective profile, provider registration, caller overrides, Session identity, and immutable snapshot before creating runtime resources.
 2. Prepare an unpublished Session, agent scope, and `publishing` admission controller, then ask the provider for a prepared runtime handle containing its immutable effective capabilities and initial normalized runtime facts. Construct the Agent and its prebuilt `AgentHandle` from those results before registry entry. The provider may allocate protocol and process resources but cannot register the Session or Agent, append canonical events, admit input, or change admission state.
 3. Run caller setup and its synchronous publication commit. Enter the Session first and the Agent second, announce `session/created`, append the initial `agent/runtime/facts` through the router, then synchronously announce `agent/created`; admission remains `publishing` throughout. After `agent/created` dispatch returns successfully, the router rechecks transaction and owner liveness, transitions admission to `open` as the final non-throwing publication action, and returns the prebuilt handle without another await or fallible step.
-4. On any failure, transition admission to terminal `closed` before the first rollback await, terminalize accepted submissions, close the provider event sink, dispose the provider to process-tree quiescence, unwind the agent scope, detach the Agent, and detach the Session. Any creation announcement that began receives its matching disposal announcement. A liveness failure or teardown requested by a synchronous listener closes admission instead of opening it.
-5. Normal disposal uses the same memoized reverse path. It stops admission, requests cancellation, and accepts terminal provider output only until every active submission settles or the graceful-shutdown deadline expires. It then closes the sink; when the deadline wins, it terminalizes every remaining receipt with the durable disposed cause. Finally it disposes the provider through final process-tree termination, awaits quiescence, unwinds scope registrations, emits `agent/disposed`, then emits `session/disposed`. Repeated or racing disposal joins the same promise.
+4. On any failure, transition admission to terminal `closed` before the first rollback await, request cancellation, and dispose the provider to process-tree quiescence while its event sink remains open for terminal output. After accepted submissions terminalize, close the sink, unwind the agent scope, detach the Agent, and detach the Session. Any creation announcement that began receives its matching disposal announcement. A liveness failure or teardown requested by a synchronous listener closes admission instead of opening it.
+5. Normal disposal uses the same memoized reverse path. It stops admission, requests cancellation, disposes the provider through its bounded protocol shutdown and final process-tree termination while the sink accepts terminal output, and awaits every active receipt. It then closes the sink, unwinds scope registrations, emits `agent/disposed`, and emits `session/disposed`. Repeated or racing disposal joins the same promise.
 
 `AgentRegistry.enter()` intentionally makes the Agent visible to `get`, `list`, and `roots` before `agent/created`, preserving the existing synchronous lifecycle behavior. A `session/created` listener that finds the Agent and an `agent/created` listener that receives it both get the same `SUBMISSION_REJECTED` publication-phase rejection from `submit`; a continuation running after successful synchronous announcement may submit only after the router opens admission.
 
@@ -205,7 +205,7 @@ agentRuntime:
       driver: acp
       launch:
         executable: acp-agent-cli
-        args: [acp, serve]
+        args: []
         cwdPolicy: parent-workspace
         ambientEnv: []
       model:
@@ -213,7 +213,7 @@ agentRuntime:
         allowSessionOverride: false
       permissions:
         sandbox: workspace-write
-        enforcement: required
+        enforcement: best-effort
         approval: unattended-fail-closed
       nativeTools:
         allowed: [filesystem, shell]
@@ -240,6 +240,10 @@ subagentRoutes:
 
 The Codex App Server Driver injects `app-server --stdio`; a Runtime Profile cannot set either reserved protocol argument, including with the Driver-required value.
 
+ACP does not define a universal CLI launch command. The ACP Provider owns a trusted, product-specific Driver launch declaration for each supported CLI, specifying the protocol argv, reserved argument forms, required and reserved environment keys, and credential targets. This declaration belongs to the trusted Provider implementation, not the Runtime Profile, and is never inferred from `launch.args`. An executable that starts directly in ACP mode has an explicitly empty protocol argv; a missing launch declaration fails before spawn.
+
+For the illustrative `acp-agent-cli`, the Driver injects `acp serve` and reserves both arguments; the Profile supplies neither. Profile attempts to set a reserved argument fail before spawn even when the value matches the Driver declaration. D2 fixtures must pin the declared launch argv and reserved-argument rejection as well as the P0b protocol frames. This Driver does not prove product-native sandbox enforcement, so the example uses `enforcement: best-effort`; `enforcement: required` fails before spawn unless a separately reviewed Driver maps the policy or uses an enforcing wrapper.
+
 The settings revision is a concurrency and audit marker, not profile history. At session creation the router resolves defaults and stores a complete non-secret `RuntimeProfileSnapshot`, including credential references but not values, in immutable session metadata. Resume reads that snapshot instead of the currently edited profile. A conflicting caller override, missing provider, or incompatible recorded driver fails explicitly; it never silently starts native execution or a fresh external session.
 
 Runtime facts learned after creation, such as negotiated capabilities, product version, process state, and a safe external-session identifier, are appended as session events. Editing a profile affects new sessions only. Credentials are re-resolved from their references at each process start so key rotation does not rewrite historical data.
@@ -250,7 +254,7 @@ A normal Harness fork inherits the parent's pinned Runtime Profile snapshot but 
 
 V1 has two external protocol targets: Codex App Server for the main-agent vertical slice and ACP for a one-shot child. Each provider pins a tested compatibility range and owns handshake, codec, stream, error, cancellation, and shutdown fixtures. A command or method named `app-server` is not compatibility evidence. Terminal prose is never parsed as an automation protocol.
 
-Newline-delimited JSON transports bound each input frame by UTF-8 byte length. On overflow the transport pauses and detaches input, rejects outstanding requests with a typed failure, reports one terminal input failure, and rejects later protocol writes. The Codex Provider supplies a validated `maxFrameBytes` limit with a 1 MiB default and promotes that typed failure into the active protocol operation. A targeted cancellation sends one best-effort `turn/interrupt`; cancellation, overflow, and protocol failure close stdin and wait for Launcher process-tree quiescence and temporary-material cleanup before settlement.
+Newline-delimited JSON transports bound each input frame by UTF-8 byte length. On overflow the transport pauses and detaches input, rejects outstanding requests with a typed failure, reports one terminal input failure, and rejects later protocol writes. The Codex and ACP Providers each supply a validated `maxFrameBytes` limit with a 1 MiB default and promote that typed failure into the active protocol operation. A targeted Codex cancellation sends one best-effort `turn/interrupt`; cancellation, overflow, and protocol failure close stdin and wait for Launcher process-tree quiescence and temporary-material cleanup before settlement.
 
 The runtime launcher resolves an executable without a shell, validates reserved arguments and environment keys, and constructs an exact child environment from driver-required operating-system entries, explicitly allowlisted non-secret entries, profile values, and freshly resolved credentials. The existing broadly scrubbed parent environment is not sufficient for this guarantee. Windows executable and `.cmd` resolution and quoting are part of this launch contract, not deferred cleanup.
 
@@ -264,9 +268,9 @@ The subprocess owner observes the whole process tree and provides bounded startu
 
 The V1 ACP child compatibility baseline is `@agentclientprotocol/sdk@0.25.1`, ACP protocol version `1`, over newline-delimited JSON-RPC 2.0 on stdio. The client sequence is `initialize` → `session/new` → one `session/prompt`. Assistant text arrives through ordered `session/update` notifications, while the `session/prompt` response supplies only the terminal `stopReason`. The provider must verify the negotiated `InitializeResponse.protocolVersion` because the SDK accepts any integer response without enforcing equality with the requested version.
 
-Cancellation uses a `session/cancel` notification. The agent may still send `session/update` notifications before the outstanding prompt settles with `stopReason: "cancelled"`, so the adapter continues reading updates until prompt settlement; local process cancellation remains authoritative for a non-cooperative agent. A structured agent failure is a JSON-RPC error response that rejects the request promise, while transport EOF independently rejects outstanding requests. Both become provider failures after retaining any assistant text already reported by complete update frames.
+Cancellation uses a `session/cancel` notification. The agent may still send `session/update` notifications before the outstanding prompt settles with `stopReason: "cancelled"`, so the adapter continues reading updates until prompt settlement; local process cancellation remains authoritative for a non-cooperative agent. A structured agent failure is a JSON-RPC error response that rejects the request promise, while transport EOF independently rejects outstanding requests. Both become provider failures after retaining any assistant text already reported by complete update frames. A validated `maxOutputBytes` limit bounds the cumulative UTF-8 assistant text retained and sent to the Router for one submission.
 
-ACP protocol version 1 provides `session/close` only as an optional method when the agent advertises `sessionCapabilities.close`; the V1 one-shot baseline does not require that capability. Provider shutdown therefore closes client stdin, observes agent stdout EOF and connection closure, then relies on the subprocess owner for process-tree quiescence. The versioned [fixture manifest](../../../../packages/subagent/subagent-acp/tests/fixtures/protocol-v1-sdk-0.25.1/manifest.json) and [official-SDK replay test](../../../../packages/subagent/subagent-acp/tests/protocol-fixtures.spec.ts) pin the one-shot, cancellation, structured-error, and EOF-shutdown frames.
+ACP protocol version 1 provides `session/close` only as an optional method when the agent advertises `sessionCapabilities.close`; the V1 one-shot baseline does not require that capability. Provider shutdown therefore closes client stdin, drains a bounded stderr tail, observes agent stdout EOF and connection closure before publishing the final assistant message, then relies on the subprocess owner for process-tree quiescence. The versioned [fixture manifest](../../../../packages/subagent/subagent-acp/tests/fixtures/protocol-v1-sdk-0.25.1/manifest.json) and [official-SDK replay test](../../../../packages/subagent/subagent-acp/tests/protocol-fixtures.spec.ts) pin the one-shot, cancellation, structured-error, and EOF-shutdown frames.
 
 ### Session facts and provenance
 
@@ -288,9 +292,9 @@ Profile and route capacity combine as the lower limit. Waiting runs use a cancel
 
 ### API and GUI
 
-The existing three-column Web shell remains the first client. Runtime Profiles and Subagent Routes receive dedicated settings forms and probe diagnostics. Session creation adds a Runtime Profile selector, and the existing conversation header and activity slot show process state, product, model, pinned profile, capabilities, activity, and child relationships. Diff, terminal, image, model, steering, approval, and resume controls appear only for declared capabilities, while Host methods independently enforce the same checks.
+The existing three-column Web shell remains the first client. Runtime Profiles and Subagent Routes have dedicated settings forms and probe diagnostics. The new-session selector creates a Session with an explicit profile instead of changing an already published blank Agent, and the conversation header reads the profile id pinned in the Session Header. The activity slot later adds process state, product, model, capabilities, activity, and child relationships. Diff, terminal, image, model, steering, approval, and resume controls appear only for declared capabilities, while Host methods independently enforce the same checks.
 
-Host exposes typed APIs for profile and route CRUD, executable and version probes, capability diagnostics, session runtime status, cancellation, and credential status. Ordinary clients never receive arbitrary Settings access or credential values. Executable paths, ambient environment, product-native tools, and sandbox policy are writable only through a trusted local or administrative control plane because they authorize code execution.
+Host splits the Runtime Profile API by trust. Every client may read a safe catalog containing profile and route ids, Provider/model labels, availability, and snapshot-schema compatibility. Complete non-secret configuration, credential configured status, revision-fenced profile/route/default writes, and Provider probes are loopback-only until an authenticated administrative control plane exists. Neither response includes credential values. Removing a user-layer profile or route may reveal a composition-base entry with the same id because Settings mutation removes the override rather than the base.
 
 Headless, ACP Host, and SDK adapters move to the common `submit` receipt and capability behavior after it is frozen. These adapters may be implemented in parallel, but none may recover native inbox semantics by adding transport-specific exceptions.
 
@@ -319,6 +323,8 @@ Implementation status, hard dependencies, parallel groups, coding-agent level, w
 **Record product-native tools as ordinary Harness tool events.** Those tools were not selected or executed by Harness and may expose incomplete arguments or results. Runtime activity events preserve observability without corrupting Harness-derived model history.
 
 **Ship a generic JSONL provider in V1.** The repository has no representative product protocol or consumer that fixes its lifecycle semantics. Adding it would create an unsupported public choice, so another documented protocol and fixtures must justify it later.
+
+**Let ACP Profiles select protocol mode through free-form arguments.** ACP wire compatibility does not establish product launch controls. Allowing Profiles to supply those controls would bypass Driver ownership and reserved-argument validation. Product-specific trusted Driver declarations preserve the shared launcher policy without inventing a universal ACP command.
 
 **Run arbitrary shell command strings or parse an interactive terminal.** Shell strings create quoting and injection differences, while terminal prose cannot reliably express lifecycle facts. Providers use an executable plus argument array and a documented structured protocol.
 

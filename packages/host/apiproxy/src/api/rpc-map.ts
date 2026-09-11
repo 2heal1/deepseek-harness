@@ -13,6 +13,7 @@ import type { GoalsApi } from './goals.ts'
 import type { SettingsApi } from './settings.ts'
 import type { CredentialsApi } from './credentials.ts'
 import type { LlmApi } from './llm.ts'
+import type { RuntimeProfilesApi } from './runtime-profiles.ts'
 import type { SubagentsApi } from './subagents.ts'
 import type { RpcResponse } from './rpc.ts'
 
@@ -74,6 +75,14 @@ export interface RpcMethodMap {
   'llm.providers': LlmApi['providers']
   'llm.models': LlmApi['models']
   'llm.discoverModels': LlmApi['discoverModels']
+  'runtimeProfile.catalog': RuntimeProfilesApi['catalog']
+  'runtimeProfile.describe': RuntimeProfilesApi['describe']
+  'runtimeProfile.save': RuntimeProfilesApi['save']
+  'runtimeProfile.remove': RuntimeProfilesApi['remove']
+  'runtimeProfile.saveRoute': RuntimeProfilesApi['saveRoute']
+  'runtimeProfile.removeRoute': RuntimeProfilesApi['removeRoute']
+  'runtimeProfile.setDefault': RuntimeProfilesApi['setDefault']
+  'runtimeProfile.probe': RuntimeProfilesApi['probe']
 }
 
 /** Business request payload of method K (reaches through the RpcRequest narrow form to payload). */

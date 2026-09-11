@@ -634,6 +634,12 @@ Settings-backed profile resolver shared by the Agent Router and subagent routes.
 resolve(id?: string, overrides: RuntimeProfileOverrides = {}): RuntimeProfileSnapshot
 
 /**
+ * Read the complete effective non-secret configuration for trusted control planes.
+ * @returns a detached deeply frozen document and its observed Settings revision.
+ */
+configuration(): AgentRuntimeProfileConfiguration
+
+/**
  * Validate and detach the Runtime Profile snapshot stored in a Session Header.
  * @param value - persisted non-secret JSON snapshot.
  * @returns complete immutable snapshot independent of current Settings.
@@ -680,7 +686,7 @@ acquireSync(profile: RuntimeProfileSnapshot): RuntimeCapacityLease
 async resolveCredentials( profile: RuntimeProfileSnapshot, ): Promise<ResolvedRuntimeCredentials>
 ```
 
-Source: [`packages/core/agent-runtime-profile/src/index.ts:594`](../../packages/core/agent-runtime-profile/src/index.ts)
+Source: [`packages/core/agent-runtime-profile/src/index.ts:600`](../../packages/core/agent-runtime-profile/src/index.ts)
 
 <a id="ctxagentruntimerouter--agentruntimerouter"></a>
 
