@@ -784,6 +784,7 @@ export class CodexAppServerWire {
       const threadId = string(params.threadId, 'item/agentMessage/delta thread id')
       if (threadId !== this.threadId) return
       const id = string(params.turnId, 'item/agentMessage/delta turn id')
+      if (this.completedTurnIds.has(id)) return
       if (id !== this.turnId) return
       const delta = params.delta
       if (typeof delta !== 'string') {

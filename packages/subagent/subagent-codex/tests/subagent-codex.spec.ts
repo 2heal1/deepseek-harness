@@ -776,8 +776,11 @@ describe('CodexAppServerWire', () => {
 
   it('sends the fixed handshake, thread, and turn payloads and keeps final_answer', async () => {
     const child = fakeChild()
+    const deltas: string[] = []
     const activities: CodexActivityObservation[] = []
-    const wire = defaultWire(child, undefined, undefined, (activity) => {
+    const wire = defaultWire(child, undefined, (delta) => {
+      deltas.push(delta)
+    }, (activity) => {
       activities.push(activity)
     })
     expect(wire.collectOutput()).toEqual([])
@@ -849,6 +852,10 @@ describe('CodexAppServerWire', () => {
       agentMessage('unphased', null),
       agentMessage('first final', 'final_answer'),
       agentMessage('last final', 'final_answer'),
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'live' },
+      },
       turnCompleted('completed'),
     )
     await expect(result).resolves.toEqual({
@@ -856,6 +863,7 @@ describe('CodexAppServerWire', () => {
       stopReason: 'completed',
     })
     expect(wire.collectOutput()).toEqual([{ type: 'text', text: 'last final' }])
+    expect(deltas).toEqual(['live'])
 
     const next = wire.runTurn(['next'], new AbortController().signal)
     const nextStart = await child.peer.nextMethod('turn/start')
@@ -865,6 +873,10 @@ describe('CodexAppServerWire', () => {
         params: { threadId: 'thread-1', turn: { id: 'turn-1' } },
       },
       agentMessage('late prior answer', 'final_answer'),
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'late' },
+      },
       turnCompleted('completed'),
     )
     child.peer.respond(nextStart, { turn: { id: 'turn-2' } })
@@ -878,6 +890,7 @@ describe('CodexAppServerWire', () => {
       stopReason: 'completed',
     })
     expect(wire.collectOutput()).toEqual([{ type: 'text', text: 'next answer' }])
+    expect(deltas).toEqual(['live'])
     expect(activities).toEqual([
       { kind: 'turn', phase: 'started', data: {} },
       { kind: 'turn', phase: 'completed', data: {} },

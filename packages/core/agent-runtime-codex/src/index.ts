@@ -252,9 +252,9 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
       launch.process.stdin as NonNullable<typeof launch.process.stdin>,
       mode,
       (delta) => {
-        if (active !== undefined) {
-          request.sink.assistantChunk(active, { kind: 'text-delta', text: delta })
-        }
+        request.sink.assistantChunk(active as SubmissionId, {
+          kind: 'text-delta', text: delta,
+        })
       },
       { approvalPolicy: 'never', sandbox: 'workspace-write' },
       { maxFrameBytes: this.config.maxFrameBytes },
