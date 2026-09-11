@@ -87,6 +87,22 @@ describe('Codex App Server Driver', () => {
     }
   })
 
+  it('unregisters the Provider when its plugin fiber is disposed', async () => {
+    const { ctx, root } = await runtimeProfile([])
+    try {
+      await ctx.plugin(AgentRuntimeRegistry)
+      const fiber = await ctx.plugin(CodexRuntime, { maxFrameBytes: 512 })
+      const providerId = AgentRuntimeProviderId('codex-app-server')
+
+      expect(ctx.agentRuntimes.getProvider(providerId)).toBeDefined()
+      await fiber.dispose()
+      expect(ctx.agentRuntimes.getProvider(providerId)).toBeUndefined()
+    } finally {
+      await ctx.fiber.dispose()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it.each([
     'overflow',
     'failure',

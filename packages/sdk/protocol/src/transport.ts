@@ -224,13 +224,14 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
     for (;;) {
       const newline = this.buffer.indexOf('\n')
       if (newline < 0) break
-      const line = this.buffer.slice(0, newline).trim()
+      const frame = this.buffer.slice(0, newline)
       this.buffer = this.buffer.slice(newline + 1)
       if (this.options.maxFrameBytes !== undefined
-        && Buffer.byteLength(line) > this.options.maxFrameBytes) {
+        && Buffer.byteLength(frame) > this.options.maxFrameBytes) {
         this.failInput(new JsonRpcInputFrameTooLargeError(this.options.maxFrameBytes))
         return
       }
+      const line = frame.trim()
       if (!line) continue
       void this.handleLine(line)
     }
@@ -313,6 +314,7 @@ export class JsonRpcLineTransport implements JsonRpcTransportPeer {
   private failInput(error: Error): void {
     if (this.failure !== undefined) return
     this.failure = error
+    this.buffer = ''
     this.input.pause()
     this.input.off('data', this.onData)
     this.failPending(error)
