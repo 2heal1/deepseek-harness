@@ -23,7 +23,7 @@ An `AgentRuntimeProvider` declares the Runtime Profile snapshot schema versions 
 
 The Router supplies the reserved runtime and Session identities, complete non-secret `RuntimeProfileSnapshot`, unpublished Agent context, cancellation signal, and a restricted `AgentRuntimeEventSink`. Providers cannot append arbitrary Session events, register the Session or Agent, or open submission admission.
 
-A prepared handle fixes its capability set for its lifetime, exposes initial normalized runtime facts, accepts already admitted submissions, receives targeted cancellation, and disposes to resource and process-tree quiescence. `snapshotAgentRuntimeCapabilities()` and `snapshotAgentRuntimeFacts()` detach, validate, and deeply freeze provider-authored values.
+A prepared handle fixes its capability set for its lifetime, exposes initial normalized runtime facts, accepts already admitted submissions, receives targeted cancellation, and disposes to resource and process-tree quiescence. `snapshotAgentRuntimeCapabilities()` and `snapshotAgentRuntimeFacts()` detach, validate, and deeply freeze provider-authored values. Before publication, Consumers call `snapshotPreparedAgentRuntimeFacts()` to reject a handle or initial facts that report identities other than those reserved by the Consumer.
 
 ## Public Vocabulary
 

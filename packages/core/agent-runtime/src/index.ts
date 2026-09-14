@@ -27,6 +27,7 @@ export {
   hasAgentRuntimeCapability,
   snapshotAgentRuntimeCapabilities,
   snapshotAgentRuntimeFacts,
+  snapshotPreparedAgentRuntimeFacts,
 } from './snapshot.ts'
 export type {
   AgentRuntimeActivity,

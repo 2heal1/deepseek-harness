@@ -392,7 +392,7 @@ export interface RuntimeProfileExecutableResolution {
 export interface Config {}
 ```
 
-来源：[`packages/core/agent-runtime-router/src/index.ts:73`](../packages/core/agent-runtime-router/src/index.ts)
+来源：[`packages/core/agent-runtime-router/src/index.ts:74`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 
@@ -2520,7 +2520,7 @@ export interface Config {
 export interface Config {}
 ```
 
-来源：[`packages/subagent/subagent-runtime-route/src/index.ts:58`](../packages/subagent/subagent-runtime-route/src/index.ts)
+来源：[`packages/subagent/subagent-runtime-route/src/index.ts:59`](../packages/subagent/subagent-runtime-route/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-spawn-in-process"></a>
 

@@ -151,12 +151,14 @@ describe('Runtime Profile-backed ACP child', () => {
     })
     await run.dispose()
 
-    expect(JSON.parse(await readFile(marker, 'utf8'))).toEqual({
+    const child = JSON.parse(await readFile(marker, 'utf8')) as Record<string, unknown>
+    expect(child).toMatchObject({
       argv: ['acp', 'serve'],
-      cwd: canonicalWorkspace,
       childCredential: 'child-only-secret',
       parentCredential: null,
     })
+    if (typeof child.cwd !== 'string') throw new TypeError('child cwd must be a string')
+    await expect(realpath(child.cwd)).resolves.toBe(canonicalWorkspace)
     expect(lifecycle).toEqual(['start:child', 'end:completed'])
     await expect(readdir(temporaryRoot)).resolves.toEqual([])
     await ctx.fiber.dispose()

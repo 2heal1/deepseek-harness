@@ -728,7 +728,7 @@ async resume(ownerCtx: Context, options: ResumeAgentOptions): Promise<AgentHandl
 
 Types: [SessionHeader](persistence.md)
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:571`](../../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:552`](../../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="ctxagentruntimes--agentruntimeregistry"></a>
 
@@ -762,7 +762,7 @@ getProvider(id: AgentRuntimeProviderId): AgentRuntimeProvider | undefined
 listProviders(): AgentRuntimeProvider[]
 ```
 
-Source: [`packages/core/agent-runtime/src/index.ts:184`](../../packages/core/agent-runtime/src/index.ts)
+Source: [`packages/core/agent-runtime/src/index.ts:185`](../../packages/core/agent-runtime/src/index.ts)
 
 <a id="ctxagents--agentregistry"></a>
 
@@ -1298,7 +1298,7 @@ An agent runtime provider became selectable.
 'agent-runtime/provider-added'(provider: AgentRuntimeProvider): void
 ```
 
-Source: [`packages/core/agent-runtime/src/index.ts:96`](../../packages/core/agent-runtime/src/index.ts)
+Source: [`packages/core/agent-runtime/src/index.ts:97`](../../packages/core/agent-runtime/src/index.ts)
 
 <a id="agent-runtimeprovider-removed--emit"></a>
 
@@ -1315,5 +1315,5 @@ An agent runtime provider stopped being selectable.
 'agent-runtime/provider-removed'(providerId: AgentRuntimeProviderId): void
 ```
 
-Source: [`packages/core/agent-runtime/src/index.ts:102`](../../packages/core/agent-runtime/src/index.ts)
+Source: [`packages/core/agent-runtime/src/index.ts:103`](../../packages/core/agent-runtime/src/index.ts)
 <!-- END GENERATED cordis-surface -->

@@ -13,6 +13,7 @@ import {
   AgentRuntimeId,
   snapshotAgentRuntimeCapabilities,
   snapshotAgentRuntimeFacts,
+  snapshotPreparedAgentRuntimeFacts,
   SubmissionId,
 } from '@deepseek-ai/dsh-agent-runtime'
 import type {
@@ -398,17 +399,7 @@ class RuntimeRouteProvider implements SubagentProvider {
         sink,
         signal: request.signal,
       })
-      const facts = snapshotAgentRuntimeFacts(runtime.initialFacts)
-      if (runtime.runtimeId !== runtimeId
-        || facts.runtimeId !== runtimeId
-        || facts.providerId !== provider.id) {
-        throw new AgentRuntimeError({
-          code: 'RUNTIME_INCOMPATIBLE',
-          phase: 'prepare',
-          message: `agent runtime provider "${provider.id}" returned mismatched runtime identity`,
-          providerId: provider.id,
-        })
-      }
+      snapshotPreparedAgentRuntimeFacts(provider, runtimeId, runtime)
       if (runtime.agentDriver !== undefined) {
         throw new AgentRuntimeError({
           code: 'RUNTIME_INCOMPATIBLE',

@@ -26,6 +26,7 @@ import {
   AgentRuntimeProviderId,
   hasAgentRuntimeCapability,
   snapshotAgentRuntimeFacts,
+  snapshotPreparedAgentRuntimeFacts,
 } from '@deepseek-ai/dsh-agent-runtime'
 import type {
   AgentRuntimeActivity,
@@ -184,26 +185,6 @@ async function raceAbortCall<T>(
     void pending.then(releaseAbandoned, () => undefined)
     throw error
   }
-}
-
-/** Validate the prepared handle before any registry publication. */
-function validatePreparedRuntime(
-  provider: AgentRuntimeProvider,
-  runtimeId: ReturnType<typeof AgentRuntimeId>,
-  runtime: PreparedAgentRuntime,
-): AgentRuntimeFacts {
-  const facts = snapshotAgentRuntimeFacts(runtime.initialFacts)
-  if (runtime.runtimeId !== runtimeId
-    || facts.runtimeId !== runtimeId
-    || facts.providerId !== provider.id) {
-    throw new AgentRuntimeError({
-      code: 'RUNTIME_INCOMPATIBLE',
-      phase: 'prepare',
-      message: `agent runtime provider "${provider.id}" returned mismatched runtime identity`,
-      providerId: provider.id,
-    })
-  }
-  return facts
 }
 
 /** Reconstruct Agent-facing Native options from one persisted effective snapshot. */
@@ -483,7 +464,7 @@ class AgentLifecycle {
     runtimeId: ReturnType<typeof AgentRuntimeId>,
     runtime: PreparedAgentRuntime,
   ): void {
-    this.initialFacts = validatePreparedRuntime(this.provider, runtimeId, runtime)
+    this.initialFacts = snapshotPreparedAgentRuntimeFacts(this.provider, runtimeId, runtime)
     this.runtime = runtime
     this.agent.attachRuntime(runtime)
   }

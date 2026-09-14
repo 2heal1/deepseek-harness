@@ -23,7 +23,7 @@
 
 Router 提供预留的运行时和 Session identity、完整的非秘密 `RuntimeProfileSnapshot`、未发布的 Agent context、取消 signal 以及受限的 `AgentRuntimeEventSink`。Provider 不能任意追加 Session 事件、注册 Session 或 Agent，也不能打开 submission 准入。
 
-prepared handle 在整个生命周期内固定其 capability 集合，公开初始规范化运行时 facts，接收已经准入的 submission 和定向取消，并通过 dispose 达到资源与进程树完全停稳。`snapshotAgentRuntimeCapabilities()` 和 `snapshotAgentRuntimeFacts()` 会分离、校验并深度冻结 Provider 提供的值。
+prepared handle 在整个生命周期内固定其 capability 集合，公开初始规范化运行时 facts，接收已经准入的 submission 和定向取消，并通过 dispose 达到资源与进程树完全停稳。`snapshotAgentRuntimeCapabilities()` 和 `snapshotAgentRuntimeFacts()` 会分离、校验并深度冻结 Provider 提供的值。发布前，Consumer 调用 `snapshotPreparedAgentRuntimeFacts()`，拒绝报告了非 Consumer 预留 identity 的 handle 或初始 facts。
 
 ## 公开词汇
 

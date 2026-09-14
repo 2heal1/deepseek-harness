@@ -2,11 +2,15 @@
 
 import { deepFreeze } from '@deepseek-ai/dsh-llm'
 import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
+import { AgentRuntimeError } from './error.ts'
 import type {
   AgentRuntimeCapabilities,
   AgentRuntimeCapability,
   AgentRuntimeCapabilityId,
   AgentRuntimeFacts,
+  AgentRuntimeId,
+  AgentRuntimeProvider,
+  PreparedAgentRuntime,
 } from './types.ts'
 
 const CAPABILITY_IDS = new Set<AgentRuntimeCapabilityId>([
@@ -98,4 +102,32 @@ export function snapshotAgentRuntimeFacts(facts: AgentRuntimeFacts): AgentRuntim
     throw new TypeError('agent runtime facts must be lossless JSON')
   }
   return deepFreeze(detached)
+}
+
+/**
+ * Validate a prepared handle's provider and runtime identities.
+ *
+ * @param provider - Provider that returned the handle.
+ * @param runtimeId - runtime identity reserved by the Consumer.
+ * @param runtime - prepared handle to validate.
+ * @returns detached initial runtime facts.
+ * @throws {AgentRuntimeError} when the handle or facts report another identity.
+ */
+export function snapshotPreparedAgentRuntimeFacts(
+  provider: AgentRuntimeProvider,
+  runtimeId: AgentRuntimeId,
+  runtime: PreparedAgentRuntime,
+): AgentRuntimeFacts {
+  const facts = snapshotAgentRuntimeFacts(runtime.initialFacts)
+  if (runtime.runtimeId === runtimeId
+    && facts.runtimeId === runtimeId
+    && facts.providerId === provider.id) {
+    return facts
+  }
+  throw new AgentRuntimeError({
+    code: 'RUNTIME_INCOMPATIBLE',
+    phase: 'prepare',
+    message: `agent runtime provider "${provider.id}" returned mismatched runtime identity`,
+    providerId: provider.id,
+  })
 }
