@@ -195,6 +195,10 @@ class FakeProvider implements AgentRuntimeProvider {
   }
 }
 
+class NativeFakeProvider extends FakeProvider {
+  override readonly id = AgentRuntimeProviderId('native')
+}
+
 class FailingSynchronousProvider extends FakeProvider {
   prepareSync(request: AgentRuntimePrepareRequest): PreparedAgentRuntime {
     const agent = request.agentCtx.agent
@@ -425,6 +429,63 @@ describe('AgentRuntimeRouter', () => {
     await expect(incompatible.ctx.agents.create({ sessionId: SessionId('profile-version') }))
       .rejects.toMatchObject({ code: 'RUNTIME_INCOMPATIBLE', phase: 'profile' })
     await incompatible.ctx.fiber.dispose()
+  })
+
+  it('rejects Agent Presets for external runtimes and retains them for Native', async () => {
+    const externalProvider = new FakeProvider()
+    const external = await harness(externalProvider)
+    await expect(external.ctx.agents.create({
+      sessionId: SessionId('external-preset'),
+      meta: { agentPreset: 'standard' },
+    })).rejects.toMatchObject({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'profile',
+      providerId: externalProvider.id,
+    })
+    expect(externalProvider.request).toBeUndefined()
+    expect(external.ctx.sessions.get(SessionId('external-preset'))).toBeUndefined()
+    await external.ctx.fiber.dispose()
+
+    const nativeProvider = new NativeFakeProvider()
+    const native = await harness(nativeProvider)
+    const handle = await native.ctx.agents.create({
+      sessionId: SessionId('native-preset'),
+      meta: { agentPreset: 'standard' },
+    })
+    expect(handle.agent.session.header.agentPreset).toBe('standard')
+    await handle.dispose()
+    await native.ctx.fiber.dispose()
+  })
+
+  it('rejects a persisted Agent Preset before resuming an external runtime', async () => {
+    const provider = new FakeProvider()
+    provider.capabilitiesOverride = snapshotAgentRuntimeCapabilities([{ id: 'resume' }])
+    const { ctx } = await harness(provider)
+    const original = await ctx.agents.create({
+      sessionId: SessionId('external-preset-resume'),
+    })
+    const header: SessionHeader = {
+      ...structuredClone(original.agent.session.header),
+      agentPreset: 'standard',
+    }
+    const events = structuredClone(original.agent.session.events)
+    await original.dispose()
+    ctx.provide('sessionPersistence', {
+      listSnapshots: () => Promise.resolve([{ header, revision: 'revision-1' }]),
+      prepare: (id: SessionId) => SessionPreparation.create(
+        Session.fromRestore(id, structuredClone(events), structuredClone(header)),
+      ),
+    } as never)
+
+    await expect(ctx.agents.resume({
+      resumeSessionId: SessionId('external-preset-resume'),
+    })).rejects.toMatchObject({
+      code: 'RUNTIME_INCOMPATIBLE',
+      phase: 'profile',
+      providerId: provider.id,
+    })
+    expect(provider.drivers).toHaveLength(1)
+    await ctx.fiber.dispose()
   })
 
   it('resolves profile overrides and rejects malformed prepared handles', async () => {
@@ -977,8 +1038,11 @@ describe('AgentRuntimeRouter', () => {
     })
 
     // A Provider is an asynchronous extension boundary and may reject with a non-Error value.
-    // oxlint-disable-next-line typescript/prefer-promise-reject-errors
-    nativeProvider.submitHandler = () => Promise.reject('raw provider failure')
+    nativeProvider.submitHandler = () => {
+      const rejected = Promise.withResolvers<never>()
+      rejected.reject('raw provider failure')
+      return rejected.promise
+    }
     const rawFailure = nativeHandle.agent.submit(message('raw failure'))
     await expect(rawFailure.settled).resolves.toMatchObject({
       kind: 'not-started',

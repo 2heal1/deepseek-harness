@@ -29,6 +29,8 @@ import {
 
 export { CodexAppServerWire } from './wire.ts'
 export type {
+  CodexActivityObservation,
+  CodexActivityObserver,
   CodexAssistantDeltaObserver,
   CodexPermissionMode,
   CodexWireFailureFacts,

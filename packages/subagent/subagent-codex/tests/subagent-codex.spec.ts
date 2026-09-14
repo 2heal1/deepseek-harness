@@ -29,7 +29,10 @@ import {
   textTask,
   type CodexRunSpec,
 } from '../src/run.ts'
-import { CodexAppServerWire } from '../src/wire.ts'
+import {
+  CodexAppServerWire,
+  type CodexActivityObservation,
+} from '../src/wire.ts'
 
 const { hostStderrWrite } = vi.hoisted(() => ({
   hostStderrWrite: {
@@ -239,6 +242,7 @@ function defaultWire(
   child: FakeChild,
   maxFrameBytes?: number,
   onAssistantDelta?: (delta: string) => void,
+  onActivity?: (activity: CodexActivityObservation) => void,
 ): CodexAppServerWire {
   return new CodexAppServerWire(
     child.handle.stdout!,
@@ -247,6 +251,7 @@ function defaultWire(
     onAssistantDelta,
     undefined,
     maxFrameBytes === undefined ? undefined : { maxFrameBytes },
+    onActivity,
   )
 }
 
@@ -771,8 +776,15 @@ describe('CodexAppServerWire', () => {
 
   it('sends the fixed handshake, thread, and turn payloads and keeps final_answer', async () => {
     const child = fakeChild()
-    const wire = defaultWire(child)
+    const deltas: string[] = []
+    const activities: CodexActivityObservation[] = []
+    const wire = defaultWire(child, undefined, (delta) => {
+      deltas.push(delta)
+    }, (activity) => {
+      activities.push(activity)
+    })
     expect(wire.collectOutput()).toEqual([])
+    expect(() => wire.externalSessionId()).toThrow('thread has not started')
     wire.start()
 
     const initializing = wire.initialize(new AbortController().signal)
@@ -801,11 +813,16 @@ describe('CodexAppServerWire', () => {
     })
     child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true } })
     await starting
+    expect(wire.externalSessionId()).toBe('thread-1')
 
     const result = wire.runTurn(
       ['first', 'second'],
       new AbortController().signal,
     )
+    await expect(wire.runTurn(
+      ['overlapping'],
+      new AbortController().signal,
+    )).rejects.toThrow('already has an active turn')
     const turnStart = await child.peer.nextMethod('turn/start')
     expect(turnStart.params).toEqual({
       threadId: 'thread-1',
@@ -835,6 +852,10 @@ describe('CodexAppServerWire', () => {
       agentMessage('unphased', null),
       agentMessage('first final', 'final_answer'),
       agentMessage('last final', 'final_answer'),
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'live' },
+      },
       turnCompleted('completed'),
     )
     await expect(result).resolves.toEqual({
@@ -842,6 +863,40 @@ describe('CodexAppServerWire', () => {
       stopReason: 'completed',
     })
     expect(wire.collectOutput()).toEqual([{ type: 'text', text: 'last final' }])
+    expect(deltas).toEqual(['live'])
+
+    const next = wire.runTurn(['next'], new AbortController().signal)
+    const nextStart = await child.peer.nextMethod('turn/start')
+    child.peer.send(
+      {
+        method: 'turn/started',
+        params: { threadId: 'thread-1', turn: { id: 'turn-1' } },
+      },
+      agentMessage('late prior answer', 'final_answer'),
+      {
+        method: 'item/agentMessage/delta',
+        params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'late' },
+      },
+      turnCompleted('completed'),
+    )
+    child.peer.respond(nextStart, { turn: { id: 'turn-2' } })
+    await nextTask()
+    child.peer.send(
+      agentMessage('next answer', 'final_answer', 'turn-2'),
+      turnCompleted('completed', 'turn-2'),
+    )
+    await expect(next).resolves.toEqual({
+      output: [{ type: 'text', text: 'next answer' }],
+      stopReason: 'completed',
+    })
+    expect(wire.collectOutput()).toEqual([{ type: 'text', text: 'next answer' }])
+    expect(deltas).toEqual(['live'])
+    expect(activities).toEqual([
+      { kind: 'turn', phase: 'started', data: {} },
+      { kind: 'turn', phase: 'completed', data: {} },
+      { kind: 'turn', phase: 'started', data: {} },
+      { kind: 'turn', phase: 'completed', data: {} },
+    ])
     wire.close()
     wire.close()
   })

@@ -123,6 +123,16 @@ Router 会把完整、非秘密的有效快照存入每个新 Session Header。J
 
 Web Host 把最新 runtime facts 发布为类型化的 `runtimeStatus` Session projection。新的空闲 Web prompt 使用 submission receipt。当 Native Agent 正在运行或仍保留 queued 输入时，Queue 使用已声明的 `continuation` 与 `queuedInputRead` 能力，Steer 使用 `steering` 能力，以保持待处理消息可寻址；这些操作不返回 receipt，并通过其 Native 轮次事件完成。ACP、Headless、JSON-RPC server 与两个 SDK 使用 submission receipt，不再依赖 inbox 或整个 Agent idle 推断。JSON-RPC version `0.0.2` 返回 `{ messageId, submissionId }`；客户端收集到匹配的持久 settlement。F5 不增加外部协议 Provider、主 agent 垂直切片、activity UI 或 runtime selector。
 
+#### M1 Codex 外部主 Agent
+
+`@deepseek-ai/dsh-agent-runtime-codex` 是可选 Profile Bundle。加载其 patch 会注册 `codex-app-server` Provider，但不会启动进程；使用 `schemaVersion: 1` 的 Runtime Profile 为新的主 Agent 选择该 Provider。默认 base Bundle 仍不包含 Codex wrapper 与平台 payload。
+
+Web Host 会为外部 profile 省略隐式 Agent Preset 与 Native 模型默认值。显式请求 Preset 会在 Host API 失败，Router 还会在外部 Provider preparation 前独立拒绝非空 Preset metadata，覆盖 create、resume 与 fork 路径。
+
+一个已准备 Codex runtime 在多个串行 submission 之间持有一个进程和一个 ephemeral thread。每个 submission 都会打开独立 Codex turn，流式发布已关联的 assistant delta，发布一条规范最终 assistant 消息，并通过 Router receipt 结算。定向取消会中断活动 turn 并等待 Launcher 完全停稳；失败的 runtime 不会回退到 Native。
+
+Provider 把已校验的 thread id 报告为安全的 external Session identity，并声明为每个已观察到的 turn phase 提供完整字段的 `runtimeActivity`。它只发布已观察到的 `turn` 开始与终态 activity；本地取消可能先于 Codex 终态通知结算，Provider 不会合成该通知。它不声称提供 command、file、diff、usage 或 native-tool detail。Session Header 保留完整且不含秘密的 Runtime Profile snapshot，不受后续 Settings 编辑影响。
+
 #### 安全启动
 
 F4 按以下规则实现供所有外部运行时使用的唯一 Launcher：

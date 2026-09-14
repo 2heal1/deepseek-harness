@@ -14,6 +14,8 @@ Publication enters the Session and Agent registries, synchronously announces `se
 
 The caller context, Router service, and selected Provider generation are structural owners. Any owner teardown converges on one memoized disposal: close admission, cancel and drain the prepared runtime while its event sink remains open, await durable submission settlement, close the sink, dispose the Agent scope, detach the Agent, detach the Session, then release the profile capacity lease. Disposal waits for provider quiescence even when cleanup ultimately reports `DISPOSE_FAILED`.
 
+Native profiles may carry an Agent Preset in Session metadata. External profiles reject a non-empty Agent Preset before Provider preparation because external Providers do not consume Harness prompt and tool composition.
+
 ## Submission and events
 
 `RoutedAgent.submit()` synchronously appends `agent/submission/accepted` and returns a receipt whose `started` and `settled` promises follow the durable lifecycle records. The Router serializes Provider submissions, targets cancellation by `SubmissionId`, and keeps `Agent.status` running until every admitted submission settles. Disposal closes admission, cancels outstanding work, and keeps the event sink open through Provider quiescence and durable settlement.

@@ -204,10 +204,19 @@ describe('Codex App Server Driver', () => {
                     },
                   },
                 )
-                setTimeout(() => send({
-                  method: 'item/agentMessage/delta',
-                  params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'late' },
-                }), 10)
+                setTimeout(() => send(
+                  {
+                    method: 'item/agentMessage/delta',
+                    params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'late' },
+                  },
+                  {
+                    method: 'turn/completed',
+                    params: {
+                      threadId: 'thread-1',
+                      turn: { id: 'turn-1', status: 'completed', error: null },
+                    },
+                  },
+                ), 10)
               })
             }
           }
@@ -268,6 +277,10 @@ describe('Codex App Server Driver', () => {
             profile,
             signal: new AbortController().signal,
           })).resolves.toMatchObject({
+            capabilities: [{
+              id: 'runtimeActivity',
+              metadata: { fidelity: 'complete', kinds: ['turn'] },
+            }],
             permissionEnforcement: 'enforced',
             protocolVersion: '0.147.0',
           })
@@ -320,6 +333,7 @@ describe('Codex App Server Driver', () => {
         }
         const chunks: string[] = []
         const messages: string[] = []
+        const activities: Parameters<AgentRuntimeEventSink['activity']>[0][] = []
         const sink: AgentRuntimeEventSink = {
           facts() {},
           assistantChunk(_submissionId, chunk) {
@@ -330,7 +344,9 @@ describe('Codex App Server Driver', () => {
               if (block.type === 'text') messages.push(block.text)
             }
           },
-          activity() {},
+          activity(activity) {
+            activities.push(activity)
+          },
         }
         const preparing = provider.prepare({
           kind: 'create',
@@ -351,6 +367,13 @@ describe('Codex App Server Driver', () => {
           return
         }
         const runtime = await preparing
+        expect(runtime.initialFacts).toMatchObject({
+          capabilities: [{
+            id: 'runtimeActivity',
+            metadata: { fidelity: 'complete', kinds: ['turn'] },
+          }],
+          externalSessionId: 'thread-1',
+        })
 
         const submissionId = SubmissionId('submission-1')
         const submissionAbort = new AbortController()
@@ -406,6 +429,24 @@ describe('Codex App Server Driver', () => {
             await new Promise<void>((resolve) => { setTimeout(resolve, 20) })
             expect(chunks).toEqual(['live'])
             expect(messages).toEqual(['answer'])
+            expect(activities).toEqual([
+              {
+                runtimeId: AgentRuntimeId('runtime-1'),
+                submissionId,
+                kind: 'turn',
+                phase: 'started',
+                fidelity: 'complete',
+                data: {},
+              },
+              {
+                runtimeId: AgentRuntimeId('runtime-1'),
+                submissionId,
+                kind: 'turn',
+                phase: 'completed',
+                fidelity: 'complete',
+                data: {},
+              },
+            ])
           }
           await runtime.dispose()
         } else if (scenario === 'cleanup-failure') {
