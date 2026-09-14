@@ -1,12 +1,23 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import AgentRuntimeRegistry, {
+  AgentRuntimeError,
+  AgentRuntimeId,
+  AgentRuntimeProviderId,
+  snapshotAgentRuntimeFacts,
+  SubmissionId,
+} from '@deepseek-ai/dsh-agent-runtime'
+import type {
+  AgentRuntimePrepareRequest,
+  AgentRuntimeProvider,
+  AgentRuntimeSubmissionRequest,
+  PreparedAgentRuntime,
+} from '@deepseek-ai/dsh-agent-runtime'
 import AgentRuntimeProfiles from '@deepseek-ai/dsh-agent-runtime-profile'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime, {
   type ResolvedSubagentStartRequest,
-  type SubagentProvider,
-  type SubagentRun,
 } from '@deepseek-ai/dsh-subagent'
 import AgentRuntimeSubagentRoutes from '@deepseek-ai/dsh-subagent-runtime-route'
 import SettingsProvider, {
@@ -16,7 +27,11 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
 
-function profileSettings(routeCapacity = 1, profileCapacity = 2) {
+function profileSettings(
+  routeCapacity = 1,
+  profileCapacity = 2,
+  cwdPolicy: 'parent-workspace' | { readonly fixed: string } = 'parent-workspace',
+) {
   return {
     defaultMainProfile: 'child-profile',
     profiles: {
@@ -25,16 +40,11 @@ function profileSettings(routeCapacity = 1, profileCapacity = 2) {
         launch: {
           executable: '/usr/bin/acp',
           resolution: 'absolute' as const,
-          cwdPolicy: 'parent-workspace' as const,
+          cwdPolicy,
         },
         permissions: {
           policy: { sandbox: 'workspace-write' },
-          enforcement: 'required' as const,
-        },
-        credentials: {
-          env: {
-            CHILD_API_KEY: { credentialRef: 'CHILD_RUNTIME_KEY' },
-          },
+          enforcement: 'best-effort' as const,
         },
         process: {
           startupTimeoutMs: 1_000,
@@ -56,23 +66,28 @@ function profileSettings(routeCapacity = 1, profileCapacity = 2) {
   }
 }
 
-function parent(depth = 0): Agent {
+function parent(depth = 0, cwd: string | null = '/workspace'): Agent {
   return {
     id: SessionId('parent'),
     options: {},
     capabilities: [],
     session: {
       id: SessionId('parent'),
-      header: { id: SessionId('parent'), createdAt: 1, delegationDepth: depth },
+      header: {
+        id: SessionId('parent'),
+        createdAt: 1,
+        ...(cwd === null ? {} : { cwd }),
+        delegationDepth: depth,
+      },
     },
     ctx: new Context(),
   } as unknown as Agent
 }
 
-function request(signal: AbortSignal, depth = 0): ResolvedSubagentStartRequest {
+function request(signal: AbortSignal, depth = 0, cwd?: string): ResolvedSubagentStartRequest {
   return {
     prompt: [{ type: 'text', text: 'work' }],
-    parent: parent(depth),
+    parent: parent(depth, cwd ?? '/workspace'),
     signal,
     descriptor: {
       version: 0,
@@ -82,28 +97,89 @@ function request(signal: AbortSignal, depth = 0): ResolvedSubagentStartRequest {
   }
 }
 
-class FakeAcpProvider implements SubagentProvider {
-  readonly name = 'acp'
-  readonly capabilities = {
-    outputSchema: false,
-    depthLimit: false,
-    toolFilter: false,
-    persona: false,
-  }
-  readonly inheritsParentContext = false
-  readonly requests: ResolvedSubagentStartRequest[] = []
+class FakeRuntimeProvider implements AgentRuntimeProvider {
+  readonly id = AgentRuntimeProviderId('acp')
+  readonly profileSnapshotVersions = [0]
+  readonly requests: AgentRuntimePrepareRequest[] = []
+  readonly submissions: AgentRuntimeSubmissionRequest[] = []
+  readonly cancellations: Array<{
+    id: AgentRuntimeSubmissionRequest['submissionId']
+    cause: Parameters<PreparedAgentRuntime['cancel']>[1]
+  }> = []
   readonly disposals: Array<ReturnType<typeof Promise.withResolvers<undefined>>> = []
+  prepareFailure: Error | undefined
+  submitFailure: Error | undefined
+  waitForCancellation = false
+  disposeFailure: Error | undefined
+  emitOutput = true
+  mismatch: 'runtime' | 'facts-runtime' | 'facts-provider' | undefined
+  onPrepare: ((request: AgentRuntimePrepareRequest) => void) | undefined
+  onSubmit: ((
+    prepare: AgentRuntimePrepareRequest,
+    submission: AgentRuntimeSubmissionRequest,
+  ) => void) | undefined
+  terminal: Awaited<ReturnType<PreparedAgentRuntime['submit']>>['reason'] = { kind: 'completed' }
+  native = false
 
-  async start(value: ResolvedSubagentStartRequest): Promise<SubagentRun> {
+  probe() {
+    return Promise.resolve({
+      capabilities: [],
+      permissionEnforcement: 'best-effort' as const,
+    })
+  }
+
+  async prepare(value: AgentRuntimePrepareRequest): Promise<PreparedAgentRuntime> {
     this.requests.push(value)
+    this.onPrepare?.(value)
+    if (this.prepareFailure !== undefined) throw this.prepareFailure
     const disposal = Promise.withResolvers<undefined>()
     this.disposals.push(disposal)
-    return {
-      id: SessionId(`child-${String(this.requests.length)}`),
-      localAgent: undefined,
-      result: Promise.resolve({ output: [], stopReason: 'completed' }),
-      dispose: () => disposal.promise,
+    const runtime: PreparedAgentRuntime = {
+      runtimeId: this.mismatch === 'runtime' ? AgentRuntimeId('wrong-runtime') : value.runtimeId,
+      capabilities: [],
+      initialFacts: snapshotAgentRuntimeFacts({
+        runtimeId: this.mismatch === 'facts-runtime'
+          ? AgentRuntimeId('wrong-runtime')
+          : value.runtimeId,
+        providerId: this.mismatch === 'facts-provider'
+          ? AgentRuntimeProviderId('wrong-provider')
+          : this.id,
+        capabilities: [],
+        phase: 'ready',
+      }),
+      submit: async (submission) => {
+        this.submissions.push(submission)
+        submission.started(1)
+        this.onSubmit?.(value, submission)
+        if (this.waitForCancellation) {
+          await new Promise<void>((resolve) => {
+            submission.signal.addEventListener('abort', () => { resolve() }, { once: true })
+          })
+        }
+        if (this.submitFailure !== undefined) throw this.submitFailure
+        if (this.emitOutput) {
+          value.sink.assistantChunk(submission.submissionId, {
+            kind: 'text-delta',
+            text: 'streamed',
+          })
+          value.sink.assistantMessage(submission.submissionId, {
+            content: [{ type: 'text', text: 'final' }],
+          })
+        }
+        return { reason: this.terminal }
+      },
+      cancel: (id, cause) => {
+        this.cancellations.push({ id, cause })
+      },
+      dispose: async () => {
+        if (this.disposeFailure !== undefined) throw this.disposeFailure
+        await disposal.promise
+      },
+      ...(this.native
+        ? { agentDriver: {} as NonNullable<PreparedAgentRuntime['agentDriver']> }
+        : {}),
     }
+    return runtime
   }
 }
 
@@ -124,7 +200,11 @@ class MemorySettings extends SettingsProvider {
   }
 }
 
-async function harness(routeCapacity = 1, profileCapacity = 2) {
+async function harness(
+  routeCapacity = 1,
+  profileCapacity = 2,
+  cwdPolicy: 'parent-workspace' | { readonly fixed: string } = 'parent-workspace',
+) {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
@@ -132,11 +212,15 @@ async function harness(routeCapacity = 1, profileCapacity = 2) {
   await ctx.plugin(ToolRuntime, {})
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(MemorySettings)
-  await ctx.plugin(AgentRuntimeProfiles, profileSettings(routeCapacity, profileCapacity))
-  const backing = new FakeAcpProvider()
+  await ctx.plugin(AgentRuntimeRegistry)
+  await ctx.plugin(
+    AgentRuntimeProfiles,
+    profileSettings(routeCapacity, profileCapacity, cwdPolicy),
+  )
+  const backing = new FakeRuntimeProvider()
   const backingFiber = ctx.plugin(Object.assign((child: Context) => {
-    child.subagents.registerProvider(backing)
-  }, { inject: ['subagents'] }))
+    child.agentRuntimes.registerProvider(backing)
+  }, { inject: ['agentRuntimes'] }))
   await backingFiber
   const routesFiber = ctx.plugin(AgentRuntimeSubagentRoutes, {})
   await routesFiber
@@ -144,7 +228,7 @@ async function harness(routeCapacity = 1, profileCapacity = 2) {
 }
 
 describe('AgentRuntimeSubagentRoutes', () => {
-  it('registers the route and tool and pins the profile on the delegated request', async () => {
+  it('runs a Provider under the pinned profile and returns its final assistant output', async () => {
     const { ctx, backing, routesFiber } = await harness()
     expect(ctx.subagents.getProvider('child')).toBeDefined()
     expect(ctx.tools.get('delegate_child')).toBeDefined()
@@ -152,11 +236,45 @@ describe('AgentRuntimeSubagentRoutes', () => {
     const run = await ctx.subagents.getProvider('child')!.start(
       request(new AbortController().signal),
     )
-    expect(backing.requests[0]?.runtimeProfile).toMatchObject({
+    await expect(run.result).resolves.toEqual({
+      output: [{ type: 'text', text: 'final' }],
+      stopReason: 'completed',
+    })
+    expect(run.localAgent).toBeUndefined()
+    expect(backing.requests[0]?.profile).toMatchObject({
       profileId: 'child-profile',
       provider: { id: 'acp' },
-      credentials: [{ target: 'CHILD_API_KEY', credentialRef: 'CHILD_RUNTIME_KEY' }],
     })
+    expect(backing.requests[0]?.agentCtx.agent).toMatchObject({
+      id: run.id,
+      status: 'idle',
+      capabilities: [],
+      session: {
+        header: {
+          cwd: '/workspace',
+          parentSession: 'parent',
+          origin: 'subagent',
+          delegationDepth: 1,
+        },
+      },
+    })
+    const privateAgent = backing.requests[0]!.agentCtx.agent!
+    expect(() => privateAgent.inbox).toThrow('before publication')
+    for (const operation of [
+      'cancel',
+      'whenIdle',
+      'submit',
+      'cancelSubmission',
+      'runMaintenance',
+      'send',
+      'followup',
+      'steer',
+      'inject',
+    ] as const) {
+      expect(() => {
+        Reflect.apply(privateAgent[operation], privateAgent, [])
+      }).toThrow(`Agent.${operation}`)
+    }
     backing.disposals[0]?.resolve(undefined)
     await run.dispose()
 
@@ -178,12 +296,14 @@ describe('AgentRuntimeSubagentRoutes', () => {
 
     secondController.abort()
     await expect(second).rejects.toMatchObject({ name: 'AbortError' })
+    const firstDisposal = first.dispose()
     backing.disposals[0]?.resolve(undefined)
-    await first.dispose()
+    await firstDisposal
     const thirdRun = await third
     expect(backing.requests).toHaveLength(2)
+    const thirdDisposal = thirdRun.dispose()
     backing.disposals[1]?.resolve(undefined)
-    await thirdRun.dispose()
+    await thirdDisposal
     await ctx.fiber.dispose()
   })
 
@@ -202,45 +322,268 @@ describe('AgentRuntimeSubagentRoutes', () => {
     await dispose
     const secondRun = await second
     expect(backing.requests).toHaveLength(2)
+    const secondDisposal = secondRun.dispose()
     backing.disposals[1]?.resolve(undefined)
-    await secondRun.dispose()
+    await secondDisposal
     await secondRun.dispose()
     await ctx.fiber.dispose()
   })
 
-  it('releases capacity when backing startup rejects', async () => {
+  it('releases capacity after startup and disposal failures', async () => {
     const { ctx, backing } = await harness()
-    vi.spyOn(backing, 'start').mockRejectedValueOnce(new Error('startup failed'))
+    backing.prepareFailure = new Error('startup failed')
     const route = ctx.subagents.getProvider('child')!
     await expect(route.start(request(new AbortController().signal))).rejects.toThrow('startup failed')
-    const run = await route.start(request(new AbortController().signal))
-    backing.disposals[0]?.resolve(undefined)
-    await run.dispose()
+    backing.prepareFailure = undefined
+    backing.disposeFailure = new Error('dispose failed')
+    const first = await route.start(request(new AbortController().signal))
+    await expect(first.dispose()).rejects.toThrow('dispose failed')
+    backing.disposeFailure = undefined
+    const second = await route.start(request(new AbortController().signal))
+    const secondDisposal = second.dispose()
+    backing.disposals[1]?.resolve(undefined)
+    await secondDisposal
     await ctx.fiber.dispose()
   })
 
-  it('fails explicitly when the profile provider is absent or resolves to the route itself', async () => {
+  it('fails before preparation for missing providers, profile versions, and workspaces', async () => {
     const { ctx, backingFiber } = await harness()
+    const route = ctx.subagents.getProvider('child')!
     await backingFiber.dispose()
-    await expect(ctx.subagents.getProvider('child')!.start(
-      request(new AbortController().signal),
-    )).rejects.toMatchObject({ code: 'NO_PROVIDER' })
+    await expect(route.start(request(new AbortController().signal)))
+      .rejects.toMatchObject({ code: 'NO_PROVIDER' })
+
+    const replacement = new FakeRuntimeProvider()
+    replacement.profileSnapshotVersions[0] = 1
+    ctx.agentRuntimes.registerProvider(replacement)
+    await expect(route.start(request(new AbortController().signal)))
+      .rejects.toMatchObject({ failure: { code: 'RUNTIME_INCOMPATIBLE' } })
     await ctx.fiber.dispose()
 
-    const self = new Context()
-    await self.plugin(LlmRuntime)
-    await self.plugin(SessionStore)
-    await self.plugin(SystemPrompt, {})
-    await self.plugin(ToolRuntime, {})
-    await self.plugin(SubagentRuntime)
-    const configured = profileSettings()
-    configured.profiles['child-profile'].provider = 'child'
-    await self.plugin(AgentRuntimeProfiles, configured)
-    await self.plugin(AgentRuntimeSubagentRoutes, {})
-    await expect(self.subagents.getProvider('child')!.start(
+    const missingWorkspace = await harness()
+    const withoutCwd = {
+      ...request(new AbortController().signal),
+      parent: parent(0, null),
+    }
+    await expect(missingWorkspace.ctx.subagents.getProvider('child')!.start(withoutCwd))
+      .rejects.toMatchObject({ failure: { code: 'PROFILE_INVALID' } })
+    expect(missingWorkspace.backing.requests).toHaveLength(0)
+    await missingWorkspace.ctx.fiber.dispose()
+  })
+
+  it.each([
+    [{ kind: 'max-tokens' }, 'max-tokens'],
+    [{ kind: 'blocked' }, 'refusal'],
+    [{ kind: 'aborted', reason: { kind: 'parent' } }, 'aborted'],
+    [{ kind: 'interrupted' }, 'aborted'],
+    [{ kind: 'error', error: { code: 'FAILED', message: 'safe failure' } }, 'error'],
+  ] as const)('maps runtime terminal reason $0 to $1', async (terminal, expected) => {
+    const { ctx, backing } = await harness()
+    backing.terminal = terminal
+    const run = await ctx.subagents.getProvider('child')!.start(
       request(new AbortController().signal),
-    )).rejects.toMatchObject({ code: 'NO_PROVIDER' })
-    await self.fiber.dispose()
+    )
+    await expect(run.result).resolves.toMatchObject({
+      output: [{ type: 'text', text: 'final' }],
+      stopReason: expected,
+    })
+    const disposal = run.dispose()
+    backing.disposals[0]?.resolve(undefined)
+    await disposal
+    await ctx.fiber.dispose()
+  })
+
+  it('maps a post-publication Provider failure and forwards cancellation', async () => {
+    const { ctx, backing } = await harness()
+    const controller = new AbortController()
+    backing.waitForCancellation = true
+    backing.submitFailure = new AgentRuntimeError({
+      code: 'RUNTIME_FAILED',
+      phase: 'turn',
+      message: 'safe provider failure',
+      providerId: backing.id,
+    })
+    const run = await ctx.subagents.getProvider('child')!.start(request(controller.signal))
+    controller.abort()
+    await expect(run.result).resolves.toEqual({
+      output: [],
+      stopReason: 'error',
+      diagnostic: 'safe provider failure',
+    })
+    expect(backing.cancellations).toMatchObject([{ cause: { kind: 'parent' } }])
+    const disposal = run.dispose()
+    backing.disposals[0]?.resolve(undefined)
+    await disposal
+    await ctx.fiber.dispose()
+  })
+
+  it('validates sink correlations and uses streamed text when no final message exists', async () => {
+    const { ctx, backing } = await harness(1, 2, { fixed: '/fixed-child' })
+    backing.emitOutput = false
+    backing.onSubmit = (prepare, submission) => {
+      const facts = {
+        runtimeId: prepare.runtimeId,
+        providerId: backing.id,
+        capabilities: [],
+        phase: 'running' as const,
+      }
+      prepare.sink.facts(facts)
+      expect(() => {
+        prepare.sink.facts({
+          ...facts,
+          runtimeId: AgentRuntimeId('wrong-runtime'),
+        })
+      }).toThrow('runtime facts do not match')
+      expect(() => {
+        prepare.sink.facts({
+          ...facts,
+          providerId: AgentRuntimeProviderId('wrong-provider'),
+        })
+      }).toThrow('runtime facts do not match')
+      prepare.sink.activity({
+        runtimeId: prepare.runtimeId,
+        kind: 'turn',
+        phase: 'started',
+        fidelity: 'complete',
+        data: {},
+      })
+      prepare.sink.activity({
+        runtimeId: prepare.runtimeId,
+        submissionId: submission.submissionId,
+        kind: 'turn',
+        phase: 'completed',
+        fidelity: 'complete',
+        data: {},
+      })
+      expect(() => {
+        prepare.sink.activity({
+          runtimeId: AgentRuntimeId('wrong-runtime'),
+          kind: 'turn',
+          phase: 'started',
+          fidelity: 'complete',
+          data: {},
+        })
+      }).toThrow('runtime activity does not match')
+      expect(() => {
+        prepare.sink.activity({
+          runtimeId: prepare.runtimeId,
+          submissionId: SubmissionId('wrong-submission'),
+          kind: 'turn',
+          phase: 'started',
+          fidelity: 'complete',
+          data: {},
+        })
+      }).toThrow('runtime activity does not match')
+      prepare.sink.assistantChunk(submission.submissionId, {
+        kind: 'reasoning-delta',
+        text: 'ignored reasoning',
+      })
+      prepare.sink.assistantChunk(submission.submissionId, {
+        kind: 'content-block',
+        block: { type: 'text', text: 'ignored block' },
+      })
+      prepare.sink.assistantMessage(submission.submissionId, { content: [] })
+      prepare.sink.assistantChunk(submission.submissionId, {
+        kind: 'text-delta',
+        text: 'streamed fallback',
+      })
+      expect(() => {
+        prepare.sink.assistantChunk(SubmissionId('wrong-submission'), {
+          kind: 'text-delta',
+          text: 'wrong',
+        })
+      }).toThrow('assistant output does not match')
+    }
+    const run = await ctx.subagents.getProvider('child')!.start({
+      ...request(new AbortController().signal),
+      parent: parent(0, null),
+    })
+    await expect(run.result).resolves.toEqual({
+      output: [{ type: 'text', text: 'streamed fallback' }],
+      stopReason: 'completed',
+    })
+    expect(backing.requests[0]?.agentCtx.agent?.session.header.cwd).toBe('/fixed-child')
+    expect(() => {
+      backing.requests[0]!.sink.facts({
+        runtimeId: backing.requests[0]!.runtimeId,
+        providerId: backing.id,
+        capabilities: [],
+        phase: 'stopped',
+      })
+    }).toThrow('event sink is closed')
+    const disposal = run.dispose()
+    backing.disposals[0]?.resolve(undefined)
+    await disposal
+    await ctx.fiber.dispose()
+  })
+
+  it.each(['runtime', 'facts-runtime', 'facts-provider'] as const)(
+    'rejects a prepared handle with mismatched %s identity',
+    async (mismatch) => {
+      const { ctx, backing } = await harness()
+      backing.mismatch = mismatch
+      const start = ctx.subagents.getProvider('child')!.start(
+        request(new AbortController().signal),
+      )
+      await vi.waitFor(() => { expect(backing.disposals).toHaveLength(1) })
+      backing.disposals[0]?.resolve(undefined)
+      await expect(start).rejects.toMatchObject({
+        failure: { code: 'RUNTIME_INCOMPATIBLE' },
+      })
+      await ctx.fiber.dispose()
+    },
+  )
+
+  it('maps unknown failures and future terminal reasons conservatively', async () => {
+    const failed = await harness()
+    failed.backing.submitFailure = new Error('private failure')
+    const failedRun = await failed.ctx.subagents.getProvider('child')!.start(
+      request(new AbortController().signal),
+    )
+    await expect(failedRun.result).resolves.toEqual({
+      output: [],
+      stopReason: 'error',
+      diagnostic: 'agent runtime submission failed',
+    })
+    const failedDisposal = failedRun.dispose()
+    failed.backing.disposals[0]?.resolve(undefined)
+    await failedDisposal
+    await failed.ctx.fiber.dispose()
+
+    const future = await harness()
+    future.backing.terminal = { kind: 'future-runtime-reason' } as never
+    const futureRun = await future.ctx.subagents.getProvider('child')!.start(
+      request(new AbortController().signal),
+    )
+    await expect(futureRun.result).resolves.toMatchObject({ stopReason: 'error' })
+    const futureDisposal = futureRun.dispose()
+    future.backing.disposals[0]?.resolve(undefined)
+    await futureDisposal
+    await future.ctx.fiber.dispose()
+  })
+
+  it('forwards a cancellation that wins while Provider preparation completes', async () => {
+    const { ctx, backing } = await harness()
+    const controller = new AbortController()
+    backing.onPrepare = () => { controller.abort() }
+    const run = await ctx.subagents.getProvider('child')!.start(request(controller.signal))
+    await run.result
+    expect(backing.cancellations[0]?.cause).toEqual({ kind: 'parent' })
+    const disposal = run.dispose()
+    backing.disposals[0]?.resolve(undefined)
+    await disposal
+    await ctx.fiber.dispose()
+  })
+
+  it('rejects a Native driver and releases its prepared runtime', async () => {
+    const { ctx, backing } = await harness()
+    backing.native = true
+    backing.disposeFailure = new Error('native cleanup failed')
+    const start = ctx.subagents.getProvider('child')!.start(
+      request(new AbortController().signal),
+    )
+    await expect(start).rejects.toThrow('runtime subagent startup rollback failed')
+    await ctx.fiber.dispose()
   })
 
   it('reconciles Settings edits and removals without remounting unchanged routes', async () => {
@@ -265,16 +608,8 @@ describe('AgentRuntimeSubagentRoutes', () => {
     await ctx.fiber.dispose()
   })
 
-  it('contains asynchronous reconciliation failure and releases after dispose rejection', async () => {
-    const { ctx, backing } = await harness()
-    const route = ctx.subagents.getProvider('child')!
-    const first = await route.start(request(new AbortController().signal))
-    backing.disposals[0]?.reject(new Error('dispose failed'))
-    await expect(first.dispose()).rejects.toThrow('dispose failed')
-    const second = await route.start(request(new AbortController().signal))
-    backing.disposals[1]?.resolve(undefined)
-    await second.dispose()
-
+  it('contains asynchronous reconciliation failure', async () => {
+    const { ctx } = await harness()
     const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
     vi.spyOn(ctx.agentRuntimeProfiles, 'resolveRoute').mockImplementationOnce(() => {
       throw new Error('reconcile failed')

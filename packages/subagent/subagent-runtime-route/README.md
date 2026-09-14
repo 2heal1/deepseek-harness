@@ -11,13 +11,17 @@ The service reads route definitions from `ctx.agentRuntimeProfiles`. For each ro
 - A `SubagentProvider` under the route id.
 - One `dsh-tool-subagent` instance under the configured tool name.
 
-The wrapper resolves a fresh immutable profile snapshot when a request starts, checks the absolute delegation-depth limit, selects the underlying `ctx.subagents` Provider from the snapshot's runtime Provider id, and waits for capacity. The effective limit is the lower of profile capacity and route capacity. The selected Provider receives the snapshot through `ResolvedSubagentStartRequest.runtimeProfile`.
+The wrapper resolves a fresh immutable profile snapshot when a request starts, checks the absolute delegation-depth limit and Provider snapshot-version support, selects the underlying `ctx.agentRuntimes` Provider, and waits for capacity. The effective limit is the lower of profile capacity and route capacity.
 
-The existing `ctx.subagents.start()` remains the public dispatch and lifecycle authority. The wrapper calls the selected Provider directly only after that outer service has validated the route provider's declared capabilities and emitted its lifecycle events; this avoids a recursive second routing pass.
+The existing `ctx.subagents.start()` remains the public dispatch and lifecycle authority. The wrapper prepares the runtime directly after that outer service validates the route provider's declared capabilities and emits its lifecycle events; it does not introduce another subagent routing pass.
 
 ## Lifecycle and cancellation
 
-Capacity waits are FIFO and use the request signal for cancellation. A startup failure releases the lease before rejecting. A published run keeps the lease until its underlying `dispose()` reaches quiescence; repeated disposal shares one promise and releases exactly once.
+Each start creates a detached Harness Session and unpublished private Agent scope with fresh child, runtime, and submission identities. The Session Header records the parent Session, delegation depth, child workspace, and complete non-secret Runtime Profile snapshot. Neither identity enters the public Session or Agent registries.
+
+The child sends one text submission to the prepared external runtime. The route sink validates runtime, Provider, and submission correlation, returns a non-empty final assistant message when present, and otherwise joins streamed text deltas. Runtime terminal reasons map to the existing `SubagentResult` stop reasons. Runtime facts and activity are correlation-checked but are not persisted for the detached child.
+
+Capacity waits are FIFO and use the request signal for cancellation. Parent cancellation targets the child submission. Disposal requests a separate disposed cancellation and waits for the result, Provider quiescence, and private Agent scope disposal before releasing capacity. Startup rollback releases all acquired resources before rejecting; repeated disposal shares one promise and releases exactly once.
 
 Settings updates reconcile route fibers serially. An unchanged route remains mounted. Editing or deleting a route disposes its previous Provider and tool registrations before replacement. Plugin disposal waits for pending reconciliation and removes every mounted route. Reconciliation failures are logged and do not create an unhandled rejection.
 
@@ -35,7 +39,7 @@ subagentRoutes:
     toolName: delegate_to_acp_child
 ```
 
-Route ids must not equal the selected underlying Provider id, because that would recursively select the wrapper itself. A missing or self-referential Provider fails with `SubagentError` code `NO_PROVIDER`; an exceeded depth limit uses `DEPTH_EXCEEDED`.
+A missing runtime Provider fails with `SubagentError` code `NO_PROVIDER`; an incompatible snapshot version fails with `AgentRuntimeError` code `RUNTIME_INCOMPATIBLE`; an exceeded depth limit uses `DEPTH_EXCEEDED`. `parent-workspace` profiles require a parent Session working directory, while a fixed working-directory policy uses its configured path.
 
 ## Invariants
 
@@ -60,5 +64,6 @@ Prefix-stable while route names and mounted definitions remain unchanged. Adding
 ## Known Limitations and Deferred Work
 
 - **One-shot only** - continuable external children wait for the common submission and cold-resume behavior.
-- **No runtime Provider implementation** - the selected profile id must resolve to a separately registered `ctx.subagents` Provider that understands `runtimeProfile`.
-- **No launch enforcement** - secure process launch, exact environments, sandbox enforcement, and teardown escalation belong to F4 Providers and the secure launcher.
+- **External Providers only** - a Provider that returns a Native `agentDriver` is rejected because this route owns a detached one-shot result rather than a published Agent.
+- **No durable child transcript or activity** - the detached Session supplies runtime context but is not registered or persisted; only the final `SubagentResult` returns to the parent.
+- **Provider-owned launch enforcement** - secure process launch, exact environments, credential isolation, sandbox enforcement, and process-tree teardown remain obligations of the selected runtime Provider and shared launcher.

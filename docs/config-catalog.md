@@ -217,7 +217,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-runtime-acp/src/index.ts:90`](../packages/core/agent-runtime-acp/src/index.ts)
+Source: [`packages/core/agent-runtime-acp/src/index.ts:91`](../packages/core/agent-runtime-acp/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-codex"></a>
 
@@ -390,7 +390,7 @@ Requires: `agents` · `sessions` · `agentRuntimes` · `agentRuntimeProfiles` ·
 export interface Config {}
 ```
 
-Source: [`packages/core/agent-runtime-router/src/index.ts:73`](../packages/core/agent-runtime-router/src/index.ts)
+Source: [`packages/core/agent-runtime-router/src/index.ts:74`](../packages/core/agent-runtime-router/src/index.ts)
 
 <a id="deepseek-aidsh-agent-spine-demo"></a>
 
@@ -2511,14 +2511,14 @@ Source: [`packages/subagent/subagent-fork-in-process/src/index.ts:31`](../packag
 
 ## `@deepseek-ai/dsh-subagent-runtime-route`
 
-Requires: `agentRuntimeProfiles` · `subagents` · `tools` · `systemPrompt`
+Requires: `agentRuntimes` · `agentRuntimeProfiles` · `subagents` · `tools` · `systemPrompt`
 
 ```ts config-catalog
 /** Route Consumer configuration. Route definitions live in Settings. */
 export interface Config {}
 ```
 
-Source: [`packages/subagent/subagent-runtime-route/src/index.ts:31`](../packages/subagent/subagent-runtime-route/src/index.ts)
+Source: [`packages/subagent/subagent-runtime-route/src/index.ts:59`](../packages/subagent/subagent-runtime-route/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-spawn-in-process"></a>
 

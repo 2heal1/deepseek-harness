@@ -58,6 +58,7 @@ const ACP_CAPABILITIES: AgentRuntimeCapabilities = []
 const DEFAULT_MAX_FRAME_BYTES = 1_048_576
 const DEFAULT_MAX_OUTPUT_BYTES = 4_194_304
 const DEFAULT_MAX_STDERR_BYTES = 65_536
+const ACP_CREDENTIAL_ENVIRONMENT = 'CHILD_PROVIDER_API_KEY'
 
 type ActiveSubmission = {
   readonly id: SubmissionId
@@ -80,8 +81,8 @@ export const ACP_AGENT_CLI_DRIVER: RuntimeDriverLaunch = {
     argv: ['acp', 'serve'],
   }],
   environment: {},
-  reservedEnvironment: [],
-  credentialEnvironment: [],
+  reservedEnvironment: [ACP_CREDENTIAL_ENVIRONMENT],
+  credentialEnvironment: [ACP_CREDENTIAL_ENVIRONMENT],
   allowWindowsCommandScript: false,
   permissionEnforcement: 'none',
 }

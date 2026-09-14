@@ -8,9 +8,11 @@
 
 在 Runtime Profile 中选择 `acp` Provider。Profile 需要 session workspace 和 `workspace-write` 无人值守权限策略。示例 Driver 不能证明产品原生沙箱的强制执行能力，因此接受 `enforcement: best-effort`，并在 spawn 前拒绝 `enforcement: required`。Provider 不声明可选 runtime capability，也不支持 resume。
 
+本包是可选 Profile Bundle。应用其 `cordis.patch.yml` 会注册 Provider，但不会启动进程；Runtime Profile 或 runtime-backed subagent route 会按需启动它。
+
 `maxFrameBytes` 按 UTF-8 字节数限制每个输入 JSONL frame，默认值为 1048576。`maxOutputBytes` 限制本次 submission 的累计 assistant 文本，默认值为 4194304。`maxStderrBytes` 限制从子进程 stderr 持续排空的诊断尾部，默认值为 65536。格式错误或超限的输入会触发失败，诊断中不包含由对端控制的 frame 内容。
 
-可信的 `acp-agent-cli` Driver 注入 `acp serve`。正常 Profile 使用 `launch.args: []`。Profile 对 `acp` 或 `serve` 的任何写入，即使值与 Driver 要求相同，也会在 spawn 前失败。
+可信的 `acp-agent-cli` Driver 注入 `acp serve`，并接受 credential reference target `CHILD_PROVIDER_API_KEY`。正常 Profile 使用 `launch.args: []`。Profile 对 `acp` 或 `serve` 的任何写入，即使值与 Driver 要求相同，或者设置任何未声明 credential target，都会在 spawn 前失败。
 
 Provider 不声明 ACP Client 文件系统或终端能力，并拒绝所有 ACP 权限请求。它使用 Launcher 的精确环境、凭据解析、脱敏、deadline 和进程树释放。
 

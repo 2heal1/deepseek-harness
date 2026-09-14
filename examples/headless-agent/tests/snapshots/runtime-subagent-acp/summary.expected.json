@@ -1,0 +1,32 @@
+{
+  "runtimeProviders": [
+    "acp"
+  ],
+  "routeProviders": [
+    "acp-child"
+  ],
+  "toolRegistered": true,
+  "result": {
+    "output": [
+      {
+        "type": "text",
+        "text": "runtime child answer"
+      }
+    ],
+    "stopReason": "completed"
+  },
+  "lifecycle": [
+    "start:acp-child",
+    "end:completed"
+  ],
+  "launch": {
+    "argv": [
+      "acp",
+      "serve"
+    ],
+    "parentWorkspace": true,
+    "childCredentialPresent": true,
+    "parentCredentialAbsent": true
+  },
+  "temporaryEntries": []
+}
