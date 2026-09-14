@@ -55,6 +55,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   agentPresets: 'core.md',
   agentRuntimes: 'core.md',
   agentRuntimeLauncher: 'core.md',
+  agentRuntimeMcpGateway: 'core.md',
   agentRuntimeProfiles: 'core.md',
   agentRuntimeRouter: 'core.md',
   agentRuntimeSubagentRoutes: 'subagent.md',
@@ -544,6 +545,10 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 /** Project types deliberately documented outside the subsystems catalog. */
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
+  RuntimeMcpGatewayOpenRequest:
+    'runtime MCP endpoint input is owned by packages/mcp/mcp-runtime-gateway/README.md',
+  RuntimeMcpGatewayHandle:
+    'runtime MCP endpoint lifecycle handle is owned by packages/mcp/mcp-runtime-gateway/README.md',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   ConsumeTokenRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',

@@ -14,9 +14,9 @@ Executable resolution never invokes a shell. An absolute configured path is reva
 
 ## Environment and credentials
 
-The child receives `envMode: exact`. Its complete environment contains only launcher-required operating-system entries, explicitly allowlisted non-secret process entries, profile literals, Driver-reserved values, and freshly resolved credentials. Environment names and duplicate writers are rejected; Windows comparisons are case-insensitive. Credential-shaped ambient names cannot be allowlisted.
+The child receives `envMode: exact`. Its complete environment contains only launcher-required operating-system entries, explicitly allowlisted non-secret process entries, profile literals, Driver-reserved values, freshly resolved credentials, and Provider-generated secrets admitted by Driver-declared targets. Environment names and duplicate writers are rejected; Windows comparisons are case-insensitive. Credential-shaped ambient names cannot be allowlisted.
 
-The handle's `redact(value)` recursively replaces every non-empty resolved credential value in complete diagnostics. `KnownValueStreamRedactor` withholds possible credential prefixes across chunk boundaries. Providers must apply one of these redactors before diagnostics, retained output, events, or API data leave the launch; encoded or transformed credential values are not recognized.
+The handle's `redact(value)` recursively replaces every non-empty resolved credential or Provider-generated secret value in complete diagnostics. `KnownValueStreamRedactor` withholds possible secret prefixes across chunk boundaries. Providers must apply one of these redactors before diagnostics, retained output, events, or API data leave the launch; encoded or transformed secret values are not recognized.
 
 ## Temporary material and teardown
 

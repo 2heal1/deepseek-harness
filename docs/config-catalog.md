@@ -233,7 +233,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-runtime-codex/src/index.ts:61`](../packages/core/agent-runtime-codex/src/index.ts)
+Source: [`packages/core/agent-runtime-codex/src/index.ts:99`](../packages/core/agent-runtime-codex/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-launcher"></a>
 
@@ -1594,6 +1594,26 @@ export interface ReconnectConfig {
 ```
 
 Source: [`packages/mcp/mcp-client/src/index.ts:98`](../packages/mcp/mcp-client/src/index.ts)
+
+<a id="deepseek-aidsh-mcp-runtime-gateway"></a>
+
+## `@deepseek-ai/dsh-mcp-runtime-gateway`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Gateway listener and payload limits. */
+export interface Config {
+  /** Loopback port; zero asks the operating system to select one. */
+  port?: number
+  /** Maximum JSON request body size. */
+  maxRequestBytes?: number
+  /** Maximum JSON tool response size. */
+  maxResponseBytes?: number
+}
+```
+
+Source: [`packages/mcp/mcp-runtime-gateway/src/index.ts:50`](../packages/mcp/mcp-runtime-gateway/src/index.ts)
 
 <a id="deepseek-aidsh-message-feedback"></a>
 

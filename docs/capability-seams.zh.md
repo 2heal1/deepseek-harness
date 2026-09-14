@@ -115,6 +115,9 @@ flowchart LR
   pkg_agent_runtime_launcher["agent-runtime-launcher"]
   pkg_subagent_runtime_route["subagent-runtime-route"]
   svc_agentRuntimeLauncher["ctx.agentRuntimeLauncher<br/>Secure external runtime launcher"]
+  pkg_mcp_runtime_gateway["mcp-runtime-gateway"]
+  svc_agentRuntimeMcpGateway["ctx.agentRuntimeMcpGateway<br/>Runtime MCP gateway"]
+  pkg_agent_runtime_codex["agent-runtime-codex"]
   svc_agentRuntimeRouter["ctx.agentRuntimeRouter<br/>Agent runtime Router"]
   pkg_agent_spine_demo["agent-spine-demo"]
   svc_agentRuntimeSubagentRoutes["ctx.agentRuntimeSubagentRoutes<br/>Runtime-backed subagent routes"]
@@ -259,6 +262,7 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_local --> svc_lsp
+  pkg_mcp_runtime_gateway --> svc_agentRuntimeMcpGateway
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
   pkg_permission_presets --> svc_permissionPresets
@@ -324,6 +328,7 @@ flowchart LR
   svc_agentDefaultModel --> pkg_headless
   svc_agentDefaultModel --> pkg_host_apiproxy
   svc_agentLoop --> pkg_agent_spine_demo
+  svc_agentRuntimeMcpGateway --> pkg_agent_runtime_codex
   svc_agentRuntimeProfiles --> pkg_agent_runtime_launcher
   svc_agentRuntimeProfiles --> pkg_agent_runtime_router
   svc_agentRuntimeProfiles --> pkg_subagent_runtime_route
@@ -479,6 +484,7 @@ flowchart LR
 | `ctx.agentRuntimes` | `seam` | [`agent-runtime`](../packages/core/agent-runtime) | [`agent-loop`](../packages/core/agent-loop) | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | 定义由 effect 管理生命周期的 Provider 发现与提供方无关运行时词汇。 |
 | `ctx.agentRuntimeProfiles` | `core` | [`agent-runtime-profile`](../packages/core/agent-runtime-profile) | - | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher), [`agent-runtime-router`](../packages/core/agent-runtime-router), [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | 把已校验 Settings 解析为不可变的非秘密快照，在每次进程启动时解析凭据，并负责共享 profile 容量。 |
 | `ctx.agentRuntimeLauncher` | `core` | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher) | - | - | - | 构造精确环境、保护 Driver 自有 control，并负责有界进程树与临时材料清理。 |
+| `ctx.agentRuntimeMcpGateway` | `core` | [`mcp-runtime-gateway`](../packages/mcp/mcp-runtime-gateway) | - | [`agent-runtime-codex`](../packages/core/agent-runtime-codex) | - | 通过经过身份验证的 loopback Streamable HTTP 暴露每 runtime 的精确 Harness 工具白名单。 |
 | `ctx.agentRuntimeRouter` | `core` | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | 安装唯一的 AgentFactory，并负责基于 profile 的 Provider 选择、发布、回滚、容量生命周期与 teardown。 |
 | `ctx.agentRuntimeSubagentRoutes` | `core` | [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | - | - | 为每条由 Settings 支持的一次性 route 维护一个包装 Provider 与委派工具，同时让 ctx.subagents 保持 dispatch 权威。 |
 | `ctx.agentDefaultModel` | `core` | [`agent-default-model`](../packages/core/agent-default-model) | - | [`headless`](../packages/bundle/headless), [`host-apiproxy`](../packages/host/apiproxy) | - | 通过 settings 分层默认 `ModelSelection`，让直接入口与 Host 支撑的 Agent 入口共享同一个状态所有者。 |

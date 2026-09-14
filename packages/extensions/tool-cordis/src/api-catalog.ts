@@ -246,6 +246,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'agentRuntimeMcpGateway',
+    summary: 'Loopback listener and registry for per-runtime MCP endpoints.',
+    description: 'Loopback listener and registry for per-runtime MCP endpoints.',
+    methods: [
+      {
+        signature: 'open(request: RuntimeMcpGatewayOpenRequest): RuntimeMcpGatewayHandle',
+        description: 'Register one exact per-runtime endpoint.',
+        parameters: [{ name: 'request', description: 'runtime, Agent, allowlist, and startup ownership.' }],
+        returns: 'secret connection material and quiescent revocation.',
+      },
+    ],
+  },
+  {
     key: 'agentRuntimeProfiles',
     summary: 'Settings-backed profile resolver shared by the Agent Router and subagent routes.',
     description: 'Settings-backed profile resolver shared by the Agent Router and subagent routes.',
@@ -2988,7 +3001,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentRuntimeLaunchRequest',
-    declaration: 'export interface AgentRuntimeLaunchRequest {\n    readonly profile: RuntimeProfileSnapshot;\n    readonly cwd: string;\n    readonly driver: RuntimeDriverLaunch;\n    readonly stdio: RuntimeLaunchStdio;\n    readonly signal: AbortSignal;\n    readonly temporaryFiles?: readonly RuntimeTemporaryFile[];\n}',
+    declaration: 'export interface AgentRuntimeLaunchRequest {\n    readonly profile: RuntimeProfileSnapshot;\n    readonly cwd: string;\n    readonly driver: RuntimeDriverLaunch;\n    readonly stdio: RuntimeLaunchStdio;\n    readonly signal: AbortSignal;\n    readonly temporaryFiles?: readonly RuntimeTemporaryFile[];\n    readonly runtimeSecrets?: Readonly<Record<string, string>>;\n}',
   },
   {
     name: 'AgentRuntimePhase',
@@ -4100,7 +4113,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RuntimeDriverLaunch',
-    declaration: 'export interface RuntimeDriverLaunch {\n    readonly arguments: readonly RuntimeReservedArgument[];\n    readonly environment: Readonly<Record<string, string>>;\n    readonly reservedEnvironment: readonly string[];\n    readonly credentialEnvironment: readonly string[];\n    readonly allowWindowsCommandScript: boolean;\n    readonly permissionEnforcement: \'full\' | \'partial\' | \'none\';\n}',
+    declaration: 'export interface RuntimeDriverLaunch {\n    readonly arguments: readonly RuntimeReservedArgument[];\n    readonly environment: Readonly<Record<string, string>>;\n    readonly reservedEnvironment: readonly string[];\n    readonly credentialEnvironment: readonly string[];\n    readonly runtimeSecretEnvironment?: readonly string[];\n    readonly allowWindowsCommandScript: boolean;\n    readonly permissionEnforcement: \'full\' | \'partial\' | \'none\';\n}',
   },
   {
     name: 'RuntimeExecutableResolution',
@@ -4117,6 +4130,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RuntimeLaunchStdio',
     declaration: 'export interface RuntimeLaunchStdio {\n    readonly stdin: SubprocessStdinMode;\n    readonly stdout: SubprocessOutputMode;\n    readonly stderr: SubprocessOutputMode;\n}',
+  },
+  {
+    name: 'RuntimeMcpGatewayConnection',
+    declaration: 'export interface RuntimeMcpGatewayConnection {\n    readonly url: string;\n    readonly tokenEnvironment: typeof MCP_RUNTIME_GATEWAY_TOKEN_ENV;\n    readonly token: string;\n}',
+  },
+  {
+    name: 'RuntimeMcpGatewayHandle',
+    declaration: 'export interface RuntimeMcpGatewayHandle {\n    readonly connection: RuntimeMcpGatewayConnection;\n    dispose(): Promise<void>;\n}',
+  },
+  {
+    name: 'RuntimeMcpGatewayOpenRequest',
+    declaration: 'export interface RuntimeMcpGatewayOpenRequest {\n    readonly agent: Agent;\n    readonly runtimeId: AgentRuntimeId;\n    readonly providerId: AgentRuntimeProviderId;\n    readonly allowedTools: readonly string[];\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'RuntimeMessageSource',

@@ -365,6 +365,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Builds exact environments, protects Driver-owned controls, and owns bounded process-tree and temporary-material cleanup.',
   },
   {
+    key: 'agentRuntimeMcpGateway',
+    pkg: 'mcp-runtime-gateway',
+    title: 'Runtime MCP gateway',
+    mode: 'core',
+    consumers: ['agent-runtime-codex'],
+    note: 'Exposes an exact per-runtime Harness tool allowlist through authenticated loopback Streamable HTTP.',
+  },
+  {
     key: 'agentRuntimeRouter',
     pkg: 'agent-runtime-router',
     title: 'Agent runtime Router',

@@ -113,6 +113,9 @@ flowchart LR
   pkg_agent_runtime_launcher["agent-runtime-launcher"]
   pkg_subagent_runtime_route["subagent-runtime-route"]
   svc_agentRuntimeLauncher["ctx.agentRuntimeLauncher<br/>Secure external runtime launcher"]
+  pkg_mcp_runtime_gateway["mcp-runtime-gateway"]
+  svc_agentRuntimeMcpGateway["ctx.agentRuntimeMcpGateway<br/>Runtime MCP gateway"]
+  pkg_agent_runtime_codex["agent-runtime-codex"]
   svc_agentRuntimeRouter["ctx.agentRuntimeRouter<br/>Agent runtime Router"]
   pkg_agent_spine_demo["agent-spine-demo"]
   svc_agentRuntimeSubagentRoutes["ctx.agentRuntimeSubagentRoutes<br/>Runtime-backed subagent routes"]
@@ -257,6 +260,7 @@ flowchart LR
   pkg_llm_replay --> svc_llm
   pkg_lsp --> svc_lsp
   pkg_lsp_local --> svc_lsp
+  pkg_mcp_runtime_gateway --> svc_agentRuntimeMcpGateway
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
   pkg_permission_presets --> svc_permissionPresets
@@ -322,6 +326,7 @@ flowchart LR
   svc_agentDefaultModel --> pkg_headless
   svc_agentDefaultModel --> pkg_host_apiproxy
   svc_agentLoop --> pkg_agent_spine_demo
+  svc_agentRuntimeMcpGateway --> pkg_agent_runtime_codex
   svc_agentRuntimeProfiles --> pkg_agent_runtime_launcher
   svc_agentRuntimeProfiles --> pkg_agent_runtime_router
   svc_agentRuntimeProfiles --> pkg_subagent_runtime_route
@@ -477,6 +482,7 @@ flowchart LR
 | `ctx.agentRuntimes` | `seam` | [`agent-runtime`](../packages/core/agent-runtime) | [`agent-loop`](../packages/core/agent-loop) | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | Defines effect-scoped Provider discovery and provider-neutral runtime vocabulary. |
 | `ctx.agentRuntimeProfiles` | `core` | [`agent-runtime-profile`](../packages/core/agent-runtime-profile) | - | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher), [`agent-runtime-router`](../packages/core/agent-runtime-router), [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | Resolves validated Settings into immutable non-secret snapshots, resolves credentials per process start, and owns shared profile capacity. |
 | `ctx.agentRuntimeLauncher` | `core` | [`agent-runtime-launcher`](../packages/core/agent-runtime-launcher) | - | - | - | Builds exact environments, protects Driver-owned controls, and owns bounded process-tree and temporary-material cleanup. |
+| `ctx.agentRuntimeMcpGateway` | `core` | [`mcp-runtime-gateway`](../packages/mcp/mcp-runtime-gateway) | - | [`agent-runtime-codex`](../packages/core/agent-runtime-codex) | - | Exposes an exact per-runtime Harness tool allowlist through authenticated loopback Streamable HTTP. |
 | `ctx.agentRuntimeRouter` | `core` | [`agent-runtime-router`](../packages/core/agent-runtime-router) | - | [`agent-spine-demo`](../packages/examples/agent-spine-demo) | - | Installs the sole AgentFactory and owns profile-based Provider selection, publication, rollback, capacity lifetime, and teardown. |
 | `ctx.agentRuntimeSubagentRoutes` | `core` | [`subagent-runtime-route`](../packages/subagent/subagent-runtime-route) | - | - | - | Maintains one wrapper Provider and delegation tool per Settings-backed one-shot route while ctx.subagents remains the dispatch authority. |
 | `ctx.agentDefaultModel` | `core` | [`agent-default-model`](../packages/core/agent-default-model) | - | [`headless`](../packages/bundle/headless), [`host-apiproxy`](../packages/host/apiproxy) | - | Layers the default ModelSelection through settings so direct and Host-backed Agent entry points share one state owner. |
