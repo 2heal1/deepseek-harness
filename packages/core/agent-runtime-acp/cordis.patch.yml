@@ -1,0 +1,5 @@
+# Optional Profile Bundle: register the ACP one-shot Runtime Provider.
+# Runtime Profile settings select it without starting a process.
+- insert:
+    - id: agent-runtime-acp
+      name: '@deepseek-ai/dsh-agent-runtime-acp'

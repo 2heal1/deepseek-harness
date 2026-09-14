@@ -490,7 +490,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 Maintains runtime-backed routes as Settings adds, edits, or removes them.
 
-Source: [`packages/subagent/subagent-runtime-route/src/index.ts:115`](../../packages/subagent/subagent-runtime-route/src/index.ts)
+Source: [`packages/subagent/subagent-runtime-route/src/index.ts:454`](../../packages/subagent/subagent-runtime-route/src/index.ts)
 
 <a id="ctxsubagents--subagentruntime"></a>
 

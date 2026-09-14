@@ -8,9 +8,11 @@ ACP protocol-v1 one-shot Provider for `ctx.agentRuntimes`, using `@agentclientpr
 
 Select provider `acp` in a Runtime Profile. The profile requires a session workspace and the `workspace-write` unattended permission policy. The illustrative Driver does not prove product-native sandbox enforcement, so it accepts `enforcement: best-effort` and rejects `enforcement: required` before spawn. The Provider advertises no optional runtime capabilities and does not support resume.
 
+The package is an optional Profile Bundle. Applying its `cordis.patch.yml` registers the Provider without starting a process; a Runtime Profile or runtime-backed subagent route starts it on demand.
+
 `maxFrameBytes` limits each inbound JSONL frame by UTF-8 bytes and defaults to 1048576. `maxOutputBytes` limits the cumulative assistant text for the submission and defaults to 4194304. `maxStderrBytes` bounds the diagnostic tail continuously drained from child stderr and defaults to 65536. Malformed and oversized input fails with diagnostics that do not include peer-controlled frame contents.
 
-The trusted `acp-agent-cli` Driver injects `acp serve`. Set `launch.args: []` for normal profiles. Any Profile spelling of `acp` or `serve`, including the required spelling, fails before spawn.
+The trusted `acp-agent-cli` Driver injects `acp serve` and accepts credential reference target `CHILD_PROVIDER_API_KEY`. Set `launch.args: []` for normal profiles. Any Profile spelling of `acp` or `serve`, including the required spelling, or any undeclared credential target fails before spawn.
 
 The Provider advertises no ACP client filesystem or terminal capabilities and rejects every ACP permission request. It uses the launcher's exact environment, credential resolution, redaction, deadlines, and process-tree disposal.
 

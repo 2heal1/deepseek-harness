@@ -415,6 +415,9 @@ importers:
 
   examples:
     dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 0.25.1
+        version: 0.25.1(zod@4.4.3)
       '@deepseek-ai/cordis-plugin-hmr':
         specifier: workspace:*
         version: link:../vendor/hmr
@@ -442,6 +445,9 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:*
         version: link:../packages/core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-acp':
+        specifier: workspace:*
+        version: link:../packages/core/agent-runtime-acp
       '@deepseek-ai/dsh-agent-runtime-codex':
         specifier: workspace:*
         version: link:../packages/core/agent-runtime-codex
@@ -652,6 +658,9 @@ importers:
       '@deepseek-ai/dsh-subagent-fork-in-process':
         specifier: workspace:*
         version: link:../packages/subagent/subagent-fork-in-process
+      '@deepseek-ai/dsh-subagent-runtime-route':
+        specifier: workspace:*
+        version: link:../packages/subagent/subagent-runtime-route
       '@deepseek-ai/dsh-subagent-spawn-in-process':
         specifier: workspace:*
         version: link:../packages/subagent/subagent-spawn-in-process
@@ -7968,15 +7977,27 @@ importers:
       '@deepseek-ai/dsh-agent-runtime':
         specifier: workspace:^
         version: link:../../core/agent-runtime
+      '@deepseek-ai/dsh-agent-runtime-acp':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-acp
+      '@deepseek-ai/dsh-agent-runtime-launcher':
+        specifier: workspace:^
+        version: link:../../core/agent-runtime-launcher
       '@deepseek-ai/dsh-agent-runtime-profile':
         specifier: workspace:^
         version: link:../../core/agent-runtime-profile
+      '@deepseek-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@deepseek-ai/dsh-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
@@ -7986,6 +8007,9 @@ importers:
       '@deepseek-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../subagent
+      '@deepseek-ai/dsh-subprocess-local':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess-local
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt

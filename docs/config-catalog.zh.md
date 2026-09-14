@@ -219,7 +219,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/core/agent-runtime-acp/src/index.ts:90`](../packages/core/agent-runtime-acp/src/index.ts)
+来源：[`packages/core/agent-runtime-acp/src/index.ts:91`](../packages/core/agent-runtime-acp/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-codex"></a>
 
@@ -2513,14 +2513,14 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-subagent-runtime-route`
 
-需要：`agentRuntimeProfiles` · `subagents` · `tools` · `systemPrompt`
+需要：`agentRuntimes` · `agentRuntimeProfiles` · `subagents` · `tools` · `systemPrompt`
 
 ```ts config-catalog
 /** Route Consumer configuration. Route definitions live in Settings. */
 export interface Config {}
 ```
 
-来源：[`packages/subagent/subagent-runtime-route/src/index.ts:31`](../packages/subagent/subagent-runtime-route/src/index.ts)
+来源：[`packages/subagent/subagent-runtime-route/src/index.ts:58`](../packages/subagent/subagent-runtime-route/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-spawn-in-process"></a>
 

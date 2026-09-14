@@ -19,6 +19,18 @@
       "path": "../../core/agent-runtime-profile"
     },
     {
+      "path": "../../core/agent"
+    },
+    {
+      "path": "../../core/scope"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
       "path": "../../subagent/subagent"
     },
     {

@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Workspace umbrella for runnable demos and example-owned test compositions: declares their cordis.yml packages so plain Node resolves real exports→lib. Not a build target.",
   "dependencies": {
+    "@agentclientprotocol/sdk": "0.25.1",
     "@deepseek-ai/cordis-plugin-hmr": "workspace:*",
     "@deepseek-ai/cordis-plugin-include": "workspace:*",
     "@deepseek-ai/cordis-plugin-logger-console": "workspace:*",
@@ -13,6 +14,7 @@
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-agent-loop": "workspace:*",
     "@deepseek-ai/dsh-agent-runtime": "workspace:*",
+    "@deepseek-ai/dsh-agent-runtime-acp": "workspace:*",
     "@deepseek-ai/dsh-agent-runtime-codex": "workspace:*",
     "@deepseek-ai/dsh-agent-runtime-launcher": "workspace:*",
     "@deepseek-ai/dsh-agent-runtime-profile": "workspace:*",
@@ -82,6 +84,7 @@
     "@deepseek-ai/dsh-subagent-codex": "workspace:*",
     "@deepseek-ai/dsh-subagent-dsh-sdk": "workspace:*",
     "@deepseek-ai/dsh-subagent-fork-in-process": "workspace:*",
+    "@deepseek-ai/dsh-subagent-runtime-route": "workspace:*",
     "@deepseek-ai/dsh-subagent-spawn-in-process": "workspace:*",
     "@deepseek-ai/dsh-subprocess-e2b": "workspace:*",
     "@deepseek-ai/dsh-subprocess-local": "workspace:*",

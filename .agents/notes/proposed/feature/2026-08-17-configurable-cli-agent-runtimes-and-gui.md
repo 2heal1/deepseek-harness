@@ -109,7 +109,7 @@ F2 intentionally does not implement the F5 submission receipts and canonical run
 
 The Router selects the Provider generation named by the snapshot and acquires shared profile capacity before preparation. Asynchronous create and resume wait in cancelable FIFO order; the Native synchronous compatibility entry fails with `AGENT_BUSY` when no slot is immediately available. The lease remains held until Provider quiescence and common teardown complete. `AgentOptions.runtimeProfile` selects a profile, while existing provider and token options are accepted only as Native overrides and model overrides require profile permission.
 
-`@deepseek-ai/dsh-subagent-runtime-route` maintains one wrapper `SubagentProvider` and one `dsh-tool-subagent` instance for each configured one-shot route. The existing `ctx.subagents` service remains the public dispatch and lifecycle authority. A start resolves a fresh snapshot, selects the underlying Provider by the snapshot's Provider id, applies the lower of route and profile capacity, and holds that lease through the underlying run's quiescent disposal. Settings reconciliation replaces or removes registrations through their Cordis fibers.
+`@deepseek-ai/dsh-subagent-runtime-route` maintains one wrapper `SubagentProvider` and one `dsh-tool-subagent` instance for each configured one-shot route. The existing `ctx.subagents` service remains the public dispatch and lifecycle authority. A start resolves a fresh snapshot, applies the lower of route and profile capacity, and holds that lease until the resulting run is disposed. F3 establishes the route and capacity behavior; S1 connects it to `ctx.agentRuntimes`.
 
 F3 does not interpret launch fields, construct process environments, enforce sandbox policy, or persist snapshots into Session headers. F4 owns secure launch and credential redaction; F5 owns durable snapshot identity, resume and fork reconstruction, submission receipts, and canonical runtime events.
 
@@ -132,6 +132,14 @@ Web Host omits its implicit Agent Preset and Native model defaults for an extern
 One prepared Codex runtime owns one process and ephemeral thread across serial submissions. Each submission opens a distinct Codex turn, streams correlated assistant deltas, publishes one canonical final assistant message, and settles through the Router receipt. Targeted cancellation interrupts the active turn and waits for Launcher quiescence; a failed runtime does not fall back to Native.
 
 The Provider reports the validated thread id as the safe external Session identity and declares `runtimeActivity` with complete fields for each observed turn phase. It emits only observed `turn` start and terminal activity; local cancellation may settle before Codex emits a terminal notification, and the Provider does not synthesize one. Command, file, diff, usage, and native-tool details remain unclaimed. The Session Header retains the complete non-secret Runtime Profile snapshot independently of later Settings edits.
+
+#### S1 runtime-backed one-shot child
+
+The runtime route selects the `ctx.agentRuntimes` Provider named by the resolved snapshot and rejects missing Providers, unsupported snapshot versions, or Native `agentDriver` handles. Each start creates fresh child, runtime, and submission identities plus a detached Session and unpublished private Agent scope. The Session Header records the parent identity, delegation depth, child workspace, and complete non-secret profile snapshot without publishing either child identity in the public registries.
+
+The private Agent exists only to supply Provider context and scope ownership. Its submission, continuation, maintenance, and inbox operations reject with publication-phase `SUBMISSION_REJECTED`; the route invokes exactly one Provider submission directly. A restricted sink validates runtime, Provider, and submission correlation, prefers a non-empty final assistant message over accumulated text deltas, and maps the Provider terminal reason to the existing `SubagentResult`. Facts and activity are checked but not persisted for the detached child.
+
+Parent cancellation targets the child submission. Run disposal issues a disposed cancellation and waits for result settlement, Provider quiescence, and private scope disposal before releasing the shared capacity lease. Startup rollback follows the same ownership order. The ACP package is an optional Profile Bundle whose trusted Driver injects `acp serve` and accepts only the child credential target `CHILD_PROVIDER_API_KEY`; the child process receives no ambient parent credential.
 
 #### Secure launch
 

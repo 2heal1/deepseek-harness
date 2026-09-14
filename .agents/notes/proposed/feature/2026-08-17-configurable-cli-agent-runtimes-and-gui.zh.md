@@ -109,7 +109,7 @@ F2 有意不实现 F5 submission receipt 与规范运行时 event sink。在 F5 
 
 Router 选择快照指定的 Provider generation，并在 preparation 前取得共享 profile 容量。异步 create 与 resume 按可取消 FIFO 顺序等待；Native 同步兼容入口在没有立即可用的 slot 时以 `AGENT_BUSY` 失败。租约会一直保留到 Provider 完全停稳且公共 teardown 完成。`AgentOptions.runtimeProfile` 选择 profile；既有 provider 与 token option 只作为 Native 覆盖接受，模型覆盖则需要 profile 明确允许。
 
-`@deepseek-ai/dsh-subagent-runtime-route` 为每条已配置的一次性 route 维护一个包装 `SubagentProvider` 和一个 `dsh-tool-subagent` 实例。现有 `ctx.subagents` 服务仍是公开 dispatch 与生命周期权威。每次启动都会解析新快照，按快照中的 Provider id 选择底层 Provider，采用 route 与 profile 容量中的较小值，并持有租约直到底层运行完全 dispose。Settings reconcile 通过各自的 Cordis fiber 替换或移除注册。
+`@deepseek-ai/dsh-subagent-runtime-route` 为每条已配置的一次性 route 维护一个包装 `SubagentProvider` 和一个 `dsh-tool-subagent` 实例。现有 `ctx.subagents` 服务仍是公开 dispatch 与生命周期权威。每次启动都会解析新快照，采用 route 与 profile 容量中的较小值，并持有租约直到结果运行完成 dispose。F3 建立 route 与容量行为；S1 将其连接到 `ctx.agentRuntimes`。
 
 F3 不解释启动字段、不构造进程环境、不执行沙箱策略，也不把快照持久化到 Session Header。F4 负责安全启动与凭据脱敏；F5 负责持久快照身份、resume 与 fork 重建、submission receipt 和规范运行时事件。
 
@@ -132,6 +132,14 @@ Web Host 会为外部 profile 省略隐式 Agent Preset 与 Native 模型默认�
 一个已准备 Codex runtime 在多个串行 submission 之间持有一个进程和一个 ephemeral thread。每个 submission 都会打开独立 Codex turn，流式发布已关联的 assistant delta，发布一条规范最终 assistant 消息，并通过 Router receipt 结算。定向取消会中断活动 turn 并等待 Launcher 完全停稳；失败的 runtime 不会回退到 Native。
 
 Provider 把已校验的 thread id 报告为安全的 external Session identity，并声明为每个已观察到的 turn phase 提供完整字段的 `runtimeActivity`。它只发布已观察到的 `turn` 开始与终态 activity；本地取消可能先于 Codex 终态通知结算，Provider 不会合成该通知。它不声称提供 command、file、diff、usage 或 native-tool detail。Session Header 保留完整且不含秘密的 Runtime Profile snapshot，不受后续 Settings 编辑影响。
+
+#### S1 runtime-backed 一次性子 agent
+
+Runtime route 按已解析快照指定的 id 选择 `ctx.agentRuntimes` Provider，并拒绝缺失的 Provider、不支持的快照版本或 Native `agentDriver` handle。每次启动都会创建新的 child、runtime 与 submission identity，以及 detached Session 和未发布的私有 Agent scope。Session Header 记录父级 identity、委派深度、子级工作目录和完整且不含秘密的 profile 快照，但不会把任一 child identity 发布到公开注册表。
+
+私有 Agent 只提供 Provider context 和 scope 所有权。其 submission、continuation、maintenance 与 inbox 操作都以 publication-phase `SUBMISSION_REJECTED` 拒绝；route 直接调用且只调用一次 Provider submission。受限 sink 会校验 runtime、Provider 与 submission 关联，优先采用非空的最终 assistant 消息，否则使用累计文本 delta，并把 Provider 终止原因映射为现有 `SubagentResult`。Facts 与 activity 只校验关联，不会为 detached child 持久化。
+
+父级取消会定向取消子级 submission。Run dispose 会发出 disposed cancellation，并等待结果结算、Provider 完全停稳和私有 scope 释放，再释放共享容量租约。启动回滚遵守相同的所有权顺序。ACP 包是可选 Profile Bundle；其可信 Driver 注入 `acp serve`，且只接受子级 credential target `CHILD_PROVIDER_API_KEY`，子进程不会收到父级 ambient credential。
 
 #### 安全启动
 
