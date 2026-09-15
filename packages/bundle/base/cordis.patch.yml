@@ -90,6 +90,9 @@
     - id: agent-runtime-router
       name: '@deepseek-ai/dsh-agent-runtime-router'
 
+    - id: mcp-runtime-gateway
+      name: '@deepseek-ai/dsh-mcp-runtime-gateway'
+
     # The transport-independent default for Agents created by entry points.
     # Settings may supply a saved selection; consumers read it at creation time.
     - id: agent-default-model

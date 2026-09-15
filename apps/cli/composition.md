@@ -36,6 +36,8 @@ flowchart LR
   cfg --> plugin_dsh_base_agent_runtime_profile
   plugin_dsh_base_agent_runtime_router["agent-runtime-router<br/>@deepseek-ai/dsh-agent-runtime-router"]
   cfg --> plugin_dsh_base_agent_runtime_router
+  plugin_dsh_base_mcp_runtime_gateway["mcp-runtime-gateway<br/>@deepseek-ai/dsh-mcp-runtime-gateway"]
+  cfg --> plugin_dsh_base_mcp_runtime_gateway
   plugin_dsh_base_agent_default_model["agent-default-model<br/>@deepseek-ai/dsh-agent-default-model"]
   cfg --> plugin_dsh_base_agent_default_model
   plugin_dsh_base_jobs["jobs<br/>@deepseek-ai/dsh-jobs-local"]
@@ -192,6 +194,7 @@ flowchart LR
 | `agent-runtime` | `@deepseek-ai/dsh-agent-runtime` |
 | `agent-runtime-profile` | `@deepseek-ai/dsh-agent-runtime-profile` |
 | `agent-runtime-router` | `@deepseek-ai/dsh-agent-runtime-router` |
+| `mcp-runtime-gateway` | `@deepseek-ai/dsh-mcp-runtime-gateway` |
 | `agent-default-model` | `@deepseek-ai/dsh-agent-default-model` |
 | `jobs` | `@deepseek-ai/dsh-jobs-local` |
 | `llm-retry` | `@deepseek-ai/dsh-llm-retry` |

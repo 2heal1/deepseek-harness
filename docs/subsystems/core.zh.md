@@ -615,7 +615,24 @@ Shared secure launcher for all external Agent Runtime Providers.
 async launch(request: AgentRuntimeLaunchRequest): Promise<AgentRuntimeLaunchHandle>
 ```
 
-Source: [`packages/core/agent-runtime-launcher/src/index.ts:441`](../../packages/core/agent-runtime-launcher/src/index.ts)
+Source: [`packages/core/agent-runtime-launcher/src/index.ts:465`](../../packages/core/agent-runtime-launcher/src/index.ts)
+
+<a id="ctxagentruntimemcpgateway--agentruntimemcpgateway"></a>
+
+### `ctx.agentRuntimeMcpGateway` — `AgentRuntimeMcpGateway`
+
+Loopback listener and registry for per-runtime MCP endpoints.
+
+```ts cordis-catalog
+/**
+ * Register one exact per-runtime endpoint.
+ * @param request - runtime, Agent, allowlist, and startup ownership.
+ * @returns secret connection material and quiescent revocation.
+ */
+open(request: RuntimeMcpGatewayOpenRequest): RuntimeMcpGatewayHandle
+```
+
+Source: [`packages/mcp/mcp-runtime-gateway/src/index.ts:410`](../../packages/mcp/mcp-runtime-gateway/src/index.ts)
 
 <a id="ctxagentruntimeprofiles--agentruntimeprofiles"></a>
 

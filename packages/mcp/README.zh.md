@@ -7,3 +7,4 @@
 | 包 | 职责 |
 |---|---|
 | [`mcp-client/`](mcp-client/README.md) | MCP 客户端桥接，将外部服务器工具注册到 `ctx.tools` |
+| [`mcp-runtime-gateway/`](mcp-runtime-gateway/README.md) | 为单个 runtime 暴露精确 Harness 工具白名单的 MCP Server |

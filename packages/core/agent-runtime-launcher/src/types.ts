@@ -31,6 +31,8 @@ export interface RuntimeDriverLaunch {
   readonly reservedEnvironment: readonly string[]
   /** Reserved environment names that receive profile credential values. */
   readonly credentialEnvironment: readonly string[]
+  /** Reserved environment names that receive launch-scoped Provider secrets. */
+  readonly runtimeSecretEnvironment?: readonly string[]
   /** Permit a resolved `.cmd` or `.bat` through the shared Windows encoder. */
   readonly allowWindowsCommandScript: boolean
   /** Whether this launch fully enforces the profile permission policy. */
@@ -66,6 +68,8 @@ export interface AgentRuntimeLaunchRequest {
   readonly signal: AbortSignal
   /** Optional sensitive files owned by this launch. */
   readonly temporaryFiles?: readonly RuntimeTemporaryFile[]
+  /** Provider-generated secrets admitted only to Driver-declared environment targets. */
+  readonly runtimeSecrets?: Readonly<Record<string, string>>
 }
 
 /** Provider protocol hooks used during timeout and disposal escalation. */

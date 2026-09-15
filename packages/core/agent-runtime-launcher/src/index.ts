@@ -176,6 +176,7 @@ function requiredWindowsEnvironment(name: 'SystemRoot' | 'ComSpec'): string {
  * @param driver - trusted reserved targets and required values.
  * @param credentials - freshly resolved credential target values.
  * @param platform - target environment-key semantics.
+ * @param runtimeSecrets - Provider-generated values admitted by Driver-declared targets.
  * @returns the complete child environment.
  */
 export function buildRuntimeEnvironment(
@@ -184,6 +185,7 @@ export function buildRuntimeEnvironment(
   driver: RuntimeDriverLaunch,
   credentials: ResolvedRuntimeCredentials,
   platform: NodeJS.Platform = process.platform,
+  runtimeSecrets: Readonly<Record<string, string>> = {},
 ): Record<string, string> {
   const reserved = new Set<string>()
   for (const name of driver.reservedEnvironment) {
@@ -202,6 +204,17 @@ export function buildRuntimeEnvironment(
       throw securityError(`agent runtime Driver repeats credential target "${name}"`)
     }
     credentialTargets.add(key)
+  }
+  const runtimeSecretTargets = new Set<string>()
+  for (const name of driver.runtimeSecretEnvironment ?? []) {
+    const key = environmentKey(name, platform)
+    if (!reserved.has(key)) {
+      throw securityError(`agent runtime secret target "${name}" is not reserved by the Driver`)
+    }
+    if (credentialTargets.has(key) || runtimeSecretTargets.has(key)) {
+      throw securityError(`agent runtime Driver repeats secret target "${name}"`)
+    }
+    runtimeSecretTargets.add(key)
   }
 
   const environment = new Map<string, readonly [source: string, name: string, value: string]>()
@@ -249,6 +262,17 @@ export function buildRuntimeEnvironment(
       throw securityError(`Runtime Profile credential target "${name}" is not declared by the Driver`)
     }
     setEnvironment(environment, name, value, 'credential', platform)
+  }
+  for (const [name, value] of Object.entries(runtimeSecrets)) {
+    if (!runtimeSecretTargets.has(environmentKey(name, platform))) {
+      throw securityError(`agent runtime secret target "${name}" is not declared by the Driver`)
+    }
+    setEnvironment(environment, name, value, 'runtime secret', platform)
+  }
+  for (const name of runtimeSecretTargets) {
+    if (![...environment.keys()].includes(name)) {
+      throw securityError(`agent runtime Driver secret target "${name}" has no launch value`)
+    }
   }
 
   return Object.fromEntries([...environment.values()].map(([, name, value]) => [name, value]))
@@ -475,7 +499,10 @@ export class AgentRuntimeLauncher extends Service {
     const platform = this.internals.platform ?? process.platform
     const credentials = await this.ctx.agentRuntimeProfiles.resolveCredentials(request.profile)
     request.signal.throwIfAborted()
-    const redactor = new KnownValueRedactor(Object.values(credentials))
+    const redactor = new KnownValueRedactor([
+      ...Object.values(credentials),
+      ...Object.values(request.runtimeSecrets ?? {}),
+    ])
     for (const [name, value] of Object.entries(request.profile.deadlines)) {
       if (!Number.isSafeInteger(value) || value <= 0 || value > MAX_TIMER_DELAY_MS) {
         throw securityError(`Runtime Profile "${request.profile.profileId}" deadline "${name}" is not representable`)
@@ -486,7 +513,14 @@ export class AgentRuntimeLauncher extends Service {
       throw securityError(`Runtime Profile "${request.profile.profileId}" requires full permission enforcement`)
     }
     const injectedArguments = validateReservedArguments(request.profile, request.driver.arguments)
-    const environment = buildRuntimeEnvironment(this.ctx, request.profile, request.driver, credentials, platform)
+    const environment = buildRuntimeEnvironment(
+      this.ctx,
+      request.profile,
+      request.driver,
+      credentials,
+      platform,
+      request.runtimeSecrets,
+    )
     const material = await this.temporary.create(request.temporaryFiles ?? [])
     try {
       let executable: string

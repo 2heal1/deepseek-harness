@@ -139,6 +139,49 @@ Source: [`packages/core/agent-runtime/src/types.ts:458`](../packages/core/agent-
 
 Source: [`packages/core/agent-runtime/src/types.ts:456`](../packages/core/agent-runtime/src/types.ts)
 
+<a id="agentruntimetool-call--log-only"></a>
+
+#### `agent/runtime/tool-call` — log-only
+
+```ts persistence-catalog
+/** Authorized Harness tool execution accepted from one runtime-owned MCP endpoint. */
+'agent/runtime/tool-call': {
+  readonly runtimeId: AgentRuntimeId
+  readonly providerId: AgentRuntimeProviderId
+  readonly submissionId: SubmissionId
+  readonly turn: number
+  readonly callId: CallId
+  readonly name: string
+  readonly arguments: JsonValue
+}
+```
+
+Types: [CallId](subsystems/core.md)
+
+Source: [`packages/mcp/mcp-runtime-gateway/src/index.ts:106`](../packages/mcp/mcp-runtime-gateway/src/index.ts)
+
+<a id="agentruntimetool-result--log-only"></a>
+
+#### `agent/runtime/tool-result` — log-only
+
+```ts persistence-catalog
+/** MCP response returned for a prior runtime-owned Harness tool execution. */
+'agent/runtime/tool-result': {
+  readonly runtimeId: AgentRuntimeId
+  readonly providerId: AgentRuntimeProviderId
+  readonly submissionId: SubmissionId
+  readonly turn: number
+  readonly callId: CallId
+  readonly content: JsonValue[]
+  readonly isError: boolean
+  readonly error?: { readonly name: string; readonly code: string }
+}
+```
+
+Types: [CallId](subsystems/core.md)
+
+Source: [`packages/mcp/mcp-runtime-gateway/src/index.ts:116`](../packages/mcp/mcp-runtime-gateway/src/index.ts)
+
 <a id="agentsubmissionaccepted--log-only"></a>
 
 #### `agent/submission/accepted` — log-only

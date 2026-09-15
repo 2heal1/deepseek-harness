@@ -10,7 +10,7 @@ Install this package into the target Profile with `dsh plugin --profile <name> a
 
 `app-server --stdio` belongs exclusively to the Driver. Set `launch.args: []` for normal profiles. Any Profile spelling of `app-server` or `--stdio`, including the required spelling, fails before spawn.
 
-The Provider uses the launcher's exact environment, credential resolution, redaction, deadlines, process-tree disposal, and required-permission enforcement. One prepared process and ephemeral Codex thread accept serial submissions until cancellation, failure, Provider removal, or Agent disposal reaches process-tree quiescence. Runtime facts expose the safe thread id as the external Session identity. The `runtimeActivity` capability reports each observed `turn` phase with complete fields; local cancellation may settle before Codex emits a terminal notification, and the Provider does not synthesize one. It does not claim command, file, diff, usage, or tool detail.
+The Provider uses the launcher's exact environment, credential resolution, redaction, deadlines, process-tree disposal, and required-permission enforcement. When `harnessTools.transport` is `mcp`, it opens a per-runtime Harness MCP endpoint, injects Driver-owned Codex MCP configuration, and supplies the bearer token through a launch-scoped secret environment variable. The `harnessTools` capability is present only on that path. One prepared process and ephemeral Codex thread accept serial submissions until cancellation, failure, Provider removal, or Agent disposal reaches process-tree quiescence. Runtime facts expose the safe thread id as the external Session identity. The `runtimeActivity` capability reports each observed `turn` phase with complete fields; local cancellation may settle before Codex emits a terminal notification, and the Provider does not synthesize one. It does not claim command, file, diff, usage, or native-tool detail.
 
 `maxFrameBytes` bounds a single UTF-8 JSONL frame from Codex; its default is 1 MiB. An oversized frame pauses the protocol stream and rejects the active operation. Cancellation sends one best-effort `turn/interrupt`. Cancellation, oversized frames, and protocol failures close stdin and wait for Launcher process-tree quiescence and temporary-material cleanup before settlement.
 
@@ -32,5 +32,5 @@ The Provider does not contribute to Harness LLM request caching.
 
 ## Known Limitations and Deferred Work
 
-- Codex V1 does not expose resume or Harness tool transport.
+- Codex V1 does not expose resume.
 - Runtime activity covers the observed turn lifecycle only; command, file, diff, usage, and native-tool details remain unavailable.

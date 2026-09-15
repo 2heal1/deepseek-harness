@@ -857,6 +857,12 @@ describe('environment policy', () => {
     ['duplicate credential target', settings(), driver({
       credentialEnvironment: ['PROVIDER_API_KEY', 'PROVIDER_API_KEY'],
     }), {}, 'repeats credential target'],
+    ['unreserved runtime secret target', settings(), driver({
+      runtimeSecretEnvironment: ['OTHER_KEY'],
+    }), {}, 'secret target "OTHER_KEY" is not reserved'],
+    ['credential runtime secret target', settings(), driver({
+      runtimeSecretEnvironment: ['PROVIDER_API_KEY'],
+    }), {}, 'repeats secret target'],
     ['reserved ambient key', (() => {
       const config = settings()
       config.profiles.main!.launch.ambientEnv!.push('DSH_PROTOCOL')
@@ -882,6 +888,47 @@ describe('environment policy', () => {
     try {
       expect(() => buildRuntimeEnvironment(ctx, profile, launchDriver, credentials))
         .toThrow(message)
+    } finally {
+      await cleanup(ctx, root)
+    }
+  })
+
+  it('admits and redacts a Provider-generated Driver-reserved secret', async () => {
+    const { ctx, launcher, profile, root, subprocess } = await harness()
+    try {
+      const launchDriver = driver({
+        reservedEnvironment: ['DSH_PROTOCOL', 'PROVIDER_API_KEY', 'RUNTIME_TOKEN'],
+        runtimeSecretEnvironment: ['RUNTIME_TOKEN'],
+      })
+      const handle = await launcher.launch({
+        ...request(profile, launchDriver),
+        runtimeSecrets: { RUNTIME_TOKEN: 'gateway-secret' },
+      })
+      expect(subprocess.spawns[0]?.env).toMatchObject({ RUNTIME_TOKEN: 'gateway-secret' })
+      expect(handle.redact('token=gateway-secret')).toBe('token=[REDACTED]')
+      await handle.dispose()
+    } finally {
+      await cleanup(ctx, root)
+    }
+  })
+
+  it('rejects missing and undeclared Provider-generated secrets', async () => {
+    const { ctx, profile, root } = await harness()
+    const launchDriver = driver({
+      reservedEnvironment: ['DSH_PROTOCOL', 'PROVIDER_API_KEY', 'RUNTIME_TOKEN'],
+      runtimeSecretEnvironment: ['RUNTIME_TOKEN'],
+    })
+    try {
+      expect(() => buildRuntimeEnvironment(ctx, profile, launchDriver, {}))
+        .toThrow('secret target "RUNTIME_TOKEN" has no launch value')
+      expect(() => buildRuntimeEnvironment(
+        ctx,
+        profile,
+        driver(),
+        {},
+        process.platform,
+        { RUNTIME_TOKEN: 'secret' },
+      )).toThrow('secret target "RUNTIME_TOKEN" is not declared')
     } finally {
       await cleanup(ctx, root)
     }

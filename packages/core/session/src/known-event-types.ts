@@ -21,6 +21,8 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'agent/inbox/spliced',
   'agent/runtime/activity',
   'agent/runtime/facts',
+  'agent/runtime/tool-call',
+  'agent/runtime/tool-result',
   'agent/submission/accepted',
   'agent/submission/settled',
   'agent/submission/started',

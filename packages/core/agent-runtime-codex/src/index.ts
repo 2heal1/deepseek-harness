@@ -26,6 +26,10 @@ import type {
 } from '@deepseek-ai/dsh-agent-runtime'
 import type { RuntimeDriverLaunch } from '@deepseek-ai/dsh-agent-runtime-launcher'
 import {
+  MCP_RUNTIME_GATEWAY_TOKEN_ENV,
+  type RuntimeMcpGatewayHandle,
+} from '@deepseek-ai/dsh-mcp-runtime-gateway'
+import {
   CodexAppServerWire,
   type CodexPermissionMode,
 } from '@deepseek-ai/dsh-subagent-codex'
@@ -39,6 +43,10 @@ const CODEX_CAPABILITIES: AgentRuntimeCapabilities = snapshotAgentRuntimeCapabil
   id: 'runtimeActivity',
   metadata: { fidelity: 'complete', kinds: ['turn'] },
 }])
+const CODEX_MCP_CAPABILITIES: AgentRuntimeCapabilities = snapshotAgentRuntimeCapabilities([
+  ...CODEX_CAPABILITIES,
+  { id: 'harnessTools', metadata: { transport: 'mcp' } },
+])
 const DEFAULT_MAX_FRAME_BYTES = 1_048_576
 type CodexLaunchHandle = Awaited<ReturnType<Context['agentRuntimeLauncher']['launch']>>
 type CodexCancelCause = Parameters<PreparedAgentRuntime['cancel']>[1]
@@ -53,8 +61,38 @@ export const CODEX_APP_SERVER_DRIVER: RuntimeDriverLaunch = {
   environment: {},
   reservedEnvironment: [],
   credentialEnvironment: [],
+  runtimeSecretEnvironment: [],
   allowWindowsCommandScript: false,
   permissionEnforcement: 'full',
+}
+
+function driverWithGateway(gateway: RuntimeMcpGatewayHandle | undefined): RuntimeDriverLaunch {
+  if (gateway === undefined) {
+    return {
+      ...CODEX_APP_SERVER_DRIVER,
+      reservedEnvironment: [],
+      runtimeSecretEnvironment: [],
+    }
+  }
+  const { url, tokenEnvironment } = gateway.connection
+  return {
+    ...CODEX_APP_SERVER_DRIVER,
+    reservedEnvironment: [MCP_RUNTIME_GATEWAY_TOKEN_ENV],
+    runtimeSecretEnvironment: [MCP_RUNTIME_GATEWAY_TOKEN_ENV],
+    arguments: [
+      ...CODEX_APP_SERVER_DRIVER.arguments,
+      {
+        name: 'harness-mcp-server',
+        forms: ['mcp_servers.deepseek_harness'],
+        argv: [
+          '-c',
+          `mcp_servers.deepseek_harness.url=${JSON.stringify(url)}`,
+          '-c',
+          `mcp_servers.deepseek_harness.bearer_token_env_var=${JSON.stringify(tokenEnvironment)}`,
+        ],
+      },
+    ],
+  }
 }
 
 /** Launcher-independent Codex protocol limits. */
@@ -126,7 +164,7 @@ function closeProtocolInput(launch: CodexLaunchHandle, wire: CodexAppServerWire)
 }
 
 class CodexPreparedRuntime implements PreparedAgentRuntime {
-  readonly capabilities = CODEX_CAPABILITIES
+  readonly capabilities: AgentRuntimeCapabilities
   readonly initialFacts
   private active: SubmissionId | undefined
   private cancellation: { readonly submissionId: SubmissionId; readonly cause: CodexCancelCause } | undefined
@@ -136,11 +174,14 @@ class CodexPreparedRuntime implements PreparedAgentRuntime {
     private readonly request: AgentRuntimePrepareRequest,
     private readonly launch: CodexLaunchHandle,
     private readonly wire: CodexAppServerWire,
+    private readonly gateway: RuntimeMcpGatewayHandle | undefined,
+    capabilities: AgentRuntimeCapabilities,
   ) {
+    this.capabilities = capabilities
     this.initialFacts = snapshotAgentRuntimeFacts({
       runtimeId,
       providerId: CODEX_PROVIDER_ID,
-      capabilities: CODEX_CAPABILITIES,
+      capabilities,
       phase: 'ready',
       product: { value: 'Codex', source: 'protocol' },
       productVersion: { value: CODEX_PROTOCOL_VERSION, source: 'profile' },
@@ -200,10 +241,28 @@ class CodexPreparedRuntime implements PreparedAgentRuntime {
   }
 
   async dispose(): Promise<void> {
-    await this.launch.dispose({
-      cancel: () => { this.wire.interrupt() },
-      closeInput: () => { closeProtocolInput(this.launch, this.wire) },
-    })
+    let launchError: unknown
+    try {
+      await this.launch.dispose({
+        cancel: () => { this.wire.interrupt() },
+        closeInput: () => { closeProtocolInput(this.launch, this.wire) },
+      })
+    } catch (error: unknown) {
+      launchError = error
+    }
+    try {
+      await this.gateway?.dispose()
+    } catch (gatewayError: unknown) {
+      if (launchError !== undefined) {
+        throw new AggregateError([launchError, gatewayError], 'Codex runtime and MCP gateway cleanup failed')
+      }
+      throw gatewayError
+    }
+    if (launchError !== undefined) {
+      throw launchError instanceof Error
+        ? launchError
+        : new Error('Codex runtime cleanup failed', { cause: launchError })
+    }
   }
 }
 
@@ -220,7 +279,9 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
     return Promise.resolve().then(() => {
       permissionMode(request.profile.permissions.policy)
       return {
-        capabilities: CODEX_CAPABILITIES,
+        capabilities: request.profile.harnessTools.transport === 'mcp'
+          ? CODEX_MCP_CAPABILITIES
+          : CODEX_CAPABILITIES,
         permissionEnforcement: 'enforced',
         productVersion: CODEX_PROTOCOL_VERSION,
         protocolVersion: CODEX_PROTOCOL_VERSION,
@@ -240,13 +301,43 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
     const mode = permissionMode(request.profile.permissions.policy)
     const cwd = sessionCwd(request)
     let active: SubmissionId | undefined
-    const launch = await this.ctx.agentRuntimeLauncher.launch({
-      profile: request.profile,
-      cwd,
-      driver: CODEX_APP_SERVER_DRIVER,
-      stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
-      signal: request.signal,
-    })
+    const agent = request.agentCtx.agent as NonNullable<typeof request.agentCtx.agent>
+    const gatewayService = this.ctx.get('agentRuntimeMcpGateway')
+    if (request.profile.harnessTools.transport === 'mcp' && gatewayService === undefined) {
+      throw new AgentRuntimeError({
+        code: 'RUNTIME_UNAVAILABLE',
+        phase: 'prepare',
+        message: 'Codex App Server requires the Harness MCP runtime gateway',
+        providerId: CODEX_PROVIDER_ID,
+      })
+    }
+    const gateway = request.profile.harnessTools.transport === 'mcp'
+      ? gatewayService?.open({
+        agent,
+        runtimeId: request.runtimeId,
+        providerId: CODEX_PROVIDER_ID,
+        allowedTools: request.profile.harnessTools.allowed,
+        signal: request.signal,
+      })
+      : undefined
+    let launch: CodexLaunchHandle
+    try {
+      launch = await this.ctx.agentRuntimeLauncher.launch({
+        profile: request.profile,
+        cwd,
+        driver: driverWithGateway(gateway),
+        stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
+        signal: request.signal,
+        ...gateway === undefined ? {} : {
+          runtimeSecrets: {
+            [gateway.connection.tokenEnvironment]: gateway.connection.token,
+          },
+        },
+      })
+    } catch (error: unknown) {
+      await gateway?.dispose()
+      throw error
+    }
     const wire = new CodexAppServerWire(
       launch.process.stdout as NonNullable<typeof launch.process.stdout>,
       launch.process.stdin as NonNullable<typeof launch.process.stdin>,
@@ -278,7 +369,14 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
         closeInput: () => { closeProtocolInput(launch, wire) },
       },
     )
-    const runtime = new CodexPreparedRuntime(request.runtimeId, request, launch, wire)
+    const runtime = new CodexPreparedRuntime(
+      request.runtimeId,
+      request,
+      launch,
+      wire,
+      gateway,
+      gateway === undefined ? CODEX_CAPABILITIES : CODEX_MCP_CAPABILITIES,
+    )
     const submit = runtime.submit.bind(runtime)
     runtime.submit = async (submission) => {
       active = submission.submissionId

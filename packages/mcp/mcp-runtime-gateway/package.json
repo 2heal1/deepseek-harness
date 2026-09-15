@@ -1,6 +1,6 @@
 {
-  "name": "@deepseek-ai/dsh-agent-runtime-codex",
-  "description": "Codex App Server runtime Provider for the DeepSeek Harness",
+  "name": "@deepseek-ai/dsh-mcp-runtime-gateway",
+  "description": "Session-owned MCP server exposing an exact Harness tool allowlist to external agent runtimes",
   "version": "0.1.0-rc.8",
   "publishConfig": {
     "access": "public"
@@ -8,7 +8,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
-    "directory": "packages/core/agent-runtime-codex"
+    "directory": "packages/mcp/mcp-runtime-gateway"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -28,35 +28,32 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "cordis.patch.yml",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
-  },
   "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-agent-runtime": "workspace:^",
-    "@deepseek-ai/dsh-agent-runtime-launcher": "workspace:^",
+    "@deepseek-ai/dsh-attachment": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-mcp-runtime-gateway": "workspace:^",
-    "@deepseek-ai/dsh-subagent-codex": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "workspace:^"
+    "@deepseek-ai/schemastery": "workspace:^",
+    "@modelcontextprotocol/sdk": "^1.12.0"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
     "@deepseek-ai/dsh-agent-runtime": "workspace:^",
-    "@deepseek-ai/dsh-agent-runtime-launcher": "workspace:^",
+    "@deepseek-ai/dsh-attachment": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
-    "@deepseek-ai/dsh-mcp-runtime-gateway": "workspace:^",
-    "@deepseek-ai/dsh-subagent-codex": "workspace:^",
-    "@deepseek-ai/dsh-subprocess": "workspace:^",
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-system-prompt": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^"
   }
 }

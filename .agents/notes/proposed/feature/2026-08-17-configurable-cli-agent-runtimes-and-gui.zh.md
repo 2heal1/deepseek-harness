@@ -294,7 +294,7 @@ ACP 协议版本 1 仅在 agent 声明 `sessionCapabilities.close` 时提供可�
 
 Session Log 继续作为 Harness 可见对话和活动的真源。运行时适配器只记录观察或协商得到的事实。规范 user、assistant 和 turn 事件表示对话事实；assistant 来源来自协商的协议数据，或者来自 Driver 明确规定为权威字段的固定 profile。无法满足规范 assistant 来源要求的提供方不能用于 V1 主 agent。
 
-产品原生命令、工具、文件编辑和 diff 使用运行时自有活动事件。它们不能伪装成 Harness `tool/call` 或 `tool/result` 事件，也不能进入派生模型历史，因为 Harness 没有执行这些工具，并且可能不知道完整的模型可见输入。只有通过 Harness 网关调用的工具才使用正常 Harness ToolRuntime 事件和 render intent。
+产品原生命令、工具、文件编辑和 diff 使用运行时自有活动事件。它们不能伪装成 Harness `tool/call` 或 `tool/result` 事件，也不能进入派生模型历史，因为 Harness 没有执行这些工具，并且可能不知道完整的模型可见输入。通过 Harness 网关调用的工具经 `ToolRuntime` 执行并保留其审批与策略行为，同时由非 surface 的 `agent/runtime/tool-call` 和 `agent/runtime/tool-result` 事件记录外部 runtime 来源，而不虚构 Native step。
 
 只有在关联 Harness turn 仍处于打开状态，且 Driver 能把完整产品决策集合映射为 Harness 决策时，外部审批才能映射到 Harness approval 服务。不完整映射必须在执行前失败。GUI 按声明的完整度渲染，绝不根据文案合成 token 用量、工具参数、diff、终端状态或模型请求。
 
