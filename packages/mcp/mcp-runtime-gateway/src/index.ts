@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import {
@@ -288,14 +288,14 @@ class GatewaySession {
     response: ServerResponse,
     body: unknown,
   ): Promise<void> {
-    const server = new Server(
+    const server = new McpServer(
       { name: 'deepseek-harness-runtime', version: '0.0.1' },
       { capabilities: { tools: {} } },
     )
-    server.setRequestHandler(ListToolsRequestSchema, () => ({
+    server.server.setRequestHandler(ListToolsRequestSchema, () => ({
       tools: this.tools(),
     }))
-    server.setRequestHandler(CallToolRequestSchema, async (call, extra) => (
+    server.server.setRequestHandler(CallToolRequestSchema, async (call, extra) => (
       this.call(call.params.name, call.params.arguments ?? {}, extra.signal)
     ))
     const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true })
