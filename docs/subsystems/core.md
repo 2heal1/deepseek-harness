@@ -624,7 +624,7 @@ Loopback listener and registry for per-runtime MCP endpoints.
 open(request: RuntimeMcpGatewayOpenRequest): RuntimeMcpGatewayHandle
 ```
 
-Source: [`packages/mcp/mcp-runtime-gateway/src/index.ts:411`](../../packages/mcp/mcp-runtime-gateway/src/index.ts)
+Source: [`packages/mcp/mcp-runtime-gateway/src/index.ts:410`](../../packages/mcp/mcp-runtime-gateway/src/index.ts)
 
 <a id="ctxagentruntimeprofiles--agentruntimeprofiles"></a>
 
