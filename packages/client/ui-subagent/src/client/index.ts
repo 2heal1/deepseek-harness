@@ -3,6 +3,9 @@ import type {
   ClientContext, SessionId, SubagentAddress,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { registerActivityDefinition } from './activity-definition.ts'
+import { registerActivityConversationView } from './activity-snapshot-builder.ts'
+import { ActivityView } from './ActivityView.tsx'
 import { SubagentCatalogAction, type SubagentCatalogInjected } from './SubagentCatalogAction.tsx'
 import {
   SubagentReadOnlyComposer, type SubagentReadOnlyMatch,
@@ -23,9 +26,13 @@ export type {
 export type {
   SubagentReadOnlyComposerProps, SubagentReadOnlyMatch,
 } from './SubagentReadOnlyComposer.tsx'
+export type { ActivityViewProps } from './ActivityView.tsx'
+export type {
+  ActivityConversationViewNode, ActivityRecord, ActivitySnapshot,
+} from './activity-contract.ts'
 
 /** Required services for conversation slots and session navigation. */
-export const inject = ['sessions', 'slots', 'locale']
+export const inject = ['sessions', 'slots', 'conversationEvents', 'conversationViews', 'locale']
 
 /** Claim the composer for one-shot history or an unavailable continuation owner. */
 function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatch | null {
@@ -45,6 +52,9 @@ function selectReadOnlySubagent(owner: ComposerChainProps): SubagentReadOnlyMatc
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-subagent: dictionaries')
+  registerActivityDefinition(ctx)
+  registerActivityConversationView(ctx)
+  const t = ctx.locale.bind(NS)
   const sessions = ctx.sessions
   const catalogActions = (_parentSessionId: SessionId): SubagentCatalogInjected => ({
     openChild(address: SubagentAddress) {
@@ -57,6 +67,16 @@ export function apply(ctx: ClientContext): void {
       sessions.setSubagentCatalogOpen(parentSessionId, open)
     },
   })
+  ctx.slots.inject(
+    'conversation.view',
+    () => ctx.slots.register({
+      name: 'conversation.view',
+      id: 'activity',
+      order: 20,
+      locale: NS,
+      label: () => t('activity.view'),
+    }, ActivityView),
+  )
   ctx.slots.inject(
     'conversation.session.header.actions',
     () => ctx.slots.register({

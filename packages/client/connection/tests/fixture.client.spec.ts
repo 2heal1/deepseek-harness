@@ -60,6 +60,22 @@ describe('createFixtureApi', () => {
     if (!response.result.ok) throw new Error('list failed')
     expect(response.result.value.items.map(s => s.sessionId)).toEqual(['fx-alpha', 'fx-beta', 'fx-gamma'])
     expect(response.result.value.items[1]?.parentSessionId).toBe('fx-alpha') // lineage material
+    expect(response.result.value.items[1]?.origin).toBe('subagent')
+    const children = await api.subagents.list(req({ parentSessionId: sid('fx-alpha') }))
+    expect(children.result).toMatchObject({
+      ok: true,
+      value: {
+        parentAvailable: true,
+        entries: [{
+          kind: 'child',
+          id: 'fx-beta',
+          mode: 'one-shot',
+          label: 'Inspect fixture runtime',
+          activity: 'inactive',
+          hasChildren: false,
+        }],
+      },
+    })
   })
 
   it('searches current message text with literal unicode61-style token phrases', async () => {
@@ -151,6 +167,7 @@ describe('createFixtureApi', () => {
         },
         plan: { active: false, pending: false },
         goal: null,
+        runtimeStatus: null,
         tokenUsage: {
           uncachedInputTokens: 0,
           outputTokens: 0,
@@ -365,7 +382,7 @@ describe('createFixtureApi', () => {
       const envelopes: RpcRequest<MuxFrame>[] = []
       for await (const envelope of api.events.mux(req({}), abort.signal)) {
         envelopes.push(envelope)
-        if (envelopes.length >= 13) abort.abort()
+        if (envelopes.length >= 14) abort.abort()
       }
       return envelopes
     }
@@ -379,23 +396,29 @@ describe('createFixtureApi', () => {
     expect(first[3]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'permissions' })
     expect(first[4]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'plan', value: { active: false, pending: false } })
     expect(first[5]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'goal', value: null })
-    expect(first[6]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'tokenUsage' })
-    expect(first[7]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'contextPressure' })
-    expect(first[8]?.payload).toMatchObject({
+    expect(first[6]?.payload).toMatchObject({
+      type: 'session/projection',
+      sessionId: 'fx-alpha',
+      key: 'runtimeStatus',
+      value: { runtimeId: 'fx-runtime-alpha', providerId: 'codex', phase: 'running' },
+    })
+    expect(first[7]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'tokenUsage' })
+    expect(first[8]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'contextPressure' })
+    expect(first[9]?.payload).toMatchObject({
       type: 'session/projection', sessionId: 'fx-alpha', key: 'contextBreakdown',
       value: { systemTokens: 0, toolsTokens: 0 },
     })
-    expect((first[8]?.payload as { value: { messageTokens: number } }).value.messageTokens).toBeGreaterThan(0)
-    expect(first[9]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'sessionStats' })
-    expect((first[9]?.payload as { value: { turns: number; steps: number } }).value.steps).toBeGreaterThan(0)
-    expect(first[10]?.payload).toMatchObject({
+    expect((first[9]?.payload as { value: { messageTokens: number } }).value.messageTokens).toBeGreaterThan(0)
+    expect(first[10]?.payload).toMatchObject({ type: 'session/projection', sessionId: 'fx-alpha', key: 'sessionStats' })
+    expect((first[10]?.payload as { value: { turns: number; steps: number } }).value.steps).toBeGreaterThan(0)
+    expect(first[11]?.payload).toMatchObject({
       type: 'session/projection', sessionId: 'fx-alpha', key: 'imageLimits',
       value: { maxImagesPerMessage: 20, maxImageBytes: 5 * 1024 * 1024 },
     })
-    expect(first[11]?.payload).toMatchObject({ type: 'approval/requested', toolName: 'dangerous_tool' })
-    expect(second[11]?.rpcId).toBe(first[11]?.rpcId) // stable rpcId across replays (host replay semantics)
-    expect(first[12]?.payload).toMatchObject({ type: 'question/requested', sessionId: 'fx-alpha' })
-    expect(second[12]?.rpcId).toBe(first[12]?.rpcId)
+    expect(first[12]?.payload).toMatchObject({ type: 'approval/requested', toolName: 'dangerous_tool' })
+    expect(second[12]?.rpcId).toBe(first[12]?.rpcId) // stable rpcId across replays (host replay semantics)
+    expect(first[13]?.payload).toMatchObject({ type: 'question/requested', sessionId: 'fx-alpha' })
+    expect(second[13]?.rpcId).toBe(first[13]?.rpcId)
   })
 
   it('steer with no replay in flight falls through to a fresh queued turn; non-text blocks stringify empty', async () => {
