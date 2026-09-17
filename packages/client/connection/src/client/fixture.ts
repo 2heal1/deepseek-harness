@@ -595,8 +595,114 @@ function buildAlphaLog(): SessionEvent[] {
   const callIndex = events.length - 4
   const callTime = events[callIndex]?.time as number
   events.splice(callIndex + 1, 0, { type: 'todo/write', time: callTime + 400, data: { todos: fixtureTodos } })
+  push({
+    type: 'agent/runtime/facts',
+    data: {
+      runtimeId: 'fx-runtime-alpha',
+      providerId: 'codex',
+      capabilities: [{ id: 'runtimeActivity' }, { id: 'harnessTools' }],
+      phase: 'running',
+      product: { value: 'Codex CLI', source: 'protocol' },
+      productVersion: { value: '0.147.0', source: 'protocol' },
+      protocol: { value: 'app-server', source: 'profile' },
+      protocolVersion: { value: '2', source: 'protocol' },
+      externalSessionId: 'fx-external-alpha',
+    },
+  })
+  push({
+    type: 'agent/submission/accepted',
+    data: { submissionId: 'fx-submission-rejected', messageId: 'fx-message-rejected' },
+  })
+  push({
+    type: 'agent/runtime/activity',
+    data: {
+      runtimeId: 'fx-runtime-alpha',
+      kind: 'command',
+      phase: 'started',
+      fidelity: 'partial',
+      data: { command: 'pnpm test', cwd: '/tmp/fixture' },
+    },
+  })
+  push({
+    type: 'agent/submission/settled',
+    data: {
+      submissionId: 'fx-submission-rejected',
+      messageId: 'fx-message-rejected',
+      settlement: {
+        kind: 'not-started',
+        reason: {
+          kind: 'rejected',
+          failure: {
+            code: 'AGENT_BUSY',
+            phase: 'submission',
+            message: 'Fixture runtime rejected a concurrent submission.',
+            providerId: 'codex',
+          },
+        },
+      },
+    },
+  })
   events.forEach((e, i) => { e.seq = i })
   return events as unknown as SessionEvent[]
+}
+
+/** One completed one-shot child used by assembled subagent navigation tests. */
+function buildBetaLog(): SessionEvent[] {
+  const time = Date.now() - 60_000
+  return [
+    {
+      type: 'subagent/descriptor',
+      seq: 0,
+      time,
+      data: {
+        version: 2,
+        mode: 'one-shot',
+        provider: 'runtime',
+        label: 'Inspect fixture runtime',
+      },
+    },
+    {
+      type: 'agent/runtime/facts',
+      seq: 1,
+      time: time + 100,
+      data: {
+        runtimeId: 'fx-runtime-beta',
+        providerId: 'codex',
+        capabilities: [{ id: 'runtimeActivity' }],
+        phase: 'stopped',
+        product: { value: 'Codex CLI', source: 'protocol' },
+        protocol: { value: 'app-server', source: 'profile' },
+      },
+    },
+    { type: 'turn/start', seq: 2, time: time + 200, data: { turn: 1 } },
+    {
+      type: 'user/message',
+      seq: 3,
+      time: time + 300,
+      surfaceOp: 'append',
+      data: userMessage(text('Inspect the fixture runtime state.')),
+    },
+    { type: 'step/start', seq: 4, time: time + 400, data: { turn: 1, step: 0 } },
+    {
+      type: 'assistant/message',
+      seq: 5,
+      time: time + 500,
+      surfaceOp: 'append',
+      data: {
+        turn: 1,
+        step: 0,
+        message: assistantMessage(text('The fixture runtime completed its delegated inspection.')),
+        usage: fixtureUsage(1, 0),
+      },
+    },
+    { type: 'step/end', seq: 6, time: time + 600, data: { turn: 1, step: 0 } },
+    {
+      type: 'turn/end',
+      seq: 7,
+      time: time + 700,
+      data: { turn: 1, reason: { kind: 'completed' } },
+    },
+  ] as unknown as SessionEvent[]
 }
 
 /** Narrows a parsed-JSON field to string; fixture args are authored in-file, so non-strings only mean a typo here. */
@@ -1070,6 +1176,11 @@ function projectionValuesOf(log: readonly SessionEvent[]): Record<string, unknow
   values['plan'] = planViewOf(log)
   // Always present (GoalService unit composed): null before create / after clear.
   values['goal'] = backscanGoal(log)
+  // Always present (API gateway composed): latest durable runtime facts.
+  const runtimeFacts = log.findLast(event => event.type === 'agent/runtime/facts')
+  values['runtimeStatus'] = runtimeFacts?.type === 'agent/runtime/facts'
+    ? runtimeFacts.data
+    : null
   // Always present (token-meter composed): full-log provider billing.
   values['tokenUsage'] = tokenUsageOf(log)
   // Always present (token-meter composed): last request pressure and capacity.
@@ -1138,6 +1249,15 @@ function projectionFramesOf(id: SessionId, log: readonly SessionEvent[], event: 
     })
   }
   if (frames.length > 0) return frames
+  if (type === 'agent/runtime/facts') {
+    return [{
+      type: 'session/projection',
+      sessionId: id,
+      key: 'runtimeStatus',
+      value: event.data,
+      seq: event.seq,
+    }]
+  }
   if (type === 'session/title') {
     const values = projectionValuesOf(log)
     /* v8 ignore next -- the advancing title event is in the log, so the key is present. */
@@ -1526,10 +1646,21 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   // The resident fixture sessions all carry history, so none of them is blank.
   const sessions: SessionSummary[] = options.empty ? [] : [
     { sessionId: sid('fx-alpha'), updatedAt: Date.now(), running: true, blank: false, cwd: '/tmp/fixture' },
-    { sessionId: sid('fx-beta'), updatedAt: Date.now() - 60_000, running: false, blank: false, parentSessionId: sid('fx-alpha'), cwd: '/tmp/fixture' },
+    {
+      sessionId: sid('fx-beta'),
+      updatedAt: Date.now() - 60_000,
+      running: false,
+      blank: false,
+      parentSessionId: sid('fx-alpha'),
+      origin: 'subagent',
+      cwd: '/tmp/fixture',
+    },
     { sessionId: sid('fx-gamma'), updatedAt: Date.now() - 120_000, running: false, blank: false, cwd: '/tmp/fixture' },
   ]
-  const logs = new Map<SessionId, SessionEvent[]>([[sid('fx-alpha'), buildAlphaLog()]])
+  const logs = new Map<SessionId, SessionEvent[]>([
+    [sid('fx-alpha'), buildAlphaLog()],
+    [sid('fx-beta'), buildBetaLog()],
+  ])
   const modelSelections = new Map<SessionId, ModelSelection>(sessions.map(session => [
     session.sessionId,
     { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
@@ -2602,7 +2733,19 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       },
     },
     subagents: {
-      list: request => ok(request, { entries: [], parentAvailable: true }),
+      list: request => ok(request, {
+        entries: request.payload.parentSessionId === sid('fx-alpha')
+          ? [{
+            kind: 'child',
+            id: sid('fx-beta'),
+            mode: 'one-shot',
+            label: 'Inspect fixture runtime',
+            activity: 'inactive',
+            hasChildren: false,
+          }]
+          : [],
+        parentAvailable: request.payload.parentSessionId === sid('fx-alpha'),
+      }),
       history: (request) => {
         const log = logs.get(request.payload.childSessionId) ?? []
         return Promise.resolve(ok(

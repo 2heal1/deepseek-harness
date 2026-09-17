@@ -1,0 +1,6 @@
+tabs=Chat | Trajectory | Activity
+runtime=RuntimeCurrent statusProcessrunningProvidercodexRuntimefx-runtime-alphaProductCodex CLI · protocol / 0.147.0 · protocolProtocolapp-server · profile / 2 · protocolExternal sessionfx-external-alphaCapabilitiesruntimeActivity, harnessTools
+runtime-facts: Runtime status changedcodex · running
+runtime-activity: command · startedpartial{ "command": "pnpm test", "cwd": "/tmp/fixture" }
+submission-rejection: Submission rejectedFixture runtime rejected a concurrent submission.AGENT_BUSY · submission
+subagents=Inspect fixture runtimeone-shot · not running

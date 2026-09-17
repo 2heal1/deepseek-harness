@@ -9,6 +9,7 @@
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Activity"
 - text: Show the local preview URL. {{clock}}
 - button "Copy":
   - img

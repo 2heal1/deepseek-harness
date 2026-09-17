@@ -310,7 +310,7 @@ Profile 与 route 容量取较小值。等待运行使用可取消的 FIFO 队�
 
 ### API 与 GUI
 
-现有三栏 Web Shell 继续作为首个 Client。Runtime Profile 与 Subagent Route 已有专用设置表单和探测诊断。新会话选择器会携带显式 profile 创建 Session，而不是改变已发布的空白 Agent；对话标题栏读取固定在 Session Header 中的 profile id。Activity slot 后续再增加进程状态、产品、模型、能力、活动和子 agent 关系。只有声明对应能力时才显示 diff、终端、图片、模型、steering、审批和恢复控件，同时 Host 方法独立执行相同检查。
+现有三栏 Web Shell 继续作为首个 Client。Runtime Profile 与 Subagent Route 已有专用设置表单和探测诊断。新会话选择器会携带显式 profile 创建 Session，而不是改变已发布的空白 Agent；对话标题栏读取固定在 Session Header 中的 profile id。Activity 标签页展示当前进程事实与能力以及持久化提供方活动和结构化失败，现有递归 subagent 目录则展示 child 关系。它保留已声明的完整度，并且不会推断缺失的模型、参数、diff、用量或终端细节。未来的 diff、终端、图片、模型、steering、审批和恢复控件仅在声明相应能力时显示，同时 Host 方法独立执行相同检查。
 
 Host 按信任级别拆分 Runtime Profile API。每个 Client 都可以读取安全 catalog，其中只包含 profile 与 route id、Provider／模型标签、可用性和快照 schema 兼容性。在具备认证的管理控制平面之前，完整的非秘密配置、凭据配置状态、受 revision 约束的 profile／route／default 写入和 Provider 探测都只限 loopback。两类响应都不包含凭据值。移除用户层 profile 或 route 可能让同 id 的组合基础层条目重新出现，因为 Settings mutation 移除的是覆盖层，而不是基础层。
 

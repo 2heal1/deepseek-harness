@@ -16,6 +16,7 @@
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
+    - tab "Activity"
 - text: Explain event sourcing in one sentence. {{clock}}
 - button "Copy":
   - img

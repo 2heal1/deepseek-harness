@@ -86,11 +86,12 @@ function historySnapshot(
     runningCalls: [],
     ...inspection,
   }
+  const views = {
+    get: target => target === 'trajectory' ? trajectory : undefined,
+  } as ConversationSnapshot['views']
   return {
     sessionId: SID,
-    views: {
-      get: target => target === 'trajectory' ? trajectory : undefined,
-    },
+    views,
     chat: EMPTY_CHAT_SNAPSHOT,
     nodes,
     turnTimings: new Map(),
