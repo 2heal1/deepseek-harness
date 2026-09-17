@@ -17,7 +17,7 @@ import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { SENSITIVE_ENV_PATTERN } from '@deepseek-ai/dsh-subprocess'
 import type { SubprocessHandle } from '@deepseek-ai/dsh-subprocess'
 import { deadline, MAX_TIMER_DELAY_MS, timeoutOf } from '@deepseek-ai/dsh-timeout'
-import { KnownValueRedactor } from './redactor.ts'
+import { KnownValueRedactor, KnownValueStreamRedactor } from './redactor.ts'
 import { RuntimeTemporaryMaterialOwner } from './temporary.ts'
 import type { RuntimeTemporaryMaterial } from './temporary.ts'
 import type {
@@ -319,6 +319,10 @@ class SecureRuntimeLaunchHandle implements AgentRuntimeLaunchHandle {
 
   redact<T>(value: T): T {
     return this.redactor.redact(value)
+  }
+
+  redactStream(): KnownValueStreamRedactor {
+    return this.redactor.stream()
   }
 
   async waitUntilReady(readiness: Promise<void>, shutdown?: RuntimeProtocolShutdown): Promise<void> {

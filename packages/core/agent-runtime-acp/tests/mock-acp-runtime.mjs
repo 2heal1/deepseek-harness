@@ -10,6 +10,9 @@ const scenario = process.env.MOCK_SCENARIO ?? 'success'
 const exitMarker = process.env.MOCK_EXIT_MARKER
 const promptMarker = process.env.MOCK_PROMPT_MARKER
 const cancelMarker = process.env.MOCK_CANCEL_MARKER
+const splitsCredential = scenario === 'redacted-output'
+  || scenario === 'partial-secret'
+  || scenario === 'failure-after-partial'
 let settlePrompt
 
 process.on('exit', () => {
@@ -93,20 +96,36 @@ new AgentSideConnection(
           sessionUpdate: 'agent_message_chunk',
           content: scenario === 'non-text-output'
             ? { type: 'image', data: 'AA==', mimeType: 'image/png' }
-            : { type: 'text', text: scenario.startsWith('multibyte-output') ? '好' : 'fixture ' },
+            : {
+              type: 'text',
+              text: scenario.startsWith('multibyte-output')
+                ? '好'
+                : splitsCredential
+                  ? 'split-'
+                  : 'fixture ',
+            },
         },
       })
+      if (scenario === 'failure-after-partial') throw new Error('private protocol failure')
       if (scenario === 'cancel'
         || scenario === 'crash-cancel'
         || scenario === 'ignore-cancel'
         || scenario === 'timeout') {
         return new Promise(resolve => { settlePrompt = resolve })
       }
+      if (scenario === 'partial-secret') return { stopReason: 'end_turn' }
       await connection.sessionUpdate({
         sessionId: params.sessionId,
         update: {
           sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: scenario.startsWith('multibyte-output') ? 'a' : 'answer' },
+          content: {
+            type: 'text',
+            text: scenario.startsWith('multibyte-output')
+              ? 'a'
+              : scenario === 'redacted-output'
+                ? 'secret'
+                : 'answer',
+          },
         },
       })
       if (scenario === 'multibyte-output-overflow') {

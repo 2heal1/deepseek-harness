@@ -9,7 +9,9 @@ import AgentRuntimeRegistry, {
   type AgentRuntimeEventSink,
   type AgentRuntimePrepareRequest,
 } from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeLauncher from '@deepseek-ai/dsh-agent-runtime-launcher'
+import AgentRuntimeLauncher, {
+  KnownValueRedactor,
+} from '@deepseek-ai/dsh-agent-runtime-launcher'
 import AgentRuntimeProfiles from '@deepseek-ai/dsh-agent-runtime-profile'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
@@ -45,6 +47,17 @@ async function runtimeProfile(args: string[]) {
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(AgentRuntimeLauncher, { temporaryRoot: root })
   return { ctx, output, root }
+}
+
+function installKnownValueRedactor(ctx: Context, values: readonly string[]): void {
+  const launch = ctx.agentRuntimeLauncher.launch.bind(ctx.agentRuntimeLauncher)
+  ctx.agentRuntimeLauncher.launch = async (request) => {
+    const handle = await launch(request)
+    const redactor = new KnownValueRedactor(values)
+    handle.redact = <T>(value: T): T => redactor.redact(value)
+    handle.redactStream = () => redactor.stream()
+    return handle
+  }
 }
 
 describe('Codex App Server Driver', () => {
@@ -108,6 +121,7 @@ describe('Codex App Server Driver', () => {
     'failure',
     'cancellation',
     'success',
+    'redacted-output',
     'max-tokens',
     'empty',
     'blank',
@@ -181,19 +195,39 @@ describe('Codex App Server Driver', () => {
                 },
               }))
             }
-            if (scenario === 'success') {
+            if (scenario === 'success' || scenario === 'redacted-output') {
               setImmediate(() => {
                 send(
                   {
                     method: 'item/agentMessage/delta',
-                    params: { threadId: 'thread-1', turnId: 'turn-1', delta: 'live' },
+                    params: {
+                      threadId: 'thread-1',
+                      turnId: 'turn-1',
+                      delta: scenario === 'redacted-output' ? 'split-' : 'live',
+                    },
                   },
+                  ...(scenario === 'redacted-output'
+                    ? [{
+                        method: 'item/agentMessage/delta',
+                        params: {
+                          threadId: 'thread-1',
+                          turnId: 'turn-1',
+                          delta: 'secret fixture split-',
+                        },
+                      }]
+                    : []),
                   {
                     method: 'item/completed',
                     params: {
                       threadId: 'thread-1',
                       turnId: 'turn-1',
-                      item: { type: 'agentMessage', text: 'answer', phase: 'final_answer' },
+                      item: {
+                        type: 'agentMessage',
+                        text: scenario === 'redacted-output'
+                          ? 'split-secret fixture split-'
+                          : 'answer',
+                        phase: 'final_answer',
+                      },
                     },
                   },
                   {
@@ -266,6 +300,9 @@ describe('Codex App Server Driver', () => {
         })
         await ctx.plugin(LocalSubprocessRuntime)
         await ctx.plugin(AgentRuntimeLauncher, { temporaryRoot })
+        if (scenario === 'redacted-output') {
+          installKnownValueRedactor(ctx, ['split-secret'])
+        }
         await ctx.plugin(AgentRuntimeRegistry)
         await ctx.plugin(CodexRuntime, { maxFrameBytes: 512 })
         const provider = ctx.agentRuntimes.getProvider(AgentRuntimeProviderId('codex-app-server'))
@@ -421,14 +458,25 @@ describe('Codex App Server Driver', () => {
             reason: { kind: 'aborted', reason: cause },
           })
           await expect(readFile(interruptMarker, 'utf8')).resolves.toBe('interrupted')
-        } else if (scenario === 'success' || scenario === 'max-tokens') {
+        } else if (scenario === 'success' || scenario === 'redacted-output' || scenario === 'max-tokens') {
           await expect(submission).resolves.toEqual({
-            reason: scenario === 'success' ? { kind: 'completed' } : { kind: 'interrupted' },
+            reason: scenario === 'max-tokens' ? { kind: 'interrupted' } : { kind: 'completed' },
           })
-          if (scenario === 'success') {
+          if (scenario === 'success' || scenario === 'redacted-output') {
             await new Promise<void>((resolve) => { setTimeout(resolve, 20) })
-            expect(chunks).toEqual(['live'])
-            expect(messages).toEqual(['answer'])
+            expect(chunks).toEqual(
+              scenario === 'redacted-output'
+                ? ['[REDACTED] fixture ', 'split-']
+                : ['live'],
+            )
+            expect(messages).toEqual(
+              scenario === 'redacted-output'
+                ? ['[REDACTED] fixture split-']
+                : ['answer'],
+            )
+            const assistantDelta = Reflect.get(runtime, 'assistantDelta') as (delta: string) => void
+            assistantDelta.call(runtime, 'ignored after settlement')
+            expect(chunks).not.toContain('ignored after settlement')
             expect(activities).toEqual([
               {
                 runtimeId: AgentRuntimeId('runtime-1'),

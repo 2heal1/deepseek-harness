@@ -16,7 +16,7 @@ The trusted `acp-agent-cli` Driver injects `acp serve` and accepts credential re
 
 The Provider advertises no ACP client filesystem or terminal capabilities and rejects every ACP permission request. It uses the launcher's exact environment, credential resolution, redaction, deadlines, and process-tree disposal.
 
-Assistant text from ordered `session/update` notifications is streamed to the Router sink and joined into one final assistant message. `end_turn`, `max_tokens`, `refusal`, and `cancelled` map to provider-neutral terminal reasons; `max_turn_requests` is a runtime failure.
+Assistant text from ordered `session/update` notifications passes through one submission-scoped stream redactor before reaching the Router sink and being joined into one final assistant message. Known values remain redacted when the agent splits them across notifications. `end_turn`, `max_tokens`, `refusal`, and `cancelled` map to provider-neutral terminal reasons; `max_turn_requests` is a runtime failure.
 
 Cancellation sends one best-effort `session/cancel` and continues accepting complete update frames until the prompt settles. If the agent does not cooperate before the shared shutdown deadline, the Launcher closes protocol input, terminates the process tree, and waits for complete quiescence. The Provider waits for ACP connection closure before publishing the joined final message. Success, cancellation, timeout, protocol failure, startup rollback, and explicit disposal all remove launch resources before settling.
 

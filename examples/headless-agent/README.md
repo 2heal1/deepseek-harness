@@ -17,6 +17,17 @@ The product command is [`dsh --profile headless`](../../apps/cli/README.md): it 
 
 Snapshot suites run this directory's configuration through [`tests/fixtures/headless-driver.ts`](tests/fixtures/headless-driver.ts), an unexported test-only process that emits canonical session events as JSONL before its result record. That stream is test infrastructure, not a supported CLI output format. Child sessions surface only through parent tool events and results.
 
+## Keyless external-runtime chain
+
+The [`runtime-chain` fixture](tests/fixtures/integration/runtime-chain/) applies the public Codex and ACP Profile Bundle patches through the real Loader. Its fake Codex main process discovers and calls `delegate_to_acp_child` over the authenticated MCP endpoint, while the fake ACP process completes the one-shot child run. The snapshot verifies exact per-process environments, runtime tool events, receipt settlement, process cleanup, and known-value redaction across protocol chunks without an API key.
+
+Run the source composition directly, or run it against built package artifacts after `pnpm run build`:
+
+```sh
+pnpm exec vitest run --config vitest.snapshot.config.ts examples/headless-agent/tests/runtime-chain.snapshot.ts
+DSH_EXAMPLE_MODE=lib pnpm exec vitest run --config vitest.snapshot.config.ts examples/headless-agent/tests/runtime-chain.snapshot.ts
+```
+
 ## E2B POC overlay
 
 [`e2b.cordis.yml`](e2b.cordis.yml) replaces the local filesystem and subprocess providers with one shared E2B sandbox while retaining `dsh-bash-local` and the same model-facing tools. Put `E2B_API_KEY` beside `DEEPSEEK_API_KEY` in the gitignored root `.env`, then run the credential-gated live composition, which drives FS, Bash, PTY, and LSP in one sandbox and proves final deletion:

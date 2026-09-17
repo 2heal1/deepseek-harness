@@ -1,0 +1,88 @@
+{
+  "runtimeProviders": [
+    "acp",
+    "codex-app-server"
+  ],
+  "routeProviders": [
+    "acp-child"
+  ],
+  "listedTools": [
+    "delegate_to_acp_child"
+  ],
+  "childResult": {
+    "content": [
+      {
+        "type": "text",
+        "text": "runtime child [REDACTED]"
+      }
+    ]
+  },
+  "receipt": {
+    "started": {
+      "kind": "started",
+      "turn": 1,
+      "eventSeq": 3
+    },
+    "settled": {
+      "kind": "settled",
+      "turn": 1,
+      "reason": {
+        "kind": "completed"
+      },
+      "eventSeq": 13
+    }
+  },
+  "assistantDeltas": [
+    "MAIN_RESULT=runtime child [REDACTED]; TOKEN=",
+    "[REDACTED]"
+  ],
+  "assistantMessages": [
+    "MAIN_RESULT=runtime child [REDACTED]; TOKEN=[REDACTED]"
+  ],
+  "runtimeTools": [
+    {
+      "type": "agent/runtime/tool-call",
+      "name": "delegate_to_acp_child"
+    },
+    {
+      "type": "agent/runtime/tool-result",
+      "content": [
+        {
+          "type": "text",
+          "text": "runtime child [REDACTED]"
+        }
+      ],
+      "isError": false
+    }
+  ],
+  "environmentIsolation": {
+    "mainExact": true,
+    "mainUnexpected": [],
+    "mainHasGatewayToken": true,
+    "mainLacksChildCredential": true,
+    "mainLacksAmbientSecret": true,
+    "childExact": true,
+    "childUnexpected": [],
+    "childHasOwnCredential": true,
+    "childLacksGatewayToken": true,
+    "childLacksAmbientSecret": true
+  },
+  "canaryFree": true,
+  "eventTypes": [
+    "agent/runtime/facts",
+    "agent/submission/accepted",
+    "turn/start",
+    "agent/submission/started",
+    "user/message",
+    "agent/runtime/activity",
+    "agent/runtime/tool-call",
+    "agent/runtime/tool-result",
+    "assistant/chunk",
+    "assistant/chunk",
+    "agent/runtime/activity",
+    "assistant/message",
+    "turn/end",
+    "agent/submission/settled"
+  ],
+  "finalStatus": "idle"
+}

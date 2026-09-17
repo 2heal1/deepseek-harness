@@ -17,6 +17,17 @@ pnpm dsh --profile headless "fix the failing test in this workspace"
 
 快照套件通过 [`tests/fixtures/headless-driver.ts`](tests/fixtures/headless-driver.ts) 运行本目录的配置。这个未导出且仅供测试使用的进程会在结果记录之前，以 JSONL 发出规范会话事件。该事件流属于测试基础设施，不是受支持的 CLI（命令行界面）输出格式。子会话只通过父会话的工具事件和结果对外显示。
 
+## 无密钥外部运行时链路
+
+[`runtime-chain` fixture](tests/fixtures/integration/runtime-chain/) 通过真实 Loader 应用公开的 Codex 与 ACP Profile Bundle patch。Fake Codex 主进程通过已认证的 MCP endpoint 发现并调用 `delegate_to_acp_child`，Fake ACP 进程则完成一次性子运行。该快照无需 API Key，即可验证各进程的精确环境、运行时工具事件、receipt 结算、进程清理，以及跨协议 chunk 的 known-value 脱敏。
+
+可以直接运行源码组合，也可以先执行 `pnpm run build`，再针对构建后的包产物运行：
+
+```sh
+pnpm exec vitest run --config vitest.snapshot.config.ts examples/headless-agent/tests/runtime-chain.snapshot.ts
+DSH_EXAMPLE_MODE=lib pnpm exec vitest run --config vitest.snapshot.config.ts examples/headless-agent/tests/runtime-chain.snapshot.ts
+```
+
 ## E2B POC overlay
 
 [`e2b.cordis.yml`](e2b.cordis.yml) 使用一个共享 E2B 沙箱替换本地文件系统与子进程提供方，同时保留 `dsh-bash-local` 和相同的面向模型工具。请在 git 忽略的根目录 `.env` 中，将 `E2B_API_KEY` 与 `DEEPSEEK_API_KEY` 放在一起，然后运行凭据门控的实机组合测试；它在同一个沙箱中驱动 FS、Bash、PTY 和 LSP，并证明沙箱最终被删除：

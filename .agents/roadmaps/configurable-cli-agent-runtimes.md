@@ -8,7 +8,7 @@
 
 集成分支：`feat/configurable-cli`
 
-远端状态：P0a、P0b、P0c、P1、F1、F2、F3、F4、F5、D1、D2、U1、M1、S1 已合入 `fork/feat/configurable-cli`
+远端状态：P0a、P0b、P0c、P1、F1、F2、F3、F4、F5、D1、D2、U1、M1、S1、G1、G2 已合入 `fork/feat/configurable-cli`
 
 ## 使用规则
 
@@ -61,8 +61,8 @@
 | M1 | 外部主 agent 垂直切片 | F2、F3、F5、D1 | M | 高级 | `done` | `feat/configurable-cli-m1-main-agent` | [PR #20](https://github.com/2heal1/deepseek-harness/pull/20) | Codex Optional Profile Bundle、外部 Session identity、串行 submission、流、receipt、定向取消、turn activity、固定 Profile 与进程停稳；Codex Provider／wire 77 项逐文件 100% coverage，Router 32 项、Host Preset 41 项及真实 Loader snapshot 通过，`doc-sync` 28 项、build、typecheck、lint、hygiene 与最终 CI 通过；PR 已合入集成分支 |
 | S1 | 运行时支持的一次性子 agent | F3、F4、D2 | M | 中等，高级评审 | `done` | `feat/configurable-cli-s1-child-agent` | [PR #21](https://github.com/2heal1/deepseek-harness/pull/21) | Runtime Provider route、detached child Session、私有 Agent scope、容量、工作区、凭据隔离、取消与完全停稳；ACP 与 route 60 项逐文件 100% coverage，真实 Loader snapshot、`doc-sync` 28 项、build、lint、hygiene 与最终 CI 通过；PR 已合入集成分支 |
 | G1 | 每会话 MCP 网关 | M1、S1 | G | 高级安全所有者 | `done` | `feat/configurable-cli-g1-mcp-gateway` | [PR #22](https://github.com/2heal1/deepseek-harness/pull/22) | 每 runtime/session authenticated loopback Streamable HTTP MCP endpoint、发现与执行双重 allowlist、审批、取消、`ToolRuntime` 执行、非 surface 审计、Codex 注入与 secret 隔离；105 项 focused tests、逐文件 100% coverage、`doc-sync`、build、lint、duplication、hygiene 及最终 CI 27 项通过或按配置跳过；PR 已合入集成分支 |
-| G2 | Activity 与子 agent 树展示 | M1、S1、F5 | G | 中等；固定渲染 fixture 可交给较低 agent | `in-review` | `feat/configurable-cli-g2-activity-ui` | [PR #23](https://github.com/2heal1/deepseek-harness/pull/23) | Activity target 展示当前进程事实、持久化 Provider 活动完整度与结构化失败，并复用递归 subagent 目录展示关系；ui-subagent 27 项逐文件 100% coverage、组装 Web 快照、build、`doc-sync` 28 项、lint、hygiene 与 pre-push typecheck 通过，等待 CI 与评审 |
-| I1 | V1 组装发布 | G1、G2、U1 | I1 | 高级集成者 | `not-started` | `feat/configurable-cli-i1-integration` | — | 无密钥主 agent 到网关再到子 agent 的示例与快照、构建冒烟、Secret canary 测试 |
+| G2 | Activity 与子 agent 树展示 | M1、S1、F5 | G | 中等；固定渲染 fixture 可交给较低 agent | `done` | `feat/configurable-cli-g2-activity-ui` | [PR #23](https://github.com/2heal1/deepseek-harness/pull/23) | Activity target 展示当前进程事实、持久化 Provider 活动完整度与结构化失败，并复用递归 subagent 目录展示关系；ui-subagent 27 项逐文件 100% coverage、组装 Web 快照、build、`doc-sync` 28 项、lint、hygiene、pre-push typecheck 与最终 CI 27 项通过；PR 已合入集成分支 |
+| I1 | V1 组装发布 | G1、G2、U1 | I1 | 高级集成者 | `in-review` | `feat/configurable-cli-i1-integration` | [PR #24](https://github.com/2heal1/deepseek-harness/pull/24) | 真实 Loader 组装 Codex 主 Agent、authenticated MCP 网关与隔离 ACP 子 Agent；source／lib 快照固定 Provider、route、tool call／result、receipt、精确环境、清理与 Harness 状态 Secret canary；分块 Secret 流式脱敏；Codex 24 项、ACP 58 项及 Launcher 102 项测试覆盖改动源文件 100%，`doc-sync` 28 项、build、typecheck、lint 与 hygiene 通过，等待 CI 与评审 |
 | R1 | Follow-up 与 interrupt | I1 | R | 高级 | `deferred` | `feat/configurable-cli-r1-followup` | — | 多轮接纳与取消竞态测试 |
 | R2 | 冷恢复与可续接子 agent | R1 | R | 高级 | `deferred` | `feat/configurable-cli-r2-cold-resume` | — | 双 Host 重启、精确 profile 恢复、状态缺失失败与续接集成 |
 
@@ -143,3 +143,7 @@ P1、F1、F2、F4、F5、M1、G1、I1、R1 和 R2 必须由高级 coding agent �
 | 2026-09-16 | G2 | 从最新 `fork/feat/configurable-cli` 的 `a0a769daab` 创建 `feat/configurable-cli-g2-activity-ui`；确认 M1、S1 与 F5 已合入且远端不存在同名工作分支；Activity 与子 agent 树展示进入 `in-progress` |
 | 2026-09-16 | G2 | 完成独立 Activity conversation target、当前 runtime facts、按完整度呈现的持久化 activity、结构化失败、瞬态错误分区及确定性主从 Session fixture；复用既有递归 subagent 目录展示关系。ui-subagent 27 项逐文件 100% coverage、组装 Web 快照 replay、build、`doc-sync` 28 项、lint 与 hygiene 通过，等待提交、推送和 Draft PR |
 | 2026-09-16 | G2 | Draft [PR #23](https://github.com/2heal1/deepseek-harness/pull/23) 已创建；base/head 为 `feat/configurable-cli` ← `feat/configurable-cli-g2-activity-ui`，状态更新为 `in-review`，等待 CI 与评审 |
+| 2026-09-16 | G2 | [PR #23](https://github.com/2heal1/deepseek-harness/pull/23) 以 `823296203a` 合入集成分支；最终 CI 27 项通过，状态更新为 `done`，I1 的 G2 依赖解除 |
+| 2026-09-16 | I1 | 从最新 `fork/feat/configurable-cli` 的 `823296203a` 创建 `feat/configurable-cli-i1-integration`；确认 G1、G2 与 U1 已合入且远端不存在同名工作分支；V1 组装发布进入 `in-progress` |
+| 2026-09-17 | I1 | 完成真实 Loader 的 Codex → authenticated MCP → ACP 运行链、source／lib 快照、精确环境与清理断言，以及跨 chunk Secret 脱敏和 Harness 状态 canary；聚焦测试逐文件 100% coverage，`doc-sync` 28 项、build、typecheck、lint 与 hygiene 通过，等待提交、推送和 Draft PR |
+| 2026-09-17 | I1 | Draft [PR #24](https://github.com/2heal1/deepseek-harness/pull/24) 已创建；base/head 为 `feat/configurable-cli` ← `feat/configurable-cli-i1-integration`，状态更新为 `in-review`，等待 CI 与评审 |

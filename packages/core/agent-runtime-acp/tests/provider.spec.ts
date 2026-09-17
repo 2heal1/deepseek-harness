@@ -12,7 +12,9 @@ import AgentRuntimeRegistry, {
   type AgentRuntimePrepareRequest,
   type PreparedAgentRuntime,
 } from '@deepseek-ai/dsh-agent-runtime'
-import AgentRuntimeLauncher from '@deepseek-ai/dsh-agent-runtime-launcher'
+import AgentRuntimeLauncher, {
+  KnownValueRedactor,
+} from '@deepseek-ai/dsh-agent-runtime-launcher'
 import AgentRuntimeProfiles from '@deepseek-ai/dsh-agent-runtime-profile'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
@@ -163,6 +165,17 @@ function failLaunchDisposal(ctx: Context): void {
   }
 }
 
+function installKnownValueRedactor(ctx: Context, values: readonly string[]): void {
+  const launch = ctx.agentRuntimeLauncher.launch.bind(ctx.agentRuntimeLauncher)
+  ctx.agentRuntimeLauncher.launch = async (request) => {
+    const handle = await launch(request)
+    const redactor = new KnownValueRedactor(values)
+    handle.redact = <T>(value: T): T => redactor.redact(value)
+    handle.redactStream = () => redactor.stream()
+    return handle
+  }
+}
+
 function submission(
   id: string,
   signal = new AbortController().signal,
@@ -267,6 +280,60 @@ describe('ACP one-shot runtime Provider', () => {
     await expectQuiescent(value)
     await value.ctx.fiber.dispose()
   })
+
+  it('redacts a known value split across assistant chunks and the final message', async () => {
+    const value = await harness('redacted-output')
+    installKnownValueRedactor(value.ctx, ['split-secret'])
+    const chunks: string[] = []
+    const messages: string[] = []
+    const runtime = await value.provider.prepare({
+      ...value.request,
+      sink: {
+        facts() {},
+        assistantChunk(_id, chunk) {
+          if (chunk.kind === 'text-delta') chunks.push(chunk.text)
+        },
+        assistantMessage(_id, output) {
+          for (const block of output.content) {
+            if (block.type === 'text') messages.push(block.text)
+          }
+        },
+        activity() {},
+      },
+    })
+
+    await expect(runtime.submit(submission('submission-1'))).resolves.toEqual({
+      reason: { kind: 'completed' },
+    })
+    expect(chunks).toEqual(['[REDACTED]'])
+    expect(messages).toEqual(['[REDACTED]'])
+    await expectQuiescent(value)
+    await value.ctx.fiber.dispose()
+  })
+
+  it.each(['partial-secret', 'failure-after-partial'] as const)(
+    'cleans up when redactor flush output fails after %s',
+    async (scenario) => {
+      const value = await harness(scenario)
+      installKnownValueRedactor(value.ctx, ['split-secret'])
+      const runtime = await value.provider.prepare({
+        ...value.request,
+        sink: {
+          facts() {},
+          assistantChunk() {
+            throw new Error('closed chunk sink')
+          },
+          assistantMessage() {},
+          activity() {},
+        },
+      })
+
+      await expect(runtime.submit(submission('submission-1')))
+        .rejects.toThrow('ACP submission failed')
+      await expectQuiescent(value)
+      await value.ctx.fiber.dispose()
+    },
+  )
 
   it.each([
     ['no-agent-info', undefined],

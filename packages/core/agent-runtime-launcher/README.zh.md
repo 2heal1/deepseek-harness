@@ -16,7 +16,7 @@ Driver 声明会保留协议参数与环境目标、提供相应注入值、标�
 
 子进程接收 `envMode: exact`。其完整环境仅包含 Launcher 必需的操作系统条目、显式 allowlist 中的非秘密 process 条目、profile literal、Driver reserved value、刚解析的 credential，以及由 Driver 声明目标接收的 Provider 生成 secret。环境名称与重复写入者会被拒绝；Windows 比较不区分大小写。Credential-shaped ambient name 不能加入 allowlist。
 
-句柄的 `redact(value)` 会在完整诊断中递归替换每个非空的已解析凭据或 Provider 生成 secret 值。`KnownValueStreamRedactor` 会跨 chunk 边界保留可能的 secret 前缀。Provider 必须在诊断、retained output、事件或 API 数据离开本次启动前应用其中一种 redactor；编码或转换后的 secret 值无法识别。
+句柄的 `redact(value)` 会在完整诊断中递归替换每个非空的已解析凭据或 Provider 生成 secret 值。句柄的 `redactStream()` 会创建 `KnownValueStreamRedactor`，跨 chunk 边界保留可能的 secret 前缀。Provider 必须在诊断、retained output、事件或 API 数据离开本次启动前应用其中一种 redactor；编码或转换后的 secret 值无法识别。
 
 ## 临时材料与 teardown
 

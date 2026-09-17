@@ -52,6 +52,7 @@
         "headless-agent/tests/fixtures/telemetry-redact-rule.ts",
         "headless-agent/tests/fixtures/e2b/e2b/bin.ts",
         "headless-agent/tests/fixtures/core/agent-runtime-codex/driver.ts",
+        "headless-agent/tests/fixtures/integration/runtime-chain/driver.ts",
         "headless-agent/tests/fixtures/subagent/runtime-route-acp/driver.ts",
         "acp-agent/tests/snapshots/lsp-definition/workspace/subject.ts",
         "acp-agent/tests/fixtures/child-question-tripwire.ts",

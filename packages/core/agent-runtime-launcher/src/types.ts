@@ -10,6 +10,7 @@ import type {
   SubprocessOutputMode,
   SubprocessStdinMode,
 } from '@deepseek-ai/dsh-subprocess'
+import type { KnownValueStreamRedactor } from './redactor.ts'
 
 /** One Driver-owned argument injection and the profile forms it reserves. */
 export interface RuntimeReservedArgument {
@@ -95,6 +96,11 @@ export interface AgentRuntimeLaunchHandle {
    * @returns a detached value with every known credential replaced.
    */
   redact<T>(value: T): T
+  /**
+   * Create an ordered stream redactor that withholds possible credential prefixes across chunks.
+   * @returns a launch-scoped redactor for one provider output stream.
+   */
+  redactStream(): KnownValueStreamRedactor
   /**
    * Bound protocol readiness by the profile startup deadline.
    * @param readiness - Provider handshake/readiness work.

@@ -1,0 +1,103 @@
+# Keyless V1 composition: external Codex main -> authenticated MCP gateway ->
+# configured one-shot ACP child. The snapshot supplies fixture executable paths.
+- id: llm
+  name: '@deepseek-ai/dsh-llm'
+
+- id: session
+  name: '@deepseek-ai/dsh-session'
+
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+
+- id: tools
+  name: '@deepseek-ai/dsh-tools'
+
+- id: agent
+  name: '@deepseek-ai/dsh-agent'
+
+- id: credentials
+  name: '@deepseek-ai/dsh-credentials-local'
+
+- id: agent-runtime-profile
+  name: '@deepseek-ai/dsh-agent-runtime-profile'
+  config:
+    defaultMainProfile: codex-main
+    profiles:
+      codex-main:
+        provider: codex-app-server
+        schemaVersion: 1
+        launch:
+          executable: !!js process.execPath
+          args: !!js JSON.parse(process.env.DSH_RUNTIME_MAIN_ARGS ?? '[]')
+          resolution: absolute
+          cwdPolicy: session-workspace
+          env:
+            DSH_RUNTIME_MAIN_MARKER: !!js process.cwd() + '/.runtime-main.json'
+        product:
+          kind: codex-app-server
+        permissions:
+          policy:
+            sandbox: workspace-write
+          enforcement: required
+        harnessTools:
+          transport: mcp
+          allowed:
+            - delegate_to_acp_child
+        process:
+          startupTimeoutMs: 5000
+          turnTimeoutMs: 5000
+          shutdownTimeoutMs: 1000
+          terminationTimeoutMs: 1000
+          maxConcurrentRuns: 1
+      acp-child:
+        provider: acp
+        launch:
+          executable: !!js process.execPath
+          args: !!js JSON.parse(process.env.DSH_RUNTIME_CHILD_ARGS ?? '[]')
+          resolution: absolute
+          cwdPolicy: parent-workspace
+          env:
+            DSH_RUNTIME_CHILD_MARKER: !!js process.cwd() + '/.runtime-child.json'
+        permissions:
+          policy:
+            sandbox: workspace-write
+          enforcement: best-effort
+        credentials:
+          env:
+            CHILD_PROVIDER_API_KEY:
+              credentialRef: CHILD_RUNTIME_KEY
+        process:
+          startupTimeoutMs: 5000
+          turnTimeoutMs: 5000
+          shutdownTimeoutMs: 1000
+          terminationTimeoutMs: 1000
+          maxConcurrentRuns: 1
+    subagentRoutes:
+      acp-child:
+        runtimeProfile: acp-child
+        maxDepth: 2
+        maxConcurrentRuns: 1
+        toolName: delegate_to_acp_child
+
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: agent-runtime-launcher
+  name: '@deepseek-ai/dsh-agent-runtime-launcher'
+  config:
+    temporaryRoot: !!js process.cwd() + '/.runtime-launches'
+
+- id: agent-runtime
+  name: '@deepseek-ai/dsh-agent-runtime'
+
+- id: subagent
+  name: '@deepseek-ai/dsh-subagent'
+
+- id: mcp-runtime-gateway
+  name: '@deepseek-ai/dsh-mcp-runtime-gateway'
+
+- id: agent-runtime-router
+  name: '@deepseek-ai/dsh-agent-runtime-router'
+
+- id: subagent-runtime-route
+  name: '@deepseek-ai/dsh-subagent-runtime-route'

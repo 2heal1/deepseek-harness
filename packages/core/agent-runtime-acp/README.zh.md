@@ -16,7 +16,7 @@
 
 Provider 不声明 ACP Client 文件系统或终端能力，并拒绝所有 ACP 权限请求。它使用 Launcher 的精确环境、凭据解析、脱敏、deadline 和进程树释放。
 
-来自有序 `session/update` 通知的 assistant 文本会流式写入 Router sink，并合并为一条最终 assistant 消息。`end_turn`、`max_tokens`、`refusal` 和 `cancelled` 映射到提供方无关的终止原因；`max_turn_requests` 属于运行时失败。
+来自有序 `session/update` 通知的 assistant 文本会先经过 submission-scoped stream redactor，再写入 Router sink 并合并为一条最终 assistant 消息。即使 agent 把 known value 拆到多个通知中，该值也会保持脱敏。`end_turn`、`max_tokens`、`refusal` 和 `cancelled` 映射到提供方无关的终止原因；`max_turn_requests` 属于运行时失败。
 
 取消会发送一次尽力而为的 `session/cancel`，并继续接收完整更新帧，直至 prompt 结算。如果 agent 未在共享 shutdown deadline 前协作，Launcher 会关闭协议输入、终止进程树并等待完全停稳。Provider 会在发布合并后的最终消息前等待 ACP connection 关闭。成功、取消、超时、协议失败、启动回滚和显式释放都会在结算前移除启动资源。
 
