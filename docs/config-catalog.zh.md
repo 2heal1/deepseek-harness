@@ -219,7 +219,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/core/agent-runtime-acp/src/index.ts:91`](../packages/core/agent-runtime-acp/src/index.ts)
+来源：[`packages/core/agent-runtime-acp/src/index.ts:92`](../packages/core/agent-runtime-acp/src/index.ts)
 
 <a id="deepseek-aidsh-agent-runtime-codex"></a>
 

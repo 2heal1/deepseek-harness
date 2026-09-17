@@ -514,6 +514,10 @@ describe('secure runtime launch', () => {
       message: 'failed with [REDACTED]',
       nested: ['[REDACTED]'],
     })
+    const stream = handle.redactStream()
+    expect(stream.write('failed with split-')).toBe('failed with ')
+    expect(stream.write('secret-value')).toBe('[REDACTED]')
+    expect(stream.end()).toBe('')
     subprocess.handles[0]!.exit()
     await handle.dispose()
     await cleanup(ctx, root)

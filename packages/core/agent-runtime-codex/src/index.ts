@@ -166,7 +166,10 @@ function closeProtocolInput(launch: CodexLaunchHandle, wire: CodexAppServerWire)
 class CodexPreparedRuntime implements PreparedAgentRuntime {
   readonly capabilities: AgentRuntimeCapabilities
   readonly initialFacts
-  private active: SubmissionId | undefined
+  private active: {
+    readonly submissionId: SubmissionId
+    readonly outputRedactor: ReturnType<CodexLaunchHandle['redactStream']>
+  } | undefined
   private cancellation: { readonly submissionId: SubmissionId; readonly cause: CodexCancelCause } | undefined
 
   constructor(
@@ -201,7 +204,11 @@ class CodexPreparedRuntime implements PreparedAgentRuntime {
       })
     }
     const texts = textInput(request)
-    this.active = request.submissionId
+    const active = {
+      submissionId: request.submissionId,
+      outputRedactor: this.launch.redactStream(),
+    }
+    this.active = active
     this.cancellation = undefined
     try {
       const result = await this.launch.runTurn(async (signal) => {
@@ -210,7 +217,10 @@ class CodexPreparedRuntime implements PreparedAgentRuntime {
         cancel: () => { this.wire.interrupt() },
         closeInput: () => { closeProtocolInput(this.launch, this.wire) },
       })
-      this.request.sink.assistantMessage(request.submissionId, { content: result.output })
+      this.flushOutput(active)
+      this.request.sink.assistantMessage(request.submissionId, {
+        content: this.launch.redact(result.output),
+      })
       return { reason: result.stopReason === 'completed' ? { kind: 'completed' } : { kind: 'interrupted' } }
     } catch (error: unknown) {
       try {
@@ -224,13 +234,30 @@ class CodexPreparedRuntime implements PreparedAgentRuntime {
       }
       throw error
     } finally {
+      this.flushOutput(active)
       this.active = undefined
       this.cancellation = undefined
     }
   }
 
+  assistantDelta(delta: string): void {
+    const active = this.active
+    if (active === undefined) return
+    const text = active.outputRedactor.write(delta)
+    if (text.length > 0) {
+      this.request.sink.assistantChunk(active.submissionId, { kind: 'text-delta', text })
+    }
+  }
+
+  private flushOutput(active: NonNullable<CodexPreparedRuntime['active']>): void {
+    const text = active.outputRedactor.end()
+    if (text.length > 0) {
+      this.request.sink.assistantChunk(active.submissionId, { kind: 'text-delta', text })
+    }
+  }
+
   cancel(submissionId: SubmissionId, cause: CodexCancelCause): void {
-    if (submissionId !== this.active) return
+    if (submissionId !== this.active?.submissionId) return
     this.cancellation = { submissionId, cause }
     this.wire.interrupt()
   }
@@ -338,15 +365,12 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
       await gateway?.dispose()
       throw error
     }
+    const prepared: { runtime?: CodexPreparedRuntime } = {}
     const wire = new CodexAppServerWire(
       launch.process.stdout as NonNullable<typeof launch.process.stdout>,
       launch.process.stdin as NonNullable<typeof launch.process.stdin>,
       mode,
-      (delta) => {
-        request.sink.assistantChunk(active as SubmissionId, {
-          kind: 'text-delta', text: delta,
-        })
-      },
+      (delta) => { prepared.runtime?.assistantDelta(delta) },
       { approvalPolicy: 'never', sandbox: 'workspace-write' },
       { maxFrameBytes: this.config.maxFrameBytes },
       (activity) => {
@@ -377,6 +401,7 @@ class CodexAppServerProvider implements AgentRuntimeProvider {
       gateway,
       gateway === undefined ? CODEX_CAPABILITIES : CODEX_MCP_CAPABILITIES,
     )
+    prepared.runtime = runtime
     const submit = runtime.submit.bind(runtime)
     runtime.submit = async (submission) => {
       active = submission.submissionId
