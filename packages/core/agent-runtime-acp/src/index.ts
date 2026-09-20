@@ -64,6 +64,7 @@ type ActiveSubmission = {
   readonly id: SubmissionId
   readonly sessionId: string
   readonly output: string[]
+  readonly redactor: ReturnType<AgentRuntimeLaunchHandle['redactStream']>
   outputBytes: number
   readonly failure: PromiseWithResolvers<never>
   prompt?: Promise<PromptResponse>
@@ -233,11 +234,7 @@ class AcpPreparedRuntime implements PreparedAgentRuntime {
         return Promise.resolve()
       }
       active.outputBytes += outputBytes
-      active.output.push(update.content.text)
-      this.request.sink.assistantChunk(active.id, {
-        kind: 'text-delta',
-        text: update.content.text,
-      })
+      this.appendOutput(active, active.redactor.write(update.content.text))
     } catch (error: unknown) {
       active.failed = true
       active.failure.reject(error)
@@ -255,6 +252,7 @@ class AcpPreparedRuntime implements PreparedAgentRuntime {
       id: request.submissionId,
       sessionId: this.initialFacts.externalSessionId as string,
       output: [],
+      redactor: this.launch.redactStream(),
       outputBytes: 0,
       failure: Promise.withResolvers<never>(),
       failed: false,
@@ -288,6 +286,14 @@ class AcpPreparedRuntime implements PreparedAgentRuntime {
       } catch (error: unknown) {
         outcome = { failure: error }
       }
+    }
+
+    try {
+      this.appendOutput(active, active.redactor.end())
+    } catch (error: unknown) {
+      outcome = 'failure' in outcome
+        ? { failure: new AggregateError([outcome.failure, error]) }
+        : { failure: error }
     }
 
     let cleanupFailure: unknown
@@ -326,6 +332,15 @@ class AcpPreparedRuntime implements PreparedAgentRuntime {
     }
     if (cleanupFailure !== undefined) throw cleanupFailure as Error
     return { reason: stopReason(outcome.response.stopReason) }
+  }
+
+  private appendOutput(active: ActiveSubmission, text: string): void {
+    if (text.length === 0) return
+    active.output.push(text)
+    this.request.sink.assistantChunk(active.id, {
+      kind: 'text-delta',
+      text,
+    })
   }
 
   cancel(submissionId: SubmissionId, cause: AgentCancelCause): void {

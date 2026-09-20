@@ -2997,7 +2997,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AgentRuntimeLaunchHandle',
-    declaration: 'export interface AgentRuntimeLaunchHandle {\n    readonly process: SubprocessHandle;\n    readonly temporaryPaths: Readonly<Record<string, string>>;\n    redact<T>(value: T): T;\n    waitUntilReady(readiness: Promise<void>, shutdown?: RuntimeProtocolShutdown): Promise<void>;\n    runTurn<T>(operation: RuntimeTurnOperation<T>, shutdown?: RuntimeProtocolShutdown): Promise<T>;\n    dispose(shutdown?: RuntimeProtocolShutdown): Promise<void>;\n}',
+    declaration: 'export interface AgentRuntimeLaunchHandle {\n    readonly process: SubprocessHandle;\n    readonly temporaryPaths: Readonly<Record<string, string>>;\n    redact<T>(value: T): T;\n    redactStream(): KnownValueStreamRedactor;\n    waitUntilReady(readiness: Promise<void>, shutdown?: RuntimeProtocolShutdown): Promise<void>;\n    runTurn<T>(operation: RuntimeTurnOperation<T>, shutdown?: RuntimeProtocolShutdown): Promise<T>;\n    dispose(shutdown?: RuntimeProtocolShutdown): Promise<void>;\n}',
   },
   {
     name: 'AgentRuntimeLaunchRequest',
@@ -3670,6 +3670,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'KnobState',
     declaration: 'export interface KnobState {\n    preset: string | null;\n    sandbox: SandboxMode | null;\n    approval: ApprovalPolicy | null;\n}',
+  },
+  {
+    name: 'KnownValueStreamRedactor',
+    declaration: 'export class KnownValueStreamRedactor {\n    constructor(values: readonly string[]);\n    write(chunk: string): string;\n    end(): string;\n}',
   },
   {
     name: 'KvFacet',

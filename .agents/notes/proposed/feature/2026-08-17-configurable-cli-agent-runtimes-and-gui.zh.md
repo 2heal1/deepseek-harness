@@ -141,6 +141,10 @@ Runtime route 按已解析快照指定的 id 选择 `ctx.agentRuntimes` Provider
 
 父级取消会定向取消子级 submission。Run dispose 会发出 disposed cancellation，并等待结果结算、Provider 完全停稳和私有 scope 释放，再释放共享容量租约。启动回滚遵守相同的所有权顺序。ACP 包是可选 Profile Bundle；其可信 Driver 注入 `acp serve`，且只接受子级 credential target `CHILD_PROVIDER_API_KEY`，子进程不会收到父级 ambient credential。
 
+#### I1 已组装 V1 运行时链路
+
+无密钥 [`runtime-chain` fixture](../../../../examples/headless-agent/tests/fixtures/integration/runtime-chain/) 通过 Loader 应用公开的 Codex 与 ACP Bundle patch，启动已配置且兼容 Codex 的主进程，并经已认证的 MCP endpoint 委派给已配置的一次性 ACP 子进程。其[快照](../../../../examples/headless-agent/tests/runtime-chain.snapshot.ts)同时针对源码和构建后的包产物运行，验证 Provider 与 route 注册、工具发现与执行、规范事件、receipt 结算、精确隔离的进程环境、完整进程清理，以及 Harness 自有状态不含已知 credential value。Fake 协议会把子级 credential 与生成的 gateway token 拆到多个输出 chunk 中；共享 Launcher stream redactor 与 Provider 级测试覆盖这些 chunk 边界。
+
 #### 安全启动
 
 F4 按以下规则实现供所有外部运行时使用的唯一 Launcher：

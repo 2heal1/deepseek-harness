@@ -10,7 +10,7 @@ Codex App Server 0.147.0 的可选 Profile Bundle 和 `ctx.agentRuntimes` Provid
 
 `app-server --stdio` 仅由 Driver 持有。正常 Profile 使用 `launch.args: []`。Profile 对 `app-server` 或 `--stdio` 的任何写入，即使值与 Driver 要求相同，也会在 spawn 前失败。
 
-Provider 使用 Launcher 的精确环境、凭据解析、脱敏、deadline、进程树释放和必需权限执行。当 `harnessTools.transport` 为 `mcp` 时，它会打开每 runtime 的 Harness MCP endpoint，注入由 Driver 持有的 Codex MCP 配置，并通过 launch-scoped secret 环境变量提供 bearer token。`harnessTools` capability 只在该路径上出现。一个已准备进程和 ephemeral Codex thread 会接受串行 submission，直至取消、失败、Provider 移除或 Agent dispose 使进程树完全停稳。Runtime facts 把安全 thread id 公开为 external Session identity。`runtimeActivity` capability 会以完整字段报告每个已观察到的 `turn` phase；本地取消可能先于 Codex 终态通知结算，Provider 不会合成该通知。它不声称提供 command、file、diff、usage 或 native-tool detail。
+Provider 使用 Launcher 的精确环境、凭据解析、脱敏、deadline、进程树释放和必需权限执行。Assistant delta 会先经过 submission-scoped stream redactor，再到达 Router sink，因此即使协议把 known value 拆到多个 frame 中也会保持脱敏；完整的最终消息会单独脱敏。当 `harnessTools.transport` 为 `mcp` 时，Provider 会打开每 runtime 的 Harness MCP endpoint，注入由 Driver 持有的 Codex MCP 配置，并通过 launch-scoped secret 环境变量提供 bearer token。`harnessTools` capability 只在该路径上出现。一个已准备进程和 ephemeral Codex thread 会接受串行 submission，直至取消、失败、Provider 移除或 Agent dispose 使进程树完全停稳。Runtime facts 把安全 thread id 公开为 external Session identity。`runtimeActivity` capability 会以完整字段报告每个已观察到的 `turn` phase；本地取消可能先于 Codex 终态通知结算，Provider 不会合成该通知。它不声称提供 command、file、diff、usage 或 native-tool detail。
 
 `maxFrameBytes` 限制 Codex 单个 UTF-8 JSONL frame，默认值为 1 MiB。超限 frame 会暂停协议流并拒绝活动操作。取消会发送一次尽力而为的 `turn/interrupt`。取消、超限 frame 和协议失败会关闭 stdin，并在 settlement 前等待 Launcher 完成进程树静止与临时材料清理。
 

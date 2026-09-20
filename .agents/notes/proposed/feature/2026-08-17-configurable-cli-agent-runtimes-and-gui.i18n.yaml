@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-08-17-configurable-cli-agent-runtimes-and-gui.md
-2026-08-17-configurable-cli-agent-runtimes-and-gui.md: 81346d34ffb1cadef7f2cb3f4113c9663c1ad981
-2026-08-17-configurable-cli-agent-runtimes-and-gui.zh.md: cba73e85fa746835079e84ac26f4780b164cb7b1
+2026-08-17-configurable-cli-agent-runtimes-and-gui.md: 38a840b0a8ee811c261cc0d778eacdf41815c8c7
+2026-08-17-configurable-cli-agent-runtimes-and-gui.zh.md: 3b914c39ef5ffbc5db32ecaee7534ef0299544e1

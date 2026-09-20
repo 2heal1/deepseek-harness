@@ -141,6 +141,10 @@ The private Agent exists only to supply Provider context and scope ownership. It
 
 Parent cancellation targets the child submission. Run disposal issues a disposed cancellation and waits for result settlement, Provider quiescence, and private scope disposal before releasing the shared capacity lease. Startup rollback follows the same ownership order. The ACP package is an optional Profile Bundle whose trusted Driver injects `acp serve` and accepts only the child credential target `CHILD_PROVIDER_API_KEY`; the child process receives no ambient parent credential.
 
+#### I1 assembled V1 runtime chain
+
+The keyless [`runtime-chain` fixture](../../../../examples/headless-agent/tests/fixtures/integration/runtime-chain/) applies the public Codex and ACP Bundle patches through the Loader, starts a configured Codex-compatible main process, and delegates through the authenticated MCP endpoint to a configured one-shot ACP child. Its [snapshot](../../../../examples/headless-agent/tests/runtime-chain.snapshot.ts) runs against both source and built package artifacts and verifies Provider and route registration, tool discovery and execution, canonical events, receipt settlement, exact isolated process environments, complete process cleanup, and absence of known credential values from Harness-owned state. The fake protocols split the child credential and generated gateway token across output chunks; the shared Launcher stream redactor and Provider-level tests cover those chunk boundaries.
+
 #### Secure launch
 
 F4 implements one launcher used by every external runtime under these rules:

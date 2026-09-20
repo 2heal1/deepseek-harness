@@ -607,7 +607,7 @@ Shared secure launcher for all external Agent Runtime Providers.
 async launch(request: AgentRuntimeLaunchRequest): Promise<AgentRuntimeLaunchHandle>
 ```
 
-Source: [`packages/core/agent-runtime-launcher/src/index.ts:465`](../../packages/core/agent-runtime-launcher/src/index.ts)
+Source: [`packages/core/agent-runtime-launcher/src/index.ts:469`](../../packages/core/agent-runtime-launcher/src/index.ts)
 
 <a id="ctxagentruntimemcpgateway--agentruntimemcpgateway"></a>
 

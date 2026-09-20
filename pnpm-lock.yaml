@@ -562,6 +562,9 @@ importers:
       '@deepseek-ai/dsh-lsp-stdio':
         specifier: workspace:*
         version: link:../packages/lsp/lsp-stdio
+      '@deepseek-ai/dsh-mcp-runtime-gateway':
+        specifier: workspace:*
+        version: link:../packages/mcp/mcp-runtime-gateway
       '@deepseek-ai/dsh-permission-presets':
         specifier: workspace:*
         version: link:../packages/interaction/permission-presets
